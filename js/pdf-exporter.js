@@ -1,14 +1,9 @@
 /**
- * LinguaContext Pro - PDF Exporter & Preview Engine (With Dynamic Font Selector)
+ * LinguaContext Pro - PDF Exporter & Live Typography Customizer Engine
  *
- * Renders high-resolution A4 PDF documents with an interactive font picker,
- * allowing users to choose between Lora, Plus Jakarta Sans, Merriweather, Inter,
- * Literata, and Work Sans directly on the preview / print window.
- *
- * Features:
- *   - Live Font Selector in the preview / export top bar.
- *   - 100% Vector text quality, 100% Vietnamese diacritics, 100% Unicode IPA phonetics.
- *   - Preserves all highlight background colors (-webkit-print-color-adjust: exact).
+ * Provides a live typography customization toolbar directly inside the PDF preview / export window.
+ * Allows users to customize Font Family (Lora, Plus Jakarta Sans, Merriweather, Inter, Literata, Playfair Display, Roboto),
+ * Font Size (12px, 13px, 14px, 15px, 16px), and Line Height (1.5, 1.75, 2.0) before saving or printing.
  */
 class PDFExporter {
     constructor() {
@@ -26,6 +21,14 @@ class PDFExporter {
     // PUBLIC ENTRY POINTS
     // ===================================================================
     async previewPDF(data = {}) {
+        return this._openDocumentWindow(data, false);
+    }
+
+    async exportToPDF(data = {}) {
+        return this._openDocumentWindow(data, true);
+    }
+
+    _openDocumentWindow(data = {}, autoPrint = false) {
         const {
             documentTitle = 'Tài Liệu Dịch & Từ Vựng Ngữ Cảnh',
             englishText = '',
@@ -37,9 +40,10 @@ class PDFExporter {
             fontFamily = "'Lora', Georgia, serif"
         } = data;
 
+        const cleanTitle = this._sanitizeTitle(documentTitle);
         const vocabRows = this._buildVocabRows(highlights, vocabList);
         const innerHTML = this._buildDocumentHTML({
-            documentTitle,
+            documentTitle: cleanTitle,
             englishText,
             vietnameseText,
             englishHTML,
@@ -49,37 +53,48 @@ class PDFExporter {
             fontFamily
         });
 
-        const filename = this._sanitizeFilename(documentTitle);
+        const filename = this._sanitizeFilename(cleanTitle);
 
-        const previewHTML = `<!DOCTYPE html>
+        const fullHTML = `<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xem Trước: ${this._escapeHTML(documentTitle)}</title>
+    <title>${this._escapeHTML(cleanTitle)}</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;700;800&family=Literata:ital,wght@0,400;0,600;0,700;1,400&family=Work+Sans:wght@400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;700;800&family=Literata:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Roboto:wght@400;500;700&family=Work+Sans:wght@400;600;700&display=swap');
         @media print {
             body { padding: 0 !important; margin: 0 !important; background: #ffffff !important; }
             .no-print { display: none !important; }
-            .lc-pdf-wrapper { padding: 0 !important; box-shadow: none !important; border-radius: 0 !important; max-width: 100% !important; }
+            .lc-pdf-wrapper { padding: 0 !important; box-shadow: none !important; border-radius: 0 !important; max-width: 100% !important; border: none !important; }
             @page { margin: 12mm; }
         }
     </style>
 </head>
 <body style="margin: 0; padding: 24px; background: #f8fafc; color: #1e293b; font-family: ${fontFamily};">
-    <div class="no-print" style="max-width: 860px; margin: 0 auto 20px auto; padding: 16px 20px; background: #fffbe6; border: 1.5px solid #ffe58f; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: space-between; gap: 15px; flex-wrap: wrap;">
-        <div>
-            <div style="font-size: 15px; font-weight: 800; color: #8c5e3c; margin-bottom: 4px;">🎨 Tùy Chỉnh Phông Chữ & Xuất File PDF:</div>
-            <div style="font-size: 12.5px; color: #475569; line-height: 1.5;">
-                Bạn có thể chọn phông chữ bên dưới để đổi kiểu chữ bài đọc trước khi In hoặc Tải về.
+    <!-- LIVE TYPOGRAPHY & EXPORT CONTROL BAR -->
+    <div class="no-print" style="max-width: 860px; margin: 0 auto 20px auto; padding: 16px 20px; background: #fffbe6; border: 1.5px solid #ffe58f; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 12px; border-bottom: 1px solid #fed7aa; padding-bottom: 10px;">
+            <div>
+                <div style="font-size: 15.5px; font-weight: 800; color: #8c5e3c;">🎨 Tùy Chỉnh Phông Chữ &amp; Định Dạng File PDF</div>
+                <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Thay đổi kiểu chữ, cỡ chữ và giãn dòng theo ý muốn trước khi Lưu / In.</div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="downloadDirectly()" style="padding: 9px 18px; background: #2563eb; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; box-shadow: 0 3px 10px rgba(37,99,235,0.25); display: flex; align-items: center; gap: 6px;">
+                    ⬇️ Tải PDF Về Máy
+                </button>
+                <button onclick="window.print()" style="padding: 9px 18px; background: #8c5e3c; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; box-shadow: 0 3px 10px rgba(140,94,60,0.25); display: flex; align-items: center; gap: 6px;">
+                    🖨️ In / Lưu PDF
+                </button>
             </div>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-            <div style="display: flex; align-items: center; gap: 6px; background: #ffffff; padding: 5px 10px; border-radius: 6px; border: 1px solid #cbd5e1;">
+
+        <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+            <!-- Font Selector -->
+            <div style="display: flex; align-items: center; gap: 6px; background: #ffffff; padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
                 <span style="font-size: 12px; font-weight: 700; color: #8c5e3c;">🔤 Phông chữ:</span>
                 <select id="pdfFontSelect" onchange="changePDFFont(this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #94a3b8; font-weight: 700; color: #1e293b; background: #ffffff; cursor: pointer; font-size: 12.5px; outline: none;">
                     <option value="'Lora', Georgia, serif" selected>Lora (Serif thanh lịch)</option>
@@ -87,14 +102,37 @@ class PDFExporter {
                     <option value="'Merriweather', serif">Merriweather (Serif đậm nét)</option>
                     <option value="'Inter', sans-serif">Inter (Sans rõ nét)</option>
                     <option value="'Literata', serif">Literata (Serif tinh tế)</option>
+                    <option value="'Playfair Display', serif">Playfair Display (Serif nghệ thuật)</option>
+                    <option value="'Roboto', sans-serif">Roboto (Sans cổ điển)</option>
                     <option value="'Work Sans', sans-serif">Work Sans (Sans gọn gàng)</option>
                 </select>
             </div>
-            <button onclick="downloadDirectly()" style="padding: 9px 18px; background: #2563eb; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; box-shadow: 0 3px 10px rgba(37,99,235,0.3); transition: transform 0.15s ease;">⬇️ Tải PDF Về Máy</button>
-            <button onclick="window.print()" style="padding: 9px 18px; background: #8c5e3c; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; box-shadow: 0 3px 10px rgba(140,94,60,0.3); transition: transform 0.15s ease;">🖨️ In / Lưu PDF</button>
+
+            <!-- Font Size Selector -->
+            <div style="display: flex; align-items: center; gap: 6px; background: #ffffff; padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                <span style="font-size: 12px; font-weight: 700; color: #8c5e3c;">📏 Cỡ chữ:</span>
+                <select id="pdfFontSizeSelect" onchange="changePDFFontSize(this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #94a3b8; font-weight: 700; color: #1e293b; background: #ffffff; cursor: pointer; font-size: 12.5px; outline: none;">
+                    <option value="12px">12px (Nhỏ gọn)</option>
+                    <option value="13px" selected>13px (Chuẩn vừa vặn)</option>
+                    <option value="14px">14px (Vừa phải)</option>
+                    <option value="15px">15px (Lớn rõ)</option>
+                    <option value="16px">16px (Rất lớn)</option>
+                </select>
+            </div>
+
+            <!-- Line Height Selector -->
+            <div style="display: flex; align-items: center; gap: 6px; background: #ffffff; padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
+                <span style="font-size: 12px; font-weight: 700; color: #8c5e3c;">↕️ Giãn dòng:</span>
+                <select id="pdfLineHeightSelect" onchange="changePDFLineHeight(this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #94a3b8; font-weight: 700; color: #1e293b; background: #ffffff; cursor: pointer; font-size: 12.5px; outline: none;">
+                    <option value="1.5">1.5 (Gọn gàng)</option>
+                    <option value="1.75" selected>1.75 (Thoáng mắt)</option>
+                    <option value="2.0">2.0 (Rộng rãi)</option>
+                </select>
+            </div>
         </div>
     </div>
 
+    <!-- DOCUMENT A4 CANVAS -->
     <div id="pdfCaptureTarget" class="lc-pdf-wrapper" style="max-width: 860px; margin: 0 auto; background: #ffffff; padding: 24px 28px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
         ${innerHTML}
     </div>
@@ -106,6 +144,14 @@ class PDFExporter {
                 root.style.fontFamily = fontFamily;
             }
             document.body.style.fontFamily = fontFamily;
+        }
+        function changePDFFontSize(fontSize) {
+            var cols = document.querySelectorAll('.lc-col');
+            cols.forEach(function(c) { c.style.fontSize = fontSize; });
+        }
+        function changePDFLineHeight(lh) {
+            var cols = document.querySelectorAll('.lc-col');
+            cols.forEach(function(c) { c.style.lineHeight = lh; });
         }
         function downloadDirectly() {
             if (window.html2pdf) {
@@ -122,6 +168,7 @@ class PDFExporter {
                 window.print();
             }
         }
+        ${autoPrint ? "setTimeout(function() { window.print(); }, 800);" : ""}
     <\/script>
 </body>
 </html>`;
@@ -132,107 +179,8 @@ class PDFExporter {
         } catch (e) {}
 
         if (win) {
-            win.document.write(previewHTML);
+            win.document.write(fullHTML);
             win.document.close();
-            return true;
-        }
-
-        return this.exportToPDF(data);
-    }
-
-    async exportToPDF(data = {}) {
-        const {
-            documentTitle = 'Tài Liệu Dịch & Từ Vựng Ngữ Cảnh',
-            englishText = '',
-            vietnameseText = '',
-            englishHTML = '',
-            vietnameseHTML = '',
-            highlights = [],
-            vocabList = [],
-            fontFamily = "'Lora', Georgia, serif"
-        } = data;
-
-        const vocabRows = this._buildVocabRows(highlights, vocabList);
-        const innerHTML = this._buildDocumentHTML({
-            documentTitle,
-            englishText,
-            vietnameseText,
-            englishHTML,
-            vietnameseHTML,
-            highlights,
-            vocabRows,
-            fontFamily
-        });
-
-        const filename = this._sanitizeFilename(documentTitle);
-
-        const fullHTML = `<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${this._escapeHTML(documentTitle)}</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;700;800&family=Literata:ital,wght@0,400;0,600;0,700;1,400&family=Work+Sans:wght@400;600;700&display=swap');
-        @media print {
-            body { padding: 0 !important; margin: 0 !important; background: #ffffff !important; }
-            .no-print { display: none !important; }
-            .lc-pdf-wrapper { padding: 0 !important; box-shadow: none !important; border-radius: 0 !important; max-width: 100% !important; }
-            @page { margin: 12mm; }
-        }
-    </style>
-</head>
-<body style="margin: 0; padding: 24px; background: #f8fafc; color: #1e293b; font-family: ${fontFamily};">
-    <div class="no-print" style="max-width: 860px; margin: 0 auto 20px auto; padding: 16px 20px; background: #fffbe6; border: 1.5px solid #ffe58f; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: space-between; gap: 15px; flex-wrap: wrap;">
-        <div>
-            <div style="font-size: 15px; font-weight: 800; color: #8c5e3c; margin-bottom: 4px;">🎨 Tùy Chỉnh Phông Chữ & Xuất File PDF:</div>
-            <div style="font-size: 12.5px; color: #475569; line-height: 1.5;">
-                Chọn phông chữ yêu thích bên dưới để đổi giao diện tài liệu A4 trước khi bấm in.
-            </div>
-        </div>
-        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-            <div style="display: flex; align-items: center; gap: 6px; background: #ffffff; padding: 5px 10px; border-radius: 6px; border: 1px solid #cbd5e1;">
-                <span style="font-size: 12px; font-weight: 700; color: #8c5e3c;">🔤 Phông chữ:</span>
-                <select id="pdfFontSelect" onchange="changePDFFont(this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #94a3b8; font-weight: 700; color: #1e293b; background: #ffffff; cursor: pointer; font-size: 12.5px; outline: none;">
-                    <option value="'Lora', Georgia, serif" selected>Lora (Serif thanh lịch)</option>
-                    <option value="'Plus Jakarta Sans', sans-serif">Plus Jakarta Sans (Sans hiện đại)</option>
-                    <option value="'Merriweather', serif">Merriweather (Serif đậm nét)</option>
-                    <option value="'Inter', sans-serif">Inter (Sans rõ nét)</option>
-                    <option value="'Literata', serif">Literata (Serif tinh tế)</option>
-                    <option value="'Work Sans', sans-serif">Work Sans (Sans gọn gàng)</option>
-                </select>
-            </div>
-            <button onclick="window.print()" style="flex-shrink: 0; padding: 9px 20px; background: #8c5e3c; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13.5px; box-shadow: 0 3px 10px rgba(140,94,60,0.3);">🖨️ Lưu Thành File PDF Ngay</button>
-        </div>
-    </div>
-
-    <div class="lc-pdf-wrapper" style="max-width: 860px; margin: 0 auto; background: #ffffff; padding: 24px 28px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
-        ${innerHTML}
-    </div>
-
-    <script>
-        function changePDFFont(fontFamily) {
-            var root = document.querySelector('.lc-pdf-root');
-            if (root) {
-                root.style.fontFamily = fontFamily;
-            }
-            document.body.style.fontFamily = fontFamily;
-        }
-        setTimeout(function() {
-            window.print();
-        }, 500);
-    <\/script>
-</body>
-</html>`;
-
-        let printWin = null;
-        try {
-            printWin = window.open('', '_blank');
-        } catch (e) {}
-
-        if (printWin) {
-            printWin.document.write(fullHTML);
-            printWin.document.close();
             return true;
         }
 
@@ -247,7 +195,7 @@ class PDFExporter {
             iframe.contentWindow.focus();
             iframe.contentWindow.print();
             setTimeout(() => iframe.remove(), 4000);
-        }, 500);
+        }, 600);
 
         return true;
     }
@@ -262,6 +210,7 @@ class PDFExporter {
         const vnHTML = this._buildTranslationHTML(vietnameseText, vietnameseHTML);
         const rowsHTML = this._buildVocabRowsHTML(vocabRows);
         const font = fontFamily || "'Lora', Georgia, serif";
+        const title = this._sanitizeTitle(documentTitle);
 
         return `
         <div class="lc-pdf-root" style="font-family: ${font};">
@@ -272,7 +221,7 @@ class PDFExporter {
                     <div class="lc-app-name">📖 LinguaContext Pro</div>
                     <div class="lc-tagline">Dịch Ngữ Cảnh · Giữ Tô Màu · Sẵn Sàng In</div>
                 </div>
-                <div class="lc-doc-title">${this._escapeHTML(documentTitle)}</div>
+                <div class="lc-doc-title">${this._escapeHTML(title)}</div>
                 <div class="lc-meta-bar">
                     <span>Ngày tạo: <strong>${dateStr}</strong></span>
                     <span>Tổng số từ: <strong>${wordCount.toLocaleString('vi-VN')} từ</strong></span>
@@ -314,7 +263,7 @@ class PDFExporter {
     _styleBlock(fontFamily) {
         const font = fontFamily || "'Lora', Georgia, serif";
         return `<style>
-            @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;700;800&family=Literata:ital,wght@0,400;0,600;0,700;1,400&family=Work+Sans:wght@400;600;700&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;700;800&family=Literata:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Roboto:wght@400;500;700&family=Work+Sans:wght@400;600;700&display=swap');
             .lc-pdf-root { font-family: ${font}; color: #2b231d; font-size: 13px; line-height: 1.75; padding: 4px 6px; background: #ffffff; }
             .lc-pdf-root * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             .lc-header { position: relative; padding: 10px 0 12px; border-bottom: 2.5px solid #8c5e3c; margin-bottom: 16px; }
@@ -503,11 +452,17 @@ class PDFExporter {
         return result.map((item, idx) => ({ index: idx + 1, ...item }));
     }
 
+    _sanitizeTitle(title) {
+        if (!title) return 'Tài Liệu Dịch & Từ Vựng Ngữ Cảnh';
+        return String(title).replace(/^#+\s*/g, '').trim();
+    }
+
     _sanitizeFilename(title) {
         if (!title) return 'LinguaContext_Vocab.pdf';
         let clean = (title || '').normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+            .replace(/^#+\s*/g, '')
             .replace(/[^a-zA-Z0-9_-]/g, '_')
             .replace(/_+/g, '_')
             .replace(/^_+|_+$/g, '')
