@@ -1,5 +1,5 @@
 /**
- * LinguaContext Pro - PDF Exporter (html2pdf pipeline & print fallback)
+ * LinguaContext Pro - PDF Exporter (html2pdf pipeline & native print fallback)
  *
  * Renders a pristine A4 PDF from a styled HTML template using html2pdf.js.
  * Guarantees 100% correct Vietnamese diacritics and Unicode IPA phonetics
@@ -51,18 +51,16 @@ class PDFExporter {
 
         const filename = this._sanitizeFilename(documentTitle);
 
-        // Try direct pdf generation using html2pdf if available
+        // Try direct PDF generation via html2pdf
         if (window.html2pdf) {
             const container = document.createElement('div');
-            // Position at (0,0) behind page with z-index so html2canvas renders valid positive coordinates
-            container.style.position = 'absolute';
+            container.style.position = 'fixed';
             container.style.left = '0';
             container.style.top = '0';
-            container.style.zIndex = '-9999';
-            container.style.opacity = '1';
-            container.style.pointerEvents = 'none';
             container.style.width = '794px'; // A4 width at 96dpi
+            container.style.zIndex = '99999';
             container.style.background = '#ffffff';
+            container.style.boxShadow = '0 0 20px rgba(0,0,0,0.5)';
             container.innerHTML = html;
             document.body.appendChild(container);
 
@@ -83,7 +81,7 @@ class PDFExporter {
                 };
 
                 await window.html2pdf().set(opt).from(container).save();
-                console.log('[PDFExporter] PDF saved successfully via html2pdf');
+                console.log('[PDFExporter] Direct PDF exported via html2pdf successfully');
                 return true;
             } catch (err) {
                 console.warn('[PDFExporter] html2pdf failed, falling back to print window:', err);
