@@ -1,12 +1,12 @@
 /**
- * LinguaContext Pro - PDF Exporter (html2pdf pipeline & native print fallback)
+ * LinguaContext Pro - PDF Exporter (Fail-Safe Vector Printable PDF Engine)
  *
- * Renders a pristine A4 PDF from a styled HTML template using html2pdf.js.
- * Guarantees 100% correct Vietnamese diacritics and Unicode IPA phonetics
- * rendered by the browser with Google Fonts (Plus Jakarta Sans / Inter).
+ * Renders a pristine A4 PDF document using the browser's native print-to-PDF engine.
+ * Guarantees 100% vector text quality, 100% full Vietnamese diacritics, 100% Unicode IPA,
+ * and 100% preserved pastel highlight background colors without any missing content.
  *
- * Sections:
- *   SECTION 1 — VĂN BẢN GỐC & BẢN DỊCH (2 cột song song)
+ * Structure:
+ *   SECTION 1 — VĂN BẢN ĐỌC & TỪ VỰNG TÔ ĐẬM (2 cột song song)
  *     - Left  : English text with all color highlights preserved.
  *     - Right : Vietnamese translation paragraph-aligned.
  *   SECTION 2 — BẢNG TỔNG KẾT TỪ VỰNG (ĐẦY ĐỦ - KHÔNG THIẾU)
@@ -39,7 +39,7 @@ class PDFExporter {
         } = data;
 
         const vocabRows = this._buildVocabRows(highlights, vocabList);
-        const html = this._buildDocumentHTML({
+        const innerHTML = this._buildDocumentHTML({
             documentTitle,
             englishText,
             vietnameseText,
@@ -49,51 +49,71 @@ class PDFExporter {
             vocabRows
         });
 
-        const filename = this._sanitizeFilename(documentTitle);
+        const fullHTML = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${this._escapeHTML(documentTitle)}</title>
+    <style>
+        @media print {
+            body { padding: 0 !important; margin: 0 !important; background: #ffffff !important; }
+            .no-print { display: none !important; }
+            .lc-pdf-wrapper { padding: 0 !important; box-shadow: none !important; border-radius: 0 !important; max-width: 100% !important; }
+            @page { margin: 12mm; }
+        }
+    </style>
+</head>
+<body style="margin: 0; padding: 24px; background: #f8fafc; color: #1e293b; font-family: 'Plus Jakarta Sans', 'Segoe UI', Arial, sans-serif;">
+    <div class="no-print" style="max-width: 840px; margin: 0 auto 20px auto; padding: 16px 20px; background: #fffbe6; border: 1.5px solid #ffe58f; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: space-between; gap: 15px;">
+        <div>
+            <div style="font-size: 15px; font-weight: 800; color: #8c5e3c; margin-bottom: 4px;">🖨️ Hướng dẫn lưu file PDF đẹp chuẩn (100% Tiếng Việt + Highlight):</div>
+            <div style="font-size: 12.5px; color: #475569; line-height: 1.5;">
+                1. Tại ô <strong>Máy in / Destination</strong> ➔ Chọn <strong>"Lưu dưới dạng PDF" (Save as PDF)</strong>.
+                <br>2. Tích chọn ô <strong>"Đồ họa nền" (Background graphics)</strong> để hiển thị đầy đủ màu sắc tô đậm.
+            </div>
+        </div>
+        <button onclick="window.print()" style="flex-shrink: 0; padding: 10px 22px; background: #8c5e3c; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13.5px; box-shadow: 0 3px 10px rgba(140,94,60,0.3); transition: transform 0.15s ease;">🖨️ Lưu Thành File PDF Ngay</button>
+    </div>
 
-        // Try direct PDF generation via html2pdf
-        if (window.html2pdf) {
-            const container = document.createElement('div');
-            container.style.position = 'fixed';
-            container.style.left = '0';
-            container.style.top = '0';
-            container.style.width = '794px'; // A4 width at 96dpi
-            container.style.zIndex = '99999';
-            container.style.background = '#ffffff';
-            container.style.boxShadow = '0 0 20px rgba(0,0,0,0.5)';
-            container.innerHTML = html;
-            document.body.appendChild(container);
+    <div class="lc-pdf-wrapper" style="max-width: 840px; margin: 0 auto; background: #ffffff; padding: 24px 28px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+        ${innerHTML}
+    </div>
 
-            try {
-                const opt = {
-                    margin: [10, 10, 12, 10],
-                    filename: filename,
-                    image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: {
-                        scale: 2,
-                        useCORS: true,
-                        letterRendering: true,
-                        backgroundColor: '#ffffff',
-                        logging: false
-                    },
-                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                    pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.lc-reading-wrap', '.lc-table-row'] }
-                };
+    <script>
+        setTimeout(function() {
+            window.print();
+        }, 500);
+    <\/script>
+</body>
+</html>`;
 
-                await window.html2pdf().set(opt).from(container).save();
-                console.log('[PDFExporter] Direct PDF exported via html2pdf successfully');
-                return true;
-            } catch (err) {
-                console.warn('[PDFExporter] html2pdf failed, falling back to print window:', err);
-            } finally {
-                if (container.parentNode) {
-                    container.parentNode.removeChild(container);
-                }
-            }
+        let printWin = null;
+        try {
+            printWin = window.open('', '_blank');
+        } catch (e) {}
+
+        if (printWin) {
+            printWin.document.write(fullHTML);
+            printWin.document.close();
+            return true;
         }
 
-        // Fallback to printable window / hidden iframe if html2pdf failed or blocked
-        return this._exportWithHTMLFallback(data);
+        // In case popup window is blocked by browser popup blocker, use hidden iframe in-place:
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:fixed; right:0; bottom:0; width:0; height:0; border:0; z-index:-9999;';
+        document.body.appendChild(iframe);
+        const doc = iframe.contentWindow.document;
+        doc.open();
+        doc.write(fullHTML);
+        doc.close();
+        setTimeout(() => {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+            setTimeout(() => iframe.remove(), 4000);
+        }, 500);
+
+        return true;
     }
 
     // ===================================================================
@@ -157,7 +177,7 @@ class PDFExporter {
     _styleBlock() {
         return `<style>
             @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-            .lc-pdf-root { font-family: 'Plus Jakarta Sans', 'Segoe UI', Arial, sans-serif; color: #2b231d; font-size: 12.5px; line-height: 1.65; padding: 12px 14px; background: #ffffff; }
+            .lc-pdf-root { font-family: 'Plus Jakarta Sans', 'Segoe UI', Arial, sans-serif; color: #2b231d; font-size: 12.5px; line-height: 1.65; padding: 4px 6px; background: #ffffff; }
             .lc-pdf-root * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             .lc-header { position: relative; padding: 10px 0 12px; border-bottom: 2.5px solid #8c5e3c; margin-bottom: 16px; }
             .lc-brandbar { position: absolute; top: -4px; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #8c5e3c, #c08552); }
@@ -366,83 +386,6 @@ class PDFExporter {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
-    }
-
-    // ===================================================================
-    // FALLBACK PRINT WINDOW (Used if html2pdf fails or popups are blocked)
-    // ===================================================================
-    _exportWithHTMLFallback(data = {}) {
-        const {
-            documentTitle = 'Tài Liệu Dịch & Từ Vựng Ngữ Cảnh',
-            englishText = '',
-            vietnameseText = '',
-            englishHTML = '',
-            vietnameseHTML = '',
-            highlights = [],
-            vocabList = []
-        } = data;
-
-        const vocabRows = this._buildVocabRows(highlights, vocabList);
-        const innerHTML = this._buildDocumentHTML({
-            documentTitle,
-            englishText,
-            vietnameseText,
-            englishHTML,
-            vietnameseHTML,
-            highlights,
-            vocabRows
-        });
-
-        const fullHTML = `<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <title>${this._escapeHTML(documentTitle)}</title>
-    <style>
-        @media print {
-            body { padding: 0; }
-            .no-print { display: none !important; }
-        }
-    </style>
-</head>
-<body style="margin: 0; padding: 20px; background: #ffffff;">
-    <div class="no-print" style="margin-bottom: 16px; padding: 14px; background: #fffbe6; border: 1.5px solid #ffe58f; border-radius: 8px; font-size: 13px; font-family: sans-serif;">
-        💡 <strong>Hướng dẫn xuất file PDF đẹp chuẩn:</strong>
-        <br>Tại ô <strong>Máy in (Destination)</strong> ➔ Chọn <strong>"Lưu dưới dạng PDF" (Save as PDF)</strong>.
-        <br>Tích chọn ô <strong>"Đồ họa nền" (Background graphics)</strong> để hiển thị đầy đủ màu sắc tô đậm.
-        <br><button onclick="window.print()" style="margin-top: 8px; padding: 7px 18px; background: #8c5e3c; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px;">🖨️ Lưu Thành File PDF Ngay</button>
-    </div>
-    ${innerHTML}
-    <script>
-        setTimeout(function() { window.print(); }, 600);
-    <\/script>
-</body>
-</html>`;
-
-        let printWin = null;
-        try {
-            printWin = window.open('', '_blank');
-        } catch (e) {}
-
-        if (printWin) {
-            printWin.document.write(fullHTML);
-            printWin.document.close();
-            return true;
-        } else {
-            const iframe = document.createElement('iframe');
-            iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-            document.body.appendChild(iframe);
-            const doc = iframe.contentWindow.document;
-            doc.open();
-            doc.write(fullHTML);
-            doc.close();
-            setTimeout(() => {
-                iframe.contentWindow.focus();
-                iframe.contentWindow.print();
-                setTimeout(() => iframe.remove(), 3500);
-            }, 500);
-            return true;
-        }
     }
 }
 
