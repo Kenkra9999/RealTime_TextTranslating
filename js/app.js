@@ -606,7 +606,11 @@ class LinguaApp {
         // Load Sample Button
         this.els.btnLoadSample.addEventListener('click', () => this.loadSampleText());
 
-        // Export PDF Buttons (header & inline bar)
+        // Export & Preview PDF Buttons (header & inline bar)
+        const btnPreviewPDFHeader = document.getElementById('btnPreviewPDFHeader');
+        if (btnPreviewPDFHeader) {
+            btnPreviewPDFHeader.addEventListener('click', () => this.handlePreviewPDF());
+        }
         const btnExportPDFHeader = document.getElementById('btnExportPDFHeader');
         if (btnExportPDFHeader) {
             btnExportPDFHeader.addEventListener('click', () => this.handleExportPDF());
@@ -1940,6 +1944,87 @@ class LinguaApp {
         utterance.lang = 'en-US';
         utterance.rate = 0.9;
         window.speechSynthesis.speak(utterance);
+    }
+
+    async handlePreviewPDF() {
+        if (!this.pdfExporter) {
+            this.pdfExporter = new PDFExporter();
+        }
+        let englishText = (this.els.inputText ? this.els.inputText.value : '').trim();
+        let vietnameseText = (this.els.translationCanvas ? this.els.translationCanvas.innerText : '').trim();
+        let vietnameseHTML = (this.els.translationCanvas ? this.els.translationCanvas.innerHTML : '') || '';
+        let rawEnHTML = (this.els.readingCanvas ? this.els.readingCanvas.innerHTML : '') || '';
+        let highlights = [];
+        let vocabList = [];
+
+        // Auto-resolve from active session if the text box is empty
+        if (this.vocabSessions && this.vocabSessions.length > 0) {
+            const activeS = this.vocabSessions.find(s => s.id === this.activeSessionId) || this.vocabSessions[0];
+            if (activeS) {
+                if (!englishText) englishText = activeS.sourceText || '';
+                if (!vietnameseText) vietnameseText = activeS.vietnameseText || '';
+                if (!vietnameseHTML) vietnameseHTML = activeS.vietnameseHTML || '';
+                highlights = activeS.highlights || [];
+                vocabList = activeS.vocabList || [];
+            }
+        }
+
+        if (!englishText) {
+            alert("Không có nội dung để xem trước PDF. Vui lòng nhập văn bản hoặc dịch một bài viết trước.");
+            return;
+        }
+
+        if (highlights.length === 0) {
+            try {
+                highlights = this.highlighter ? (this.highlighter.getAllHighlightedItems() || []) : [];
+            } catch (e) {}
+        }
+
+        if (vocabList.length === 0) {
+            vocabList = this.currentVocabData || [];
+        }
+
+        const englishHTML = rawEnHTML.trim()
+            ? rawEnHTML
+            : englishText.split(/\n\s*\n/).filter(Boolean)
+                .map(p => `<p class="paragraph-block">${this._escapeHTML(p)}</p>`).join('');
+
+        let title = "Tài Liệu Dịch & Từ Vựng Ngữ Cảnh";
+
+        await this.pdfExporter.previewPDF({
+            documentTitle: title,
+            englishText: englishText,
+            vietnameseText: vietnameseText,
+            englishHTML: englishHTML,
+            vietnameseHTML: vietnameseHTML,
+            vocabList: vocabList,
+            highlights: highlights
+        });
+    }
+
+    async previewSessionPDF(sessionId) {
+        if (!this.pdfExporter) {
+            this.pdfExporter = new PDFExporter();
+        }
+        const session = this.vocabSessions.find(s => s.id === sessionId);
+        if (!session) {
+            alert("Không tìm thấy dữ liệu văn bản này.");
+            return;
+        }
+
+        const sIdx = this.vocabSessions.indexOf(session);
+        const docName = `Văn bản ${sIdx + 1}`;
+        const defaultTitle = `${docName}` + (session.preview ? ` — ${session.preview.slice(0, 45)}` : '');
+
+        await this.pdfExporter.previewPDF({
+            documentTitle: defaultTitle,
+            englishText: session.sourceText || '',
+            vietnameseText: session.vietnameseText || '',
+            englishHTML: session.readingHTML || session.sourceText || '',
+            vietnameseHTML: session.vietnameseHTML || '',
+            vocabList: session.vocabList || [],
+            highlights: session.highlights || []
+        });
     }
 
     async handleExportPDF() {

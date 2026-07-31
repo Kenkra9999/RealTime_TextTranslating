@@ -1,16 +1,10 @@
 /**
- * LinguaContext Pro - PDF Exporter (Fail-Safe Vector Printable PDF Engine)
+ * LinguaContext Pro - PDF Exporter & Preview Engine
  *
- * Renders a pristine A4 PDF document using the browser's native print-to-PDF engine.
- * Guarantees 100% vector text quality, 100% full Vietnamese diacritics, 100% Unicode IPA,
- * and 100% preserved pastel highlight background colors without any missing content.
- *
- * Structure:
- *   SECTION 1 — VĂN BẢN ĐỌC & TỪ VỰNG TÔ ĐẬM (2 cột song song)
- *     - Left  : English text with all color highlights preserved.
- *     - Right : Vietnamese translation paragraph-aligned.
- *   SECTION 2 — BẢNG TỔNG KẾT TỪ VỰNG (ĐẦY ĐỦ - KHÔNG THIẾU)
- *     - Columns: # | Từ / Cụm từ | Phiên âm (IPA) | Loại từ | Nghĩa ngữ cảnh | Ví dụ
+ * Provides dual export modes:
+ *   1. exportToPDF(data) - Direct printable PDF export / Save as PDF.
+ *   2. previewPDF(data)  - Opens a full-page A4 preview in a new browser tab,
+ *      equipped with top banner buttons for both "Tải File PDF Về Máy" and "In / Lưu PDF".
  */
 class PDFExporter {
     constructor() {
@@ -25,8 +19,102 @@ class PDFExporter {
     }
 
     // ===================================================================
-    // PUBLIC ENTRY POINT
+    // PUBLIC ENTRY POINTS
     // ===================================================================
+    async previewPDF(data = {}) {
+        const {
+            documentTitle = 'Tài Liệu Dịch & Từ Vựng Ngữ Cảnh',
+            englishText = '',
+            vietnameseText = '',
+            englishHTML = '',
+            vietnameseHTML = '',
+            highlights = [],
+            vocabList = []
+        } = data;
+
+        const vocabRows = this._buildVocabRows(highlights, vocabList);
+        const innerHTML = this._buildDocumentHTML({
+            documentTitle,
+            englishText,
+            vietnameseText,
+            englishHTML,
+            vietnameseHTML,
+            highlights,
+            vocabRows
+        });
+
+        const filename = this._sanitizeFilename(documentTitle);
+
+        const previewHTML = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xem Trước: ${this._escapeHTML(documentTitle)}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
+    <style>
+        @media print {
+            body { padding: 0 !important; margin: 0 !important; background: #ffffff !important; }
+            .no-print { display: none !important; }
+            .lc-pdf-wrapper { padding: 0 !important; box-shadow: none !important; border-radius: 0 !important; max-width: 100% !important; }
+            @page { margin: 12mm; }
+        }
+    </style>
+</head>
+<body style="margin: 0; padding: 24px; background: #f8fafc; color: #1e293b; font-family: 'Plus Jakarta Sans', 'Segoe UI', Arial, sans-serif;">
+    <div class="no-print" style="max-width: 840px; margin: 0 auto 20px auto; padding: 16px 20px; background: #fffbe6; border: 1.5px solid #ffe58f; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: space-between; gap: 15px;">
+        <div>
+            <div style="font-size: 15px; font-weight: 800; color: #8c5e3c; margin-bottom: 4px;">👁️ Xem Trước Tài Liệu PDF:</div>
+            <div style="font-size: 12.5px; color: #475569; line-height: 1.5;">
+                Bạn đang đọc trực tiếp trên trình duyệt. Hãy chọn nút <strong>"Tải File PDF Về Máy"</strong> hoặc nút <strong>"In / Lưu PDF"</strong> bên phải.
+            </div>
+        </div>
+        <div style="display: flex; gap: 10px; flex-shrink: 0;">
+            <button onclick="downloadDirectly()" style="padding: 10px 18px; background: #2563eb; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; box-shadow: 0 3px 10px rgba(37,99,235,0.3); transition: transform 0.15s ease;">⬇️ Tải File PDF Về Máy</button>
+            <button onclick="window.print()" style="padding: 10px 18px; background: #8c5e3c; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; box-shadow: 0 3px 10px rgba(140,94,60,0.3); transition: transform 0.15s ease;">🖨️ In / Lưu PDF</button>
+        </div>
+    </div>
+
+    <div id="pdfCaptureTarget" class="lc-pdf-wrapper" style="max-width: 840px; margin: 0 auto; background: #ffffff; padding: 24px 28px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+        ${innerHTML}
+    </div>
+
+    <script>
+        function downloadDirectly() {
+            if (window.html2pdf) {
+                var element = document.getElementById('pdfCaptureTarget');
+                var opt = {
+                    margin: [10, 10, 12, 10],
+                    filename: '${filename}',
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+                window.html2pdf().set(opt).from(element).save();
+            } else {
+                window.print();
+            }
+        }
+    <\/script>
+</body>
+</html>`;
+
+        let win = null;
+        try {
+            win = window.open('', '_blank');
+        } catch (e) {}
+
+        if (win) {
+            win.document.write(previewHTML);
+            win.document.close();
+            return true;
+        }
+
+        return this.exportToPDF(data);
+    }
+
     async exportToPDF(data = {}) {
         const {
             documentTitle = 'Tài Liệu Dịch & Từ Vựng Ngữ Cảnh',
@@ -99,7 +187,6 @@ class PDFExporter {
             return true;
         }
 
-        // In case popup window is blocked by browser popup blocker, use hidden iframe in-place:
         const iframe = document.createElement('iframe');
         iframe.style.cssText = 'position:fixed; right:0; bottom:0; width:0; height:0; border:0; z-index:-9999;';
         document.body.appendChild(iframe);
