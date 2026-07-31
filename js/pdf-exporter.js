@@ -2,7 +2,7 @@
  * LinguaContext Pro - PDF Exporter & Live Typography Customizer Engine
  *
  * Renders pristine A4 PDF documents with synchronized side-by-side paragraph alignment,
- * full color highlight preservation for BOTH English and translated Vietnamese terms,
+ * full color highlight preservation and bold formatting for BOTH English and translated Vietnamese terms,
  * clean titles (no ### markdown artifacts), and an interactive font & typography toolbar.
  */
 class PDFExporter {
@@ -50,6 +50,7 @@ class PDFExporter {
             vietnameseHTML,
             highlights,
             vocabRows,
+            vocabList,
             fontFamily
         });
 
@@ -125,7 +126,7 @@ class PDFExporter {
                 <span style="font-size: 12px; font-weight: 700; color: #8c5e3c;">↕️ Giãn dòng:</span>
                 <select id="pdfLineHeightSelect" onchange="changePDFLineHeight(this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #94a3b8; font-weight: 700; color: #1e293b; background: #ffffff; cursor: pointer; font-size: 12.5px; outline: none;">
                     <option value="1.5">1.5 (Gọn gàng)</option>
-                    <option value="1.75" selected>1.75 (Thoáng mắt)</option>
+                    <option value="1.8" selected>1.8 (Thoáng mắt)</option>
                     <option value="2.0">2.0 (Rộng rãi)</option>
                 </select>
             </div>
@@ -146,12 +147,12 @@ class PDFExporter {
             document.body.style.fontFamily = fontFamily;
         }
         function changePDFFontSize(fontSize) {
-            var cols = document.querySelectorAll('.lc-col');
+            var cols = document.querySelectorAll('.lc-reading-p-row td');
             cols.forEach(function(c) { c.style.fontSize = fontSize; });
         }
         function changePDFLineHeight(lh) {
-            var cols = document.querySelectorAll('.lc-col');
-            cols.forEach(function(c) { c.style.lineHeight = lh; });
+            var ps = document.querySelectorAll('.lc-reading-p-row td p');
+            ps.forEach(function(p) { p.style.lineHeight = lh; });
         }
         function downloadDirectly() {
             if (window.html2pdf) {
@@ -203,12 +204,12 @@ class PDFExporter {
     // ===================================================================
     // HTML TEMPLATE BUILDER
     // ===================================================================
-    _buildDocumentHTML({ documentTitle, englishText, vietnameseText, englishHTML, vietnameseHTML, highlights, vocabRows, fontFamily }) {
+    _buildDocumentHTML({ documentTitle, englishText, vietnameseText, englishHTML, vietnameseHTML, highlights, vocabRows, vocabList, fontFamily }) {
         const dateStr = new Date().toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' });
         const wordCount = (englishText || '').trim().split(/\s+/).filter(Boolean).length;
         const font = fontFamily || "'Lora', Georgia, serif";
         const title = this._sanitizeTitle(documentTitle);
-        const readingRows = this._buildReadingTableRows(englishText, englishHTML, vietnameseText, vietnameseHTML, highlights, vocabRows);
+        const readingRows = this._buildReadingTableRows(englishText, englishHTML, vietnameseText, vietnameseHTML, highlights, vocabRows, vocabList);
         const vocabRowsHTML = this._buildVocabRowsHTML(vocabRows);
 
         return `
@@ -233,7 +234,7 @@ class PDFExporter {
                 <thead>
                     <tr>
                         <th class="lc-col-head lc-col-en"><span class="lc-flag">EN</span> TIẾNG ANH (Tô màu ngữ cảnh)</th>
-                        <th class="lc-col-head lc-col-vi"><span class="lc-flag">VI</span> TIẾNG VIỆT (Tô màu đối chiếu)</th>
+                        <th class="lc-col-head lc-col-vi"><span class="lc-flag">VI</span> TIẾNG VIỆT (Đối chiếu tô màu)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -264,7 +265,7 @@ class PDFExporter {
         const font = fontFamily || "'Lora', Georgia, serif";
         return `<style>
             @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;700;800&family=Literata:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Roboto:wght@400;500;700&family=Work+Sans:wght@400;600;700&display=swap');
-            .lc-pdf-root { font-family: ${font}; color: #2b231d; font-size: 13px; line-height: 1.75; padding: 4px 6px; background: #ffffff; }
+            .lc-pdf-root { font-family: ${font}; color: #2b231d; font-size: 13px; line-height: 1.8; padding: 4px 6px; background: #ffffff; }
             .lc-pdf-root * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             .lc-header { position: relative; padding: 10px 0 12px; border-bottom: 2.5px solid #8c5e3c; margin-bottom: 16px; }
             .lc-brandbar { position: absolute; top: -4px; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #8c5e3c, #c08552); }
@@ -284,11 +285,12 @@ class PDFExporter {
             .lc-reading-table th { padding: 9px 14px; font-size: 11.5px; font-weight: 800; color: #fff; background: #8c5e3c; letter-spacing: .3px; text-align: left; width: 50%; }
             .lc-col-vi { background: #6b4b2b !important; }
             .lc-flag { display: inline-block; background: rgba(255,255,255,.22); color: #fff; padding: 1px 5px; border-radius: 4px; font-size: 9px; font-weight: 800; margin-right: 4px; }
-            .lc-reading-p-row td { border-bottom: 1px solid #e8ded3; vertical-align: top; padding: 14px 16px; font-size: 13px; line-height: 1.75; width: 50%; }
+            .lc-reading-p-row td { border-bottom: 1px solid #e8ded3; vertical-align: top; padding: 14px 16px; font-size: 13px; line-height: 1.8; width: 50%; word-spacing: 0.8px; letter-spacing: 0.15px; }
             .lc-reading-p-row:last-child td { border-bottom: none; }
             .lc-col-en-body { border-right: 1px solid #e8ded3; background: #fffdf9; }
             .lc-col-vi-body { background: #fcfaf7; }
-            mark { background-color: #fef08a !important; font-weight: 700; color: #0f172a !important; padding: 2px 6px; border-radius: 4px; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; display: inline-block; margin: 1px 0; }
+            .lc-col-vi-body p, .lc-col-en-body p { margin: 0; line-height: 1.8; text-align: justify; word-spacing: 0.8px; letter-spacing: 0.15px; }
+            mark { background-color: #fef08a !important; font-weight: 700; color: #0f172a !important; padding: 2px 6px; border-radius: 4px; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; display: inline-block; margin: 1px 2px; }
 
             /* VOCAB SUMMARY TABLE */
             .lc-table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 4px; background: #ffffff; }
@@ -312,7 +314,7 @@ class PDFExporter {
         </style>`;
     }
 
-    _buildReadingTableRows(englishText = '', englishHTML = '', vietnameseText = '', vietnameseHTML = '', highlights = [], vocabRows = []) {
+    _buildReadingTableRows(englishText = '', englishHTML = '', vietnameseText = '', vietnameseHTML = '', highlights = [], vocabRows = [], vocabList = []) {
         // 1. Prepare English paragraphs
         let enParas = [];
         if (englishHTML && (englishHTML.includes('<mark') || englishHTML.includes('highlight-mark'))) {
@@ -322,7 +324,7 @@ class PDFExporter {
                 const bg = (m.style && m.style.backgroundColor) || m.getAttribute('data-color') || '#fef08a';
                 m.removeAttribute('class');
                 m.removeAttribute('id');
-                m.setAttribute('style', `background-color:${bg} !important; font-weight:700; color:#0f172a !important; padding:2px 6px; border-radius:4px; display:inline;`);
+                m.setAttribute('style', `background-color:${bg} !important; font-weight:700; color:#0f172a !important; padding:2px 6px; border-radius:4px; display:inline-block; margin:1px 2px;`);
             });
             tmp.querySelectorAll('script, style, button').forEach(el => el.remove());
             const blocks = tmp.querySelectorAll('p, div.paragraph-block');
@@ -343,7 +345,7 @@ class PDFExporter {
                     if (!word) continue;
                     const color = h.color || '#fef08a';
                     const regex = new RegExp(`\\b(${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})\\b`, 'gi');
-                    escaped = escaped.replace(regex, `<mark style="background-color:${color} !important; font-weight:700; color:#0f172a !important; padding:2px 6px; border-radius:4px;">$1</mark>`);
+                    escaped = escaped.replace(regex, `<mark style="background-color:${color} !important; font-weight:700; color:#0f172a !important; padding:2px 6px; border-radius:4px; display:inline-block; margin:1px 2px;">$1</mark>`);
                 }
                 return escaped;
             });
@@ -358,7 +360,7 @@ class PDFExporter {
                 const bg = (m.style && m.style.backgroundColor) || m.getAttribute('data-color') || '#fef08a';
                 m.removeAttribute('class');
                 m.removeAttribute('id');
-                m.setAttribute('style', `background-color:${bg} !important; font-weight:700; color:#0f172a !important; padding:2px 6px; border-radius:4px; display:inline;`);
+                m.setAttribute('style', `background-color:${bg} !important; font-weight:700; color:#0f172a !important; padding:2px 6px; border-radius:4px; display:inline-block; margin:1px 2px;`);
             });
             tmp.querySelectorAll('script, style, button').forEach(el => el.remove());
             const blocks = tmp.querySelectorAll('p, div.paragraph-block');
@@ -372,31 +374,70 @@ class PDFExporter {
             vnParas = cleanVn.split(/\n\s*\n/).filter(Boolean).map(p => this._escapeHTML(p));
         }
 
-        // 3. Highlight Vietnamese terms matching vocab rows & highlights
-        const safeVnTerms = [...(vocabRows || []), ...(highlights || [])]
-            .map(v => ({
-                word: (v.contextMeaning || v.translatedTermInVN || v.meaning || '').trim(),
-                color: v.color || '#fef08a'
-            }))
-            .filter(v => v.word.length >= 2)
-            .sort((a, b) => b.word.length - a.word.length);
+        // 3. ENRICH VIETNAMESE HIGHLIGHT MATCHING CANDIDATES
+        const vnTermMap = [];
+        const addVnCandidate = (rawWord, color) => {
+            if (!rawWord) return;
+            const clean = String(rawWord).trim().replace(/^#+\s*/g, '');
+            if (clean.length < 2) return;
+            const parts = clean.split(/[,;\n\/]/).map(s => s.trim()).filter(s => s.length >= 2);
+            parts.forEach(part => {
+                vnTermMap.push({ term: part, color: color || '#fef08a' });
+            });
+        };
 
+        (vocabRows || []).forEach(v => {
+            const color = v.color || '#fef08a';
+            addVnCandidate(v.contextMeaning, color);
+            addVnCandidate(v.translatedTermInVN, color);
+            addVnCandidate(v.meaning, color);
+        });
+
+        (vocabList || []).forEach(v => {
+            const color = v.color || '#fef08a';
+            addVnCandidate(v.contextMeaning, color);
+            addVnCandidate(v.translatedTermInVN, color);
+            addVnCandidate(v.meaning, color);
+        });
+
+        (highlights || []).forEach(h => {
+            const word = (h.text || h.word || '').trim();
+            if (!word) return;
+            const color = h.color || '#fef08a';
+            if (window.dictionaryDB && window.dictionaryDB.getMeaning) {
+                const dictM = window.dictionaryDB.getMeaning(word);
+                if (dictM) addVnCandidate(dictM, color);
+            }
+            const matched = (vocabList || []).find(v => {
+                const vw = (v.original || v.term || v.text || v.word || '').trim();
+                return vw && vw.toLowerCase() === word.toLowerCase();
+            });
+            if (matched) {
+                addVnCandidate(matched.contextMeaning, color);
+                addVnCandidate(matched.translatedTermInVN, color);
+                addVnCandidate(matched.meaning, color);
+            }
+        });
+
+        // Deduplicate and sort by length descending (longest phrases first)
         const seenVn = new Set();
-        const uniqueVnTerms = [];
-        for (const item of safeVnTerms) {
-            const k = item.word.toLowerCase();
+        const sortedVnItems = [];
+        vnTermMap.sort((a, b) => b.term.length - a.term.length);
+        for (const item of vnTermMap) {
+            const k = item.term.toLowerCase();
             if (!seenVn.has(k)) {
                 seenVn.add(k);
-                uniqueVnTerms.push(item);
+                sortedVnItems.push(item);
             }
         }
 
+        // Apply highlights to Vietnamese paragraphs
         vnParas = vnParas.map(p => {
             let pText = p;
-            for (const item of uniqueVnTerms) {
-                const termEscaped = this._escapeHTML(item.word);
+            for (const item of sortedVnItems) {
+                const termEscaped = this._escapeHTML(item.term);
                 const regex = new RegExp(`(${termEscaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-                pText = pText.replace(regex, `<mark style="background-color:${item.color} !important; font-weight:700; color:#0f172a !important; padding:2px 6px; border-radius:4px;">$1</mark>`);
+                pText = pText.replace(regex, `<mark style="background-color:${item.color} !important; font-weight:700; color:#0f172a !important; padding:2px 6px; border-radius:4px; display:inline-block; margin:1px 2px;">$1</mark>`);
             }
             return pText;
         });
@@ -415,8 +456,8 @@ class PDFExporter {
             const enP = enParas[i] || '';
             const vnP = vnParas[i] || '';
             rowsHTML += `<tr class="lc-reading-p-row">
-                <td class="lc-col lc-col-en-body"><p style="margin: 0; line-height: 1.75; text-align: justify;">${enP}</p></td>
-                <td class="lc-col lc-col-vi-body"><p style="margin: 0; line-height: 1.75; text-align: justify;">${vnP || '<span style="color:#9a8578; font-style:italic;">(Chưa có bản dịch)</span>'}</p></td>
+                <td class="lc-col lc-col-en-body"><p style="margin: 0; line-height: 1.8; text-align: justify; word-spacing: 0.8px; letter-spacing: 0.15px;">${enP}</p></td>
+                <td class="lc-col lc-col-vi-body"><p style="margin: 0; line-height: 1.8; text-align: justify; word-spacing: 0.8px; letter-spacing: 0.15px;">${vnP || '<span style="color:#9a8578; font-style:italic;">(Chưa có bản dịch)</span>'}</p></td>
             </tr>`;
         }
 
