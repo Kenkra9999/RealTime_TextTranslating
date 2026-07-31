@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinguaContext Pro — Dịch Ngữ Cảnh & Ghi Chú Từ Vựng Thông Minh</title>
+    <meta name="description" content="Ứng dụng dịch văn bản tiếng Anh dài ngữ cảnh cao cấp, tô đậm từ vựng màu sắc, tự động ánh xạ bản dịch tiếng Việt, và xuất bảng từ vựng PDF chuyên nghiệp.">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300&family=Outfit:wght@600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700&family=Literata:wght@400;500;600;700&family=Source+Serif+4:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700&family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Anti-flash theme init: read saved theme BEFORE page paints to prevent a white flash.
+         Four themes are supported: classic, dark, cosmos, sepia. Any unknown value falls
+         back to "classic" so first-time visitors see the warm vintage default. -->
+    <script>
+        (function() {
+            try {
+                var t = localStorage.getItem('lingua_theme') || 'classic';
+                var valid = ['classic', 'dark', 'cosmos', 'sepia', 'midnight'];
+                if (valid.indexOf(t) === -1) t = 'classic';
+                document.documentElement.setAttribute('data-theme', t);
+            } catch(e) {}
+        })();
+    </script>
+
+    <!-- PDF Export Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
+</head>
+<body>
+
+    <!-- Decorative SVG doodles — fixed, pointer-events none, theme-aware via opacity var -->
+    <svg class="doodle-blob" style="width:340px;top:-60px;left:-80px;transform:rotate(-18deg);" viewBox="0 0 340 300" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M280 60 Q320 120 300 180 Q280 240 210 260 Q140 280 90 240 Q40 200 50 130 Q60 60 130 30 Q200 0 260 30 Z" fill="var(--primary)" opacity="0.07"/>
+        <circle cx="60" cy="200" r="28" fill="var(--accent-2)" opacity="0.09"/>
+        <circle cx="300" cy="50" r="18" fill="var(--accent-3)" opacity="0.12"/>
+        <!-- Small pencil doodle -->
+        <g transform="translate(150,130) rotate(20)" opacity="0.18">
+            <rect x="-4" y="-36" width="8" height="48" rx="2" fill="var(--primary)"/>
+            <polygon points="-4,12 4,12 0,22" fill="var(--primary-dark)"/>
+            <rect x="-4" y="-36" width="8" height="8" rx="1" fill="var(--accent-2)"/>
+        </g>
+        <!-- Star -->
+        <text x="270" y="190" font-size="20" fill="var(--accent-2)" opacity="0.2" font-family="serif">✦</text>
+        <text x="30"  y="80"  font-size="14" fill="var(--accent-3)" opacity="0.22" font-family="serif">✦</text>
+    </svg>
+
+    <svg class="doodle-blob" style="width:300px;bottom:-50px;right:-60px;transform:rotate(12deg);" viewBox="0 0 300 280" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M240 40 Q290 100 270 170 Q250 240 180 255 Q110 270 70 220 Q30 170 50 100 Q70 30 150 15 Q230 0 240 40 Z" fill="var(--accent)" opacity="0.07"/>
+        <circle cx="260" cy="220" r="22" fill="var(--primary)" opacity="0.08"/>
+        <!-- Book doodle -->
+        <g transform="translate(120,120)" opacity="0.2">
+            <rect x="-26" y="-20" width="52" height="38" rx="3" fill="none" stroke="var(--primary)" stroke-width="2.5"/>
+            <line x1="0" y1="-20" x2="0" y2="18" stroke="var(--primary)" stroke-width="2"/>
+            <line x1="-20" y1="-10" x2="-4" y2="-10" stroke="var(--primary)" stroke-width="1.5"/>
+            <line x1="-20" y1="-2"  x2="-4" y2="-2"  stroke="var(--primary)" stroke-width="1.5"/>
+            <line x1="-20" y1="6"   x2="-4" y2="6"   stroke="var(--primary)" stroke-width="1.5"/>
+        </g>
+        <text x="20"  y="240" font-size="22" fill="var(--accent-3)" opacity="0.18" font-family="serif">✦</text>
+        <text x="250" y="60"  font-size="13" fill="var(--primary)"  opacity="0.2"  font-family="serif">✦</text>
+    </svg>
+
+    <!-- Header Navigation Bar -->
+    <header class="app-header">
+        <div class="brand-container">
+            <div class="brand-logo">📖</div>
+            <div class="brand-text-wrap">
+                <div class="brand-title">LinguaContext Pro</div>
+                <div class="brand-subtitle">Dịch & Ghi Chú Ngữ Cảnh</div>
+            </div>
+            <!-- Brand-area actions: collapse / expand toggle stays right next to the logo & title -->
+            <div class="brand-actions">
+                <button class="header-collapse-btn" id="btnToggleHeaderCollapse" title="Thu gọn / Mở rộng thanh công cụ" aria-label="Thu gọn thanh công cụ">
+                    <span class="header-collapse-icon">
+                        <span></span><span></span><span></span>
+                    </span>
+                </button>
+                <button class="header-expand-btn" id="btnToggleHeaderExpand" title="Mở rộng thanh công cụ" aria-label="Mở rộng thanh công cụ" hidden>
+                    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+                        <path d="M2 2l8 8M10 2l-8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Toolbar Controls -->
+        <div class="header-toolbar">
+
+            <!-- Typography Controls (moved UP from the left pane to free up reading area).
+                 Compact/icon-only mode in the header; labels are hidden to save space. -->
+            <div class="typography-controls-bar" id="headerTypographyControls">
+                <div class="font-size-controls" title="Cỡ chữ">
+                    <button class="font-btn" id="btnFontDec" title="Thu nhỏ cỡ chữ">A-</button>
+                    <span id="fontSizeDisplay" style="font-size: 11px; font-weight: 700; color: var(--primary-dark);">16px</span>
+                    <button class="font-btn" id="btnFontInc" title="Phóng to cỡ chữ">A+</button>
+                </div>
+
+                <div class="font-weight-controls" title="Độ đậm">
+                    <input type="range" id="fontWeightSlider" class="typo-slider" min="400" max="900" step="100" value="600" title="Kéo để chỉnh độ đậm chữ" />
+                    <span id="fontWeightDisplay" style="font-size: 11px; font-weight: 700; color: var(--primary-dark); min-width: 28px; text-align: right;">600</span>
+                </div>
+
+                <div class="font-family-controls" title="Phông chữ">
+                    <!-- Hidden native select keeps form semantics & change events -->
+                    <select id="fontFamilySelect" class="typo-select-native" aria-hidden="true" tabindex="-1" title="Chọn phông chữ đọc/dịch">
+                        <option value="'Lora', 'Merriweather', Georgia, serif" selected>Lora (Serif thanh lịch)</option>
+                        <option value="'Merriweather', Georgia, serif">Merriweather (Serif đậm)</option>
+                        <option value="'Literata', Georgia, serif">Literata (Serif hiện đại)</option>
+                        <option value="'Source Serif 4', Georgia, serif">Source Serif 4 (Serif cổ điển)</option>
+                        <option value="'Inter', -apple-system, sans-serif">Inter (Sans-serif rõ nét)</option>
+                        <option value="'Plus Jakarta Sans', -apple-system, sans-serif">Plus Jakarta Sans (Sans hiện đại)</option>
+                        <option value="'Work Sans', -apple-system, sans-serif">Work Sans (Sans gọn gàng)</option>
+                        <option value="'Nunito', -apple-system, sans-serif">Nunito (Sans mềm mại)</option>
+                        <option value="'Outfit', -apple-system, sans-serif">Outfit (Sans nổi bật)</option>
+                    </select>
+                    <!-- Custom dropdown UI (replaces native popup) -->
+                    <button type="button" id="fontFamilyTrigger" class="typo-select-trigger" aria-haspopup="listbox" aria-expanded="false">
+                        <span id="fontFamilyTriggerLabel">Lora</span>
+                        <svg class="typo-select-chevron" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+                            <path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                    <ul id="fontFamilyDropdown" class="typo-select-dropdown" role="listbox" hidden></ul>
+                </div>
+            </div>
+
+            <!-- Light / Dark Theme Toggle -->
+            <button class="theme-toggle" id="btnThemeToggle" title="Chuyển chế độ Sáng / Tối" aria-label="Toggle light/dark mode">
+                <span class="theme-toggle-icon" id="themeIcon">☀️</span>
+                <div class="theme-toggle-track" id="themeTrack"></div>
+                <span id="themeLabel" style="font-size:11px;font-weight:700;">Sáng</span>
+            </button>
+
+            <!-- Mode Selector: Select vs Brush Pen vs Dictionary Lookup -->
+            <div style="display: flex; gap: 4px; background: var(--bg-card-solid); padding: 3px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                <button class="btn btn-sm btn-toggle active" id="btnModeSelect" title="Chế độ chọn chuột bình thường">
+                    🖱️ Chọn
+                </button>
+                <button class="btn btn-sm btn-toggle" id="btnModeBrush" title="Chế độ bút tô màu tự động khi quét qua">
+                    🖌️ Bút tô
+                </button>
+                <button class="btn btn-sm btn-toggle" id="btnModeLookup" title="Chế độ tra từ: rê chuột vào từ để xem nghĩa, phiên âm, loại từ và nghe phát âm">
+                    🔍 Tra từ
+                </button>
+            </div>
+
+            <!-- Palette Selector -->
+            <div class="palette-selector" title="Chọn màu highlight mặc định">
+                <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">Màu:</span>
+                <div class="color-dot active" data-color="#fef08a" style="background: #fef08a;" title="Vàng — Collocation"></div>
+                <div class="color-dot" data-color="#bbf7d0" style="background: #bbf7d0;" title="Xanh lá — Phrasal Verb"></div>
+                <div class="color-dot" data-color="#bae6fd" style="background: #bae6fd;" title="Xanh dương — Adv+Verb"></div>
+                <div class="color-dot" data-color="#e9d5ff" style="background: #e9d5ff;" title="Tím — Idiom/Grammar"></div>
+                <div class="color-dot" data-color="#fecdd3" style="background: #fecdd3;" title="Hồng — Vocabulary"></div>
+            </div>
+
+            <!-- AI Deep Auto Scan Button -->
+            <button class="btn btn-secondary btn-sm" id="btnAutoHighlight" title="AI tự động tìm từ vựng, collocation, trạng từ + động từ & cấu trúc hay">
+                ✨ AI Quét Từ Vựng
+            </button>
+
+            <!-- Sample Text Loader -->
+            <button class="btn btn-secondary btn-sm" id="btnLoadSample" title="Tải bài viết mẫu để thử nghiệm">
+                📄 Bài mẫu
+            </button>
+
+            <!-- Translate Button -->
+            <button class="btn btn-primary" id="btnTranslate">
+                🚀 Dịch & Phân Tích
+            </button>
+
+            <!-- Export PDF Header Button -->
+            <button class="btn btn-secondary btn-sm" id="btnExportPDFHeader" title="Xuất toàn bộ bài dịch & từ vựng ra file PDF">
+                📄 Xuất PDF
+            </button>
+
+            <!-- API Settings Button -->
+            <button class="btn btn-secondary btn-sm" id="btnOpenSettings" title="Cài đặt OpenAI & Gemini API Key">
+                ⚙️ API Key
+            </button>
+
+            <!-- Clear Button -->
+            <button class="btn btn-secondary btn-sm" id="btnClear" title="Xóa làm mới toàn bộ">
+                🗑️
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace Container -->
+    <main class="main-wrapper">
+
+        <!-- Status & Progress Indicator Bar -->
+        <div id="progressStatusContainer" style="display: none; background: var(--bg-card-solid); border: 1px solid var(--border-color); padding: 10px 16px; border-radius: var(--radius-sm);">
+            <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: var(--primary-dark);">
+                <span id="progressStatusText">Đang xử lý...</span>
+                <span id="progressStatusPercent">0%</span>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="progressBarFill"></div>
+            </div>
+        </div>
+
+        <!-- Resizable Dual-Pane Split Screen -->
+        <div class="split-screen-container glass-card" id="splitScreenContainer">
+            
+            <!-- Left Pane: English Source Text -->
+            <section class="pane pane-left" id="paneLeft">
+                <div class="pane-header">
+                    <span>🇬🇧 VĂN BẢN TIẾNG ANH (GỐC)</span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span id="wordCountBadge" style="font-size: 11px; background: var(--primary-light); color: var(--primary-dark); padding: 2px 8px; border-radius: 10px; font-weight: 600;">0 từ</span>
+                        <button class="btn btn-secondary btn-sm" id="btnPasteText" style="padding: 2px 8px; font-size: 11px;" title="Dán nhanh nội dung từ Clipboard">📋 Dán bài</button>
+                        <button class="btn btn-secondary btn-sm" id="btnToggleMode" style="padding: 2px 8px; font-size: 11px;">📖 Chế độ đọc & tô màu</button>
+                    </div>
+                </div>
+
+                <div class="pane-body" id="paneBodyLeft">
+                    <!-- Textarea Mode (Default Input) -->
+                    <textarea class="editor-input" id="inputText" placeholder="Dán hoặc nhập bài viết tiếng Anh vào đây (hỗ trợ tối đa 20.000 từ)..."></textarea>
+                    
+                    <!-- Display Mode (Interactive Reading & Color Highlighting) -->
+                    <div class="text-display-content font-serif-reading" id="readingCanvas" style="display: none;"></div>
+                </div>
+            </section>
+
+            <!-- Middle Resizer Handle -->
+            <div class="pane-resizer" id="paneResizer" title="Kéo rê để điều chỉnh tỷ lệ 2 màn hình (Bấm đúp để reset 50/50)">
+                <div class="resizer-handle"></div>
+            </div>
+
+            <!-- Right Pane: Vietnamese Contextual Translation -->
+            <section class="pane pane-right" id="paneRight">
+                <div class="pane-header">
+                    <span>🇻🇳 BẢN DỊCH TIẾNG VIỆT (NGỮ CẢNH)</span>
+                    <span id="transStatusBadge" style="font-size: 11px; color: var(--text-muted); font-weight: 500;">Sẵn sàng</span>
+                </div>
+                <div class="pane-body" id="paneBodyRight">
+                    <div class="text-display-content font-serif-reading" id="translationCanvas">
+                        <em style="color: var(--text-light);">Bản dịch tiếng Việt và các từ được tô đậm tương ứng sẽ hiển thị ở đây sau khi bạn nhấn "Dịch & Phân Tích".</em>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+
+        <!-- Vertical drag handle: resize the table area below ↑/↓ -->
+        <div class="vocab-resizer" id="vocabResizer" title="Kéo lên/xuống để phóng to / thu nhỏ bảng tổng kết từ vựng (kéo xuống để kéo dài hộp văn bản)">
+            <div class="vocab-resizer-grip"></div>
+        </div>
+
+        <!-- Vocabulary Breakdown Table Section -->
+        <section class="vocab-section" id="vocabSection">
+            <div class="section-header">
+                <h2 class="section-title">
+                    📊 BẢNG TỔNG KẾT TỪ VỰNG, CỤM TỪ & CẤU TRÚC NGỮ CẢNH
+                </h2>
+                <div style="font-size: 12px; color: var(--text-muted);" id="vocabStats">
+                    📄 <strong id="vocabDocCount">0</strong> văn bản • <strong id="highlightCountText">0</strong> mục
+                </div>
+            </div>
+
+            <div class="vocab-export-bar">
+                <button class="btn btn-primary btn-export-pdf-inline" id="btnExportPDFInline" title="Tải bảng tổng kết từ vựng + văn bản đối chiếu ra file PDF (vector text, copy/select được)">
+                    📄 Xuất file PDF
+                </button>
+                <span class="vocab-export-hint">Xuất ra file PDF — chữ vector gọn nhẹ, không ảnh raster, copy được nội dung.</span>
+            </div>
+
+            <div class="vocab-accordion" id="vocabAccordionContainer">
+                <div class="vocab-empty-state" id="vocabEmptyState">
+                    Bôi đen tô màu từ vựng/cấu trúc trong văn bản tiếng Anh hoặc bấm "✨ AI Quét Từ & Cấu Trúc Hay" để tổng kết dữ liệu tại đây. Mỗi lần Dịch & Phân Tích một văn bản mới sẽ tạo thêm một mục thu gọn/mở rộng riêng bên dưới.
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- API Settings Modal (OpenAI ChatGPT & Google Gemini Support) -->
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal-card glass-card">
+            <div class="modal-header">
+                <h3 class="modal-title">⚙️ Cài đặt Động Cơ AI (ChatGPT & Gemini)</h3>
+                <button class="modal-close" id="btnCloseSettings">&times;</button>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Chọn Nhà Cung Cấp AI (Provider)</label>
+                <select class="form-select" id="selectProvider">
+                    <option value="openai">OpenAI ChatGPT (GPT-4o / GPT-4o-mini)</option>
+                    <option value="gemini" selected>Google Gemini (Gemini 2.5 Flash / 2.0 Flash)</option>
+                </select>
+            </div>
+
+            <!-- OpenAI Settings Group -->
+            <div id="groupOpenAI" style="display: none; flex-direction: column; gap: 12px;">
+                <div class="form-group">
+                    <label class="form-label">OpenAI ChatGPT API Key</label>
+                    <input type="password" class="form-input" id="inputOpenAiApiKey" placeholder="sk-proj-..." />
+                    <span style="font-size: 11.5px; color: var(--text-muted);">
+                        Nhập OpenAI API Key chính chủ của bạn (bắt đầu bằng sk-...).
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Mô hình ChatGPT Model</label>
+                    <select class="form-select" id="selectOpenAiModel">
+                        <option value="gpt-4o" selected>GPT-4o (Thông minh nhất, dịch ngữ cảnh cực chuẩn)</option>
+                        <option value="gpt-4o-mini">GPT-4o Mini (Nhanh & Tối ưu chi phí)</option>
+                        <option value="gpt-4-turbo">GPT-4 Turbo (Chính xác cao)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Gemini Settings Group -->
+            <div id="groupGemini" style="display: flex; flex-direction: column; gap: 12px;">
+                <div class="form-group">
+                    <label class="form-label">Google Gemini API Key</label>
+                    <input type="password" class="form-input" id="inputApiKey" placeholder="AIzaSy..." />
+                    <span style="font-size: 11.5px; color: var(--text-muted);">
+                        Nhập Gemini API Key chính chủ để dịch ngữ cảnh chuẩn xác và tốc độ cao.
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Mô hình Gemini Model</label>
+                    <select class="form-select" id="selectModel">
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Mới nhất, nhanh & chuẩn)</option>
+                        <option value="gemini-2.0-flash">Gemini 2.0 Flash (Nhanh & Ngữ cảnh 1M Tokens)</option>
+                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Tối ưu từ vựng)</option>
+                        <option value="gemini-2.5-pro" selected>Gemini 2.5 Pro (Chính xác nhất — Khuyên dùng)</option>
+                        <option value="gemini-1.5-pro">Gemini 1.5 Pro (Chính xác cao)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Auto AI Deep Scan Option Checkbox -->
+            <div class="form-group" style="margin-top: 10px; padding: 10px; background: var(--primary-light); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--primary-dark);">
+                    <input type="checkbox" id="chkAutoScanAi" checked style="margin-top: 3px; accent-color: var(--primary);" />
+                    <span>✨ Tự động dùng AI (ChatGPT/Gemini) quét & tô đậm đầy đủ nhất các từ vựng khó, trạng từ + động từ, collocation & cấu trúc ngữ pháp khi nhấn Dịch</span>
+                </label>
+            </div>
+
+            <!-- Divider -->
+            <div style="height: 1px; background: var(--border-color); margin: 14px 0;"></div>
+
+            <!-- Dedicated API Config for AI Quét Từ & Cấu Trúc Hay -->
+            <div class="form-group" style="padding: 10px; background: #fffbeb; border-radius: var(--radius-sm); border: 1px solid #fde68a;">
+                <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12.5px; font-weight: 700; color: #92400e;">
+                    <input type="checkbox" id="chkUseSeparateScanApi" style="margin-top: 3px; accent-color: var(--primary);" />
+                    <span>🔑 Dùng riêng 1 API Key khác cho nút "✨ AI Quét Từ & Cấu Trúc Hay" (tách biệt với API dịch ở trên, giúp quét sâu & chi tiết hơn, chuyên tìm từ vựng/cấu trúc/idiom hay không phụ thuộc quota dịch)</span>
+                </label>
+
+                <div id="groupSeparateScanApi" style="display: none; flex-direction: column; gap: 12px; margin-top: 12px;">
+                    <div class="form-group">
+                        <label class="form-label">Nhà cung cấp AI cho Quét Từ & Cấu Trúc</label>
+                        <select class="form-select" id="selectScanProvider">
+                            <option value="openai">OpenAI ChatGPT (GPT-4o / GPT-4o-mini)</option>
+                            <option value="gemini" selected>Google Gemini (Gemini 2.5 Flash / 2.0 Flash)</option>
+                        </select>
+                    </div>
+
+                    <!-- Separate OpenAI Settings -->
+                    <div id="groupScanOpenAI" style="display: none; flex-direction: column; gap: 12px;">
+                        <div class="form-group">
+                            <label class="form-label">OpenAI API Key (riêng cho Quét Từ & Cấu Trúc)</label>
+                            <input type="password" class="form-input" id="inputScanOpenAiApiKey" placeholder="sk-proj-..." />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Mô hình ChatGPT Model</label>
+                            <select class="form-select" id="selectScanOpenAiModel">
+                                <option value="gpt-4o" selected>GPT-4o (Thông minh nhất, quét sâu chính xác nhất)</option>
+                                <option value="gpt-4o-mini">GPT-4o Mini (Nhanh & Tối ưu chi phí)</option>
+                                <option value="gpt-4-turbo">GPT-4 Turbo (Chính xác cao)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Separate Gemini Settings -->
+                    <div id="groupScanGemini" style="display: flex; flex-direction: column; gap: 12px;">
+                        <div class="form-group">
+                            <label class="form-label">Gemini API Key (riêng cho Quét Từ & Cấu Trúc)</label>
+                            <input type="password" class="form-input" id="inputScanApiKey" placeholder="AIzaSy..." />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Mô hình Gemini Model</label>
+                            <select class="form-select" id="selectScanModel">
+                                <option value="gemini-2.5-flash">Gemini 2.5 Flash (Mới nhất, nhanh & chuẩn)</option>
+                                <option value="gemini-2.0-flash">Gemini 2.0 Flash (Nhanh & Ngữ cảnh 1M Tokens)</option>
+                                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                <option value="gemini-2.5-pro" selected>Gemini 2.5 Pro (Chính xác nhất — Khuyên dùng)</option>
+                                <option value="gemini-1.5-pro">Gemini 1.5 Pro (Chính xác cao)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <span style="font-size: 11.5px; color: #92400e;">
+                        Nếu không tick, nút Quét Từ & Cấu Trúc sẽ dùng chung API Key/Model ở phần cấu hình chính bên trên.
+                    </span>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+                <button class="btn btn-secondary" id="btnCancelSettings">Hủy</button>
+                <button class="btn btn-primary" id="btnSaveSettings">Lưu cài đặt</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/dictionary-db.js"></script>
+    <script src="js/highlighter.js"></script>
+    <script src="js/translator.js"></script>
+    <script src="js/pdf-exporter.js"></script>
+    <script src="js/app.js"></script>
+
+</body>
+</html>
