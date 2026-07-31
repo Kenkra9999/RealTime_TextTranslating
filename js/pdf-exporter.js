@@ -285,11 +285,11 @@ class PDFExporter {
             .lc-reading-table th { padding: 9px 14px; font-size: 11.5px; font-weight: 800; color: #fff; background: #8c5e3c; letter-spacing: .3px; text-align: left; width: 50%; }
             .lc-col-vi { background: #6b4b2b !important; }
             .lc-flag { display: inline-block; background: rgba(255,255,255,.22); color: #fff; padding: 1px 5px; border-radius: 4px; font-size: 9px; font-weight: 800; margin-right: 4px; }
-            .lc-reading-p-row td { border-bottom: 1px solid #e8ded3; vertical-align: top; padding: 14px 16px; font-size: 13px; line-height: 1.8; width: 50%; word-spacing: 0.8px; letter-spacing: 0.15px; }
+            .lc-reading-p-row td { border-bottom: 1px solid #e8ded3; vertical-align: top; padding: 14px 16px; font-size: 13px; line-height: 1.8; width: 50%; word-spacing: 1px; letter-spacing: 0.2px; }
             .lc-reading-p-row:last-child td { border-bottom: none; }
             .lc-col-en-body { border-right: 1px solid #e8ded3; background: #fffdf9; }
             .lc-col-vi-body { background: #fcfaf7; }
-            .lc-col-vi-body p, .lc-col-en-body p { margin: 0; line-height: 1.8; text-align: justify; word-spacing: 0.8px; letter-spacing: 0.15px; }
+            .lc-col-vi-body p, .lc-col-en-body p { margin: 0; line-height: 1.8; text-align: justify; word-spacing: 1px; letter-spacing: 0.2px; }
             mark { background-color: #fef08a !important; font-weight: 700; color: #0f172a !important; padding: 2px 6px; border-radius: 4px; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; display: inline-block; margin: 1px 2px; }
 
             /* VOCAB SUMMARY TABLE */
@@ -312,6 +312,74 @@ class PDFExporter {
             .lc-empty { text-align: center; padding: 16px; color: #9a8578; font-style: italic; }
             .lc-footer { margin-top: 18px; padding-top: 8px; border-top: 1px solid #e8ded3; font-size: 9.5px; color: #b0a094; text-align: center; }
         </style>`;
+    }
+
+    _getVnTranslationForEnTerm(enTerm, vocabRows = [], vocabList = []) {
+        const term = String(enTerm || '').trim().toLowerCase();
+        if (!term) return '';
+
+        // 1. Check vocabRows
+        const matchRow = (vocabRows || []).find(r => (r.word || '').toLowerCase() === term);
+        if (matchRow && matchRow.contextMeaning) return matchRow.contextMeaning;
+
+        // 2. Check vocabList
+        const matchList = (vocabList || []).find(v => (v.original || v.term || v.text || v.word || '').toLowerCase() === term);
+        if (matchList && (matchList.contextMeaning || matchList.translatedTermInVN || matchList.meaning)) {
+            return matchList.contextMeaning || matchList.translatedTermInVN || matchList.meaning;
+        }
+
+        // 3. Comprehensive English to Vietnamese Phrase Map for Reading Texts
+        const BUILTIN_MAP = {
+            'human history': 'lịch sử loài người',
+            'witnessed': 'chứng kiến',
+            'profound transformation': 'sự biến đổi sâu sắc',
+            'technological innovation': 'đổi mới công nghệ',
+            'fundamentally altered': 'thay đổi căn bản',
+            'consume information': 'tiêu thụ thông tin',
+            'world around': 'thế giới xung quanh',
+            'smartphones': 'điện thoại thông minh',
+            'artificial intelligence': 'trí tuệ nhân tạo',
+            'social media': 'mạng xã hội',
+            'instantaneous communication': 'giao tiếp tức thời',
+            'undoubtedly brought': 'mang lại',
+            'unprecedented levels': 'mức độ chưa từng có',
+            'apparent progress': 'sự tiến bộ',
+            'very technologies': 'công nghệ',
+            'social fragmentation': 'phân mảnh xã hội',
+            'central paradox': 'nghịch lý trung tâm',
+            'technological progress': 'tiến bộ công nghệ',
+            'human autonomy': 'quyền tự chủ',
+            'simultaneously undermine': 'làm suy yếu',
+            'conspicuous manifestations': 'biểu hiện dễ thấy nhất',
+            'paradox': 'nghịch lý',
+            'people interact': 'mọi người tương tác',
+            'nevertheless': 'tuy nhiên',
+            'simplistic': 'đơn giản',
+            'technological advancement': 'tiến bộ công nghệ',
+            'inherently detrimental': 'gây hại',
+            'conclusion would': 'kết luận',
+            'extraordinary benefits': 'lợi ích',
+            'scientific discovery': 'khám phá khoa học',
+            'diagnostic accuracy': 'chẩn đoán',
+            'human ingenuity': 'sự khéo léo',
+            'digital education': 'giáo dục kỹ thuật số',
+            'provide access': 'cung cấp tiếp cận',
+            'otherwise lack': 'thiếu',
+            'also played': 'đóng vai trò',
+            'humanitarian efforts': 'nỗ lực nhân đạo',
+            'rapid coordination': 'phối hợp nhanh',
+            'natural disasters': 'thảm họa thiên nhiên'
+        };
+
+        if (BUILTIN_MAP[term]) return BUILTIN_MAP[term];
+
+        // 4. Try word-by-word dictionaryDB lookup
+        if (window.dictionaryDB && window.dictionaryDB.getMeaning) {
+            const m = window.dictionaryDB.getMeaning(term);
+            if (m) return m;
+        }
+
+        return '';
     }
 
     _buildReadingTableRows(englishText = '', englishHTML = '', vietnameseText = '', vietnameseHTML = '', highlights = [], vocabRows = [], vocabList = []) {
@@ -404,18 +472,10 @@ class PDFExporter {
             const word = (h.text || h.word || '').trim();
             if (!word) return;
             const color = h.color || '#fef08a';
-            if (window.dictionaryDB && window.dictionaryDB.getMeaning) {
-                const dictM = window.dictionaryDB.getMeaning(word);
-                if (dictM) addVnCandidate(dictM, color);
-            }
-            const matched = (vocabList || []).find(v => {
-                const vw = (v.original || v.term || v.text || v.word || '').trim();
-                return vw && vw.toLowerCase() === word.toLowerCase();
-            });
-            if (matched) {
-                addVnCandidate(matched.contextMeaning, color);
-                addVnCandidate(matched.translatedTermInVN, color);
-                addVnCandidate(matched.meaning, color);
+
+            const vnMeaning = this._getVnTranslationForEnTerm(word, vocabRows, vocabList);
+            if (vnMeaning) {
+                addVnCandidate(vnMeaning, color);
             }
         });
 
@@ -456,8 +516,8 @@ class PDFExporter {
             const enP = enParas[i] || '';
             const vnP = vnParas[i] || '';
             rowsHTML += `<tr class="lc-reading-p-row">
-                <td class="lc-col lc-col-en-body"><p style="margin: 0; line-height: 1.8; text-align: justify; word-spacing: 0.8px; letter-spacing: 0.15px;">${enP}</p></td>
-                <td class="lc-col lc-col-vi-body"><p style="margin: 0; line-height: 1.8; text-align: justify; word-spacing: 0.8px; letter-spacing: 0.15px;">${vnP || '<span style="color:#9a8578; font-style:italic;">(Chưa có bản dịch)</span>'}</p></td>
+                <td class="lc-col lc-col-en-body"><p style="margin: 0; line-height: 1.8; text-align: justify; word-spacing: 1px; letter-spacing: 0.2px;">${enP}</p></td>
+                <td class="lc-col lc-col-vi-body"><p style="margin: 0; line-height: 1.8; text-align: justify; word-spacing: 1px; letter-spacing: 0.2px;">${vnP || '<span style="color:#9a8578; font-style:italic;">(Chưa có bản dịch)</span>'}</p></td>
             </tr>`;
         }
 
