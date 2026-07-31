@@ -1,10 +1,14 @@
 /**
- * LinguaContext Pro - PDF Exporter & Preview Engine
+ * LinguaContext Pro - PDF Exporter & Preview Engine (With Dynamic Font Selector)
  *
- * Provides dual export modes:
- *   1. exportToPDF(data) - Direct printable PDF export / Save as PDF.
- *   2. previewPDF(data)  - Opens a full-page A4 preview in a new browser tab,
- *      equipped with top banner buttons for both "Tải File PDF Về Máy" and "In / Lưu PDF".
+ * Renders high-resolution A4 PDF documents with an interactive font picker,
+ * allowing users to choose between Lora, Plus Jakarta Sans, Merriweather, Inter,
+ * Literata, and Work Sans directly on the preview / print window.
+ *
+ * Features:
+ *   - Live Font Selector in the preview / export top bar.
+ *   - 100% Vector text quality, 100% Vietnamese diacritics, 100% Unicode IPA phonetics.
+ *   - Preserves all highlight background colors (-webkit-print-color-adjust: exact).
  */
 class PDFExporter {
     constructor() {
@@ -29,7 +33,8 @@ class PDFExporter {
             englishHTML = '',
             vietnameseHTML = '',
             highlights = [],
-            vocabList = []
+            vocabList = [],
+            fontFamily = "'Lora', Georgia, serif"
         } = data;
 
         const vocabRows = this._buildVocabRows(highlights, vocabList);
@@ -40,7 +45,8 @@ class PDFExporter {
             englishHTML,
             vietnameseHTML,
             highlights,
-            vocabRows
+            vocabRows,
+            fontFamily
         });
 
         const filename = this._sanitizeFilename(documentTitle);
@@ -55,6 +61,7 @@ class PDFExporter {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;700;800&family=Literata:ital,wght@0,400;0,600;0,700;1,400&family=Work+Sans:wght@400;600;700&display=swap');
         @media print {
             body { padding: 0 !important; margin: 0 !important; background: #ffffff !important; }
             .no-print { display: none !important; }
@@ -63,25 +70,43 @@ class PDFExporter {
         }
     </style>
 </head>
-<body style="margin: 0; padding: 24px; background: #f8fafc; color: #1e293b; font-family: 'Plus Jakarta Sans', 'Segoe UI', Arial, sans-serif;">
-    <div class="no-print" style="max-width: 840px; margin: 0 auto 20px auto; padding: 16px 20px; background: #fffbe6; border: 1.5px solid #ffe58f; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: space-between; gap: 15px;">
+<body style="margin: 0; padding: 24px; background: #f8fafc; color: #1e293b; font-family: ${fontFamily};">
+    <div class="no-print" style="max-width: 860px; margin: 0 auto 20px auto; padding: 16px 20px; background: #fffbe6; border: 1.5px solid #ffe58f; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: space-between; gap: 15px; flex-wrap: wrap;">
         <div>
-            <div style="font-size: 15px; font-weight: 800; color: #8c5e3c; margin-bottom: 4px;">👁️ Xem Trước Tài Liệu PDF:</div>
+            <div style="font-size: 15px; font-weight: 800; color: #8c5e3c; margin-bottom: 4px;">🎨 Tùy Chỉnh Phông Chữ & Xuất File PDF:</div>
             <div style="font-size: 12.5px; color: #475569; line-height: 1.5;">
-                Bạn đang đọc trực tiếp trên trình duyệt. Hãy chọn nút <strong>"Tải File PDF Về Máy"</strong> hoặc nút <strong>"In / Lưu PDF"</strong> bên phải.
+                Bạn có thể chọn phông chữ bên dưới để đổi kiểu chữ bài đọc trước khi In hoặc Tải về.
             </div>
         </div>
-        <div style="display: flex; gap: 10px; flex-shrink: 0;">
-            <button onclick="downloadDirectly()" style="padding: 10px 18px; background: #2563eb; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; box-shadow: 0 3px 10px rgba(37,99,235,0.3); transition: transform 0.15s ease;">⬇️ Tải File PDF Về Máy</button>
-            <button onclick="window.print()" style="padding: 10px 18px; background: #8c5e3c; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; box-shadow: 0 3px 10px rgba(140,94,60,0.3); transition: transform 0.15s ease;">🖨️ In / Lưu PDF</button>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 6px; background: #ffffff; padding: 5px 10px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                <span style="font-size: 12px; font-weight: 700; color: #8c5e3c;">🔤 Phông chữ:</span>
+                <select id="pdfFontSelect" onchange="changePDFFont(this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #94a3b8; font-weight: 700; color: #1e293b; background: #ffffff; cursor: pointer; font-size: 12.5px; outline: none;">
+                    <option value="'Lora', Georgia, serif" selected>Lora (Serif thanh lịch)</option>
+                    <option value="'Plus Jakarta Sans', sans-serif">Plus Jakarta Sans (Sans hiện đại)</option>
+                    <option value="'Merriweather', serif">Merriweather (Serif đậm nét)</option>
+                    <option value="'Inter', sans-serif">Inter (Sans rõ nét)</option>
+                    <option value="'Literata', serif">Literata (Serif tinh tế)</option>
+                    <option value="'Work Sans', sans-serif">Work Sans (Sans gọn gàng)</option>
+                </select>
+            </div>
+            <button onclick="downloadDirectly()" style="padding: 9px 18px; background: #2563eb; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; box-shadow: 0 3px 10px rgba(37,99,235,0.3); transition: transform 0.15s ease;">⬇️ Tải PDF Về Máy</button>
+            <button onclick="window.print()" style="padding: 9px 18px; background: #8c5e3c; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; box-shadow: 0 3px 10px rgba(140,94,60,0.3); transition: transform 0.15s ease;">🖨️ In / Lưu PDF</button>
         </div>
     </div>
 
-    <div id="pdfCaptureTarget" class="lc-pdf-wrapper" style="max-width: 840px; margin: 0 auto; background: #ffffff; padding: 24px 28px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+    <div id="pdfCaptureTarget" class="lc-pdf-wrapper" style="max-width: 860px; margin: 0 auto; background: #ffffff; padding: 24px 28px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
         ${innerHTML}
     </div>
 
     <script>
+        function changePDFFont(fontFamily) {
+            var root = document.querySelector('.lc-pdf-root');
+            if (root) {
+                root.style.fontFamily = fontFamily;
+            }
+            document.body.style.fontFamily = fontFamily;
+        }
         function downloadDirectly() {
             if (window.html2pdf) {
                 var element = document.getElementById('pdfCaptureTarget');
@@ -123,7 +148,8 @@ class PDFExporter {
             englishHTML = '',
             vietnameseHTML = '',
             highlights = [],
-            vocabList = []
+            vocabList = [],
+            fontFamily = "'Lora', Georgia, serif"
         } = data;
 
         const vocabRows = this._buildVocabRows(highlights, vocabList);
@@ -134,8 +160,11 @@ class PDFExporter {
             englishHTML,
             vietnameseHTML,
             highlights,
-            vocabRows
+            vocabRows,
+            fontFamily
         });
+
+        const filename = this._sanitizeFilename(documentTitle);
 
         const fullHTML = `<!DOCTYPE html>
 <html lang="vi">
@@ -144,6 +173,7 @@ class PDFExporter {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${this._escapeHTML(documentTitle)}</title>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;700;800&family=Literata:ital,wght@0,400;0,600;0,700;1,400&family=Work+Sans:wght@400;600;700&display=swap');
         @media print {
             body { padding: 0 !important; margin: 0 !important; background: #ffffff !important; }
             .no-print { display: none !important; }
@@ -152,23 +182,42 @@ class PDFExporter {
         }
     </style>
 </head>
-<body style="margin: 0; padding: 24px; background: #f8fafc; color: #1e293b; font-family: 'Plus Jakarta Sans', 'Segoe UI', Arial, sans-serif;">
-    <div class="no-print" style="max-width: 840px; margin: 0 auto 20px auto; padding: 16px 20px; background: #fffbe6; border: 1.5px solid #ffe58f; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: space-between; gap: 15px;">
+<body style="margin: 0; padding: 24px; background: #f8fafc; color: #1e293b; font-family: ${fontFamily};">
+    <div class="no-print" style="max-width: 860px; margin: 0 auto 20px auto; padding: 16px 20px; background: #fffbe6; border: 1.5px solid #ffe58f; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: space-between; gap: 15px; flex-wrap: wrap;">
         <div>
-            <div style="font-size: 15px; font-weight: 800; color: #8c5e3c; margin-bottom: 4px;">🖨️ Hướng dẫn lưu file PDF đẹp chuẩn (100% Tiếng Việt + Highlight):</div>
+            <div style="font-size: 15px; font-weight: 800; color: #8c5e3c; margin-bottom: 4px;">🎨 Tùy Chỉnh Phông Chữ & Xuất File PDF:</div>
             <div style="font-size: 12.5px; color: #475569; line-height: 1.5;">
-                1. Tại ô <strong>Máy in / Destination</strong> ➔ Chọn <strong>"Lưu dưới dạng PDF" (Save as PDF)</strong>.
-                <br>2. Tích chọn ô <strong>"Đồ họa nền" (Background graphics)</strong> để hiển thị đầy đủ màu sắc tô đậm.
+                Chọn phông chữ yêu thích bên dưới để đổi giao diện tài liệu A4 trước khi bấm in.
             </div>
         </div>
-        <button onclick="window.print()" style="flex-shrink: 0; padding: 10px 22px; background: #8c5e3c; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13.5px; box-shadow: 0 3px 10px rgba(140,94,60,0.3); transition: transform 0.15s ease;">🖨️ Lưu Thành File PDF Ngay</button>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 6px; background: #ffffff; padding: 5px 10px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                <span style="font-size: 12px; font-weight: 700; color: #8c5e3c;">🔤 Phông chữ:</span>
+                <select id="pdfFontSelect" onchange="changePDFFont(this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #94a3b8; font-weight: 700; color: #1e293b; background: #ffffff; cursor: pointer; font-size: 12.5px; outline: none;">
+                    <option value="'Lora', Georgia, serif" selected>Lora (Serif thanh lịch)</option>
+                    <option value="'Plus Jakarta Sans', sans-serif">Plus Jakarta Sans (Sans hiện đại)</option>
+                    <option value="'Merriweather', serif">Merriweather (Serif đậm nét)</option>
+                    <option value="'Inter', sans-serif">Inter (Sans rõ nét)</option>
+                    <option value="'Literata', serif">Literata (Serif tinh tế)</option>
+                    <option value="'Work Sans', sans-serif">Work Sans (Sans gọn gàng)</option>
+                </select>
+            </div>
+            <button onclick="window.print()" style="flex-shrink: 0; padding: 9px 20px; background: #8c5e3c; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13.5px; box-shadow: 0 3px 10px rgba(140,94,60,0.3);">🖨️ Lưu Thành File PDF Ngay</button>
+        </div>
     </div>
 
-    <div class="lc-pdf-wrapper" style="max-width: 840px; margin: 0 auto; background: #ffffff; padding: 24px 28px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
+    <div class="lc-pdf-wrapper" style="max-width: 860px; margin: 0 auto; background: #ffffff; padding: 24px 28px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);">
         ${innerHTML}
     </div>
 
     <script>
+        function changePDFFont(fontFamily) {
+            var root = document.querySelector('.lc-pdf-root');
+            if (root) {
+                root.style.fontFamily = fontFamily;
+            }
+            document.body.style.fontFamily = fontFamily;
+        }
         setTimeout(function() {
             window.print();
         }, 500);
@@ -206,16 +255,17 @@ class PDFExporter {
     // ===================================================================
     // HTML TEMPLATE BUILDER
     // ===================================================================
-    _buildDocumentHTML({ documentTitle, englishText, vietnameseText, englishHTML, vietnameseHTML, highlights, vocabRows }) {
+    _buildDocumentHTML({ documentTitle, englishText, vietnameseText, englishHTML, vietnameseHTML, highlights, vocabRows, fontFamily }) {
         const dateStr = new Date().toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' });
         const wordCount = (englishText || '').trim().split(/\s+/).filter(Boolean).length;
         const enHTML = this._buildHighlightedParagraphHTML(englishText, englishHTML, highlights);
         const vnHTML = this._buildTranslationHTML(vietnameseText, vietnameseHTML);
         const rowsHTML = this._buildVocabRowsHTML(vocabRows);
+        const font = fontFamily || "'Lora', Georgia, serif";
 
         return `
-        <div class="lc-pdf-root">
-            ${this._styleBlock()}
+        <div class="lc-pdf-root" style="font-family: ${font};">
+            ${this._styleBlock(font)}
             <div class="lc-header">
                 <div class="lc-brandbar"></div>
                 <div class="lc-brand-row">
@@ -261,37 +311,38 @@ class PDFExporter {
         </div>`;
     }
 
-    _styleBlock() {
+    _styleBlock(fontFamily) {
+        const font = fontFamily || "'Lora', Georgia, serif";
         return `<style>
-            @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-            .lc-pdf-root { font-family: 'Plus Jakarta Sans', 'Segoe UI', Arial, sans-serif; color: #2b231d; font-size: 12.5px; line-height: 1.65; padding: 4px 6px; background: #ffffff; }
+            @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;700;800&family=Literata:ital,wght@0,400;0,600;0,700;1,400&family=Work+Sans:wght@400;600;700&display=swap');
+            .lc-pdf-root { font-family: ${font}; color: #2b231d; font-size: 13px; line-height: 1.75; padding: 4px 6px; background: #ffffff; }
             .lc-pdf-root * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             .lc-header { position: relative; padding: 10px 0 12px; border-bottom: 2.5px solid #8c5e3c; margin-bottom: 16px; }
             .lc-brandbar { position: absolute; top: -4px; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #8c5e3c, #c08552); }
             .lc-brand-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px; }
             .lc-app-name { font-size: 20px; font-weight: 800; color: #8c5e3c; letter-spacing: -.2px; }
             .lc-tagline { font-size: 10px; color: #9a8578; font-weight: 600; }
-            .lc-doc-title { font-size: 15.5px; font-weight: 700; color: #4a382c; margin: 8px 0 10px; }
+            .lc-doc-title { font-size: 16px; font-weight: 700; color: #4a382c; margin: 8px 0 10px; }
             .lc-meta-bar { display: flex; gap: 18px; flex-wrap: wrap; font-size: 11.5px; color: #7a6a5d; background: #fdfbf7; border: 1px solid #ebdccb; border-radius: 6px; padding: 7px 12px; }
             .lc-meta-bar strong { color: #5c3a21; }
-            .lc-section-title { font-size: 13.5px; font-weight: 800; color: #5c3a21; margin: 18px 0 10px; padding-left: 10px; border-left: 4px solid #8c5e3c; display: flex; align-items: center; gap: 8px; }
-            .lc-section-vocab { margin-top: 22px; }
+            .lc-section-title { font-size: 14px; font-weight: 800; color: #5c3a21; margin: 20px 0 12px; padding-left: 10px; border-left: 4px solid #8c5e3c; display: flex; align-items: center; gap: 8px; }
+            .lc-section-vocab { margin-top: 24px; }
             .lc-num { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; background: #8c5e3c; color: #fff; border-radius: 50%; font-size: 11px; font-weight: 800; }
-            .lc-sub { font-size: 10.5px; font-weight: 600; color: #9a8578; }
-            .lc-reading-wrap { border: 1px solid #e8ded3; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+            .lc-sub { font-size: 11px; font-weight: 600; color: #9a8578; }
+            .lc-reading-wrap { border: 1px solid #e8ded3; border-radius: 8px; overflow: hidden; margin-bottom: 14px; }
             .lc-reading-head { display: grid; grid-template-columns: 1fr 1fr; }
-            .lc-col-head { padding: 7px 12px; font-size: 11px; font-weight: 800; color: #fff; background: #8c5e3c; letter-spacing: .3px; }
+            .lc-col-head { padding: 8px 14px; font-size: 11.5px; font-weight: 800; color: #fff; background: #8c5e3c; letter-spacing: .3px; }
             .lc-col-vi { background: #6b4b2b; }
             .lc-flag { display: inline-block; background: rgba(255,255,255,.22); color: #fff; padding: 1px 5px; border-radius: 4px; font-size: 9px; font-weight: 800; margin-right: 4px; }
             .lc-reading-grid { display: grid; grid-template-columns: 1fr 1fr; }
-            .lc-col { padding: 12px 14px; font-size: 12.5px; }
+            .lc-col { padding: 14px 16px; font-size: 13px; line-height: 1.75; }
             .lc-col-en-body { border-right: 1px solid #e8ded3; background: #fffdf9; }
             .lc-col-vi-body { background: #fcfaf7; }
-            .lc-col p { margin: 0 0 10px; text-align: justify; line-height: 1.7; }
+            .lc-col p { margin: 0 0 12px; text-align: justify; }
             .lc-col p:last-child { margin-bottom: 0; }
             mark { background-color: #fef08a !important; font-weight: 700; color: #0f172a !important; padding: 2px 6px; border-radius: 4px; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             .lc-table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 4px; background: #ffffff; }
-            .lc-table th { background-color: #8c5e3c !important; color: #ffffff !important; padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 700; border: 1px solid #72492c; text-transform: uppercase; letter-spacing: .3px; }
+            .lc-table th { background-color: #8c5e3c !important; color: #ffffff !important; padding: 9px 10px; text-align: left; font-size: 11px; font-weight: 700; border: 1px solid #72492c; text-transform: uppercase; letter-spacing: .3px; }
             .lc-table td { border: 1px solid #e8ded3; padding: 8px 10px; vertical-align: top; }
             .lc-table tr:nth-child(even) td { background-color: #faf6f0 !important; }
             .lc-th-idx { width: 32px; text-align: center; }
@@ -302,7 +353,7 @@ class PDFExporter {
             .lc-td-idx { text-align: center; font-weight: 800; color: #8c7665; }
             .lc-td-word { font-weight: 700; color: #221a14; }
             .lc-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; border: 1px solid rgba(0,0,0,.18); }
-            .lc-td-ipa { font-family: 'Plus Jakarta Sans', 'Inter', 'Segoe UI', sans-serif; color: #2563eb; font-weight: 600; letter-spacing: .2px; }
+            .lc-td-ipa { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; color: #2563eb; font-weight: 600; letter-spacing: .2px; }
             .lc-badge { display: inline-block; background: #f3eae0; color: #6b472b; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; }
             .lc-td-mean { font-weight: 700; color: #78350f; }
             .lc-td-ex { font-style: italic; color: #4b5563; font-size: 11px; }

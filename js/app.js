@@ -1991,6 +1991,8 @@ class LinguaApp {
 
         let title = "Tài Liệu Dịch & Từ Vựng Ngữ Cảnh";
 
+        const activeFont = document.getElementById('fontFamilySelect') ? document.getElementById('fontFamilySelect').value : "'Lora', Georgia, serif";
+
         await this.pdfExporter.previewPDF({
             documentTitle: title,
             englishText: englishText,
@@ -1998,7 +2000,8 @@ class LinguaApp {
             englishHTML: englishHTML,
             vietnameseHTML: vietnameseHTML,
             vocabList: vocabList,
-            highlights: highlights
+            highlights: highlights,
+            fontFamily: activeFont
         });
     }
 
@@ -2015,6 +2018,7 @@ class LinguaApp {
         const sIdx = this.vocabSessions.indexOf(session);
         const docName = `Văn bản ${sIdx + 1}`;
         const defaultTitle = `${docName}` + (session.preview ? ` — ${session.preview.slice(0, 45)}` : '');
+        const activeFont = document.getElementById('fontFamilySelect') ? document.getElementById('fontFamilySelect').value : "'Lora', Georgia, serif";
 
         await this.pdfExporter.previewPDF({
             documentTitle: defaultTitle,
@@ -2023,7 +2027,8 @@ class LinguaApp {
             englishHTML: session.readingHTML || session.sourceText || '',
             vietnameseHTML: session.vietnameseHTML || '',
             vocabList: session.vocabList || [],
-            highlights: session.highlights || []
+            highlights: session.highlights || [],
+            fontFamily: activeFont
         });
     }
 
