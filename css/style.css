@@ -1699,3 +1699,129 @@ html[data-theme="cosmos"] mark.highlight-mark:hover {
 /* Section title decorative bar adapts to primary colour */
 html[data-theme="dark"] .section-title::before,
 html[data-theme="cosmos"] .section-title::before { background: var(--primary); }
+
+/* ===================================================================
+   MOBILE RESPONSIVE ENGINE (iOS & Android Phone & Tablet Support)
+   =================================================================== */
+@media screen and (max-width: 860px) {
+    /* Touch-friendly inputs & zoomed prevention on iOS */
+    input[type="text"], textarea, select {
+        font-size: 15px !important;
+    }
+
+    /* App Header Bar */
+    .app-header {
+        padding: 10px 14px !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+    }
+    .header-brand {
+        justify-content: space-between !important;
+        width: 100% !important;
+    }
+    .header-toolbar {
+        width: 100% !important;
+        justify-content: flex-start !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+    }
+    .btn {
+        padding: 8px 14px !important;
+        font-size: 12.5px !important;
+        min-height: 38px !important;
+    }
+
+    /* Split Screen Stack for Mobile */
+    .split-screen-container {
+        flex-direction: column !important;
+        height: auto !important;
+        min-height: unset !important;
+        gap: 16px !important;
+    }
+    .pane {
+        width: 100% !important;
+        height: auto !important;
+        min-height: 320px !important;
+        flex: 1 1 100% !important;
+    }
+    .pane-resizer {
+        display: none !important;
+    }
+
+    /* Reading paragraphs touch spacing */
+    .paragraph-block, .reader-paragraph {
+        font-size: 15px !important;
+        line-height: 1.85 !important;
+        padding: 12px 14px !important;
+    }
+    mark.highlight-mark {
+        padding: 2px 6px !important;
+        margin: 1px 2px !important;
+        font-size: 0.95em !important;
+    }
+
+    /* In-Page PDF Preview Modal for Mobile */
+    #pdfPreviewModal .modal-card {
+        width: 98% !important;
+        max-width: 100% !important;
+        padding: 12px !important;
+        max-height: 94vh !important;
+        margin: 8px auto !important;
+        border-radius: 12px !important;
+    }
+    .lc-reading-table {
+        display: block !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+    .lc-reading-p-row td {
+        padding: 10px 12px !important;
+        font-size: 13px !important;
+        line-height: 1.8 !important;
+    }
+
+    /* Vocab summary table mobile scroll */
+    .vocab-section {
+        padding: 14px 12px !important;
+    }
+    .vocab-table-wrapper {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+    .lc-table {
+        min-width: 600px !important;
+    }
+
+    /* Controls bar flex adjustments */
+    .typography-controls-bar {
+        padding: 8px 10px !important;
+        gap: 8px !important;
+        justify-content: space-between !important;
+    }
+    .font-size-controls, .font-family-controls {
+        padding: 3px 8px !important;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .app-title {
+        font-size: 17px !important;
+    }
+    .header-tagline {
+        font-size: 10px !important;
+    }
+    .btn {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+    .header-toolbar {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 6px !important;
+    }
+    .header-toolbar .btn {
+        font-size: 11.5px !important;
+        padding: 7px 8px !important;
+    }
+}
