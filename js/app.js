@@ -1957,31 +1957,27 @@ class LinguaApp {
         let highlights = [];
         let vocabList = [];
 
-        // Auto-resolve from active session if the text box is empty
-        if (this.vocabSessions && this.vocabSessions.length > 0) {
-            const activeS = this.vocabSessions.find(s => s.id === this.activeSessionId) || this.vocabSessions[0];
-            if (activeS) {
-                if (!englishText) englishText = activeS.sourceText || '';
-                if (!vietnameseText) vietnameseText = activeS.vietnameseText || '';
-                if (!vietnameseHTML) vietnameseHTML = activeS.vietnameseHTML || '';
-                highlights = activeS.highlights || [];
-                vocabList = activeS.vocabList || [];
-            }
+        const activeS = (this.vocabSessions && this.vocabSessions.length > 0)
+            ? (this.vocabSessions.find(s => s.id === this.activeSessionId) || this.vocabSessions[0])
+            : null;
+
+        if (activeS) {
+            if (!englishText) englishText = activeS.sourceText || '';
+            if (!vietnameseText) vietnameseText = activeS.vietnameseText || '';
+            if (!vietnameseHTML) vietnameseHTML = activeS.vietnameseHTML || '';
         }
+
+        const sessionHighlights = activeS ? (activeS.highlights || []) : [];
+        const canvasHighlights = this.highlighter ? (this.highlighter.getAllHighlightedItems() || []) : [];
+        highlights = [...sessionHighlights, ...canvasHighlights];
+
+        const sessionVocab = activeS ? (activeS.vocabList || []) : [];
+        const currentVocab = this.currentVocabData || [];
+        vocabList = [...sessionVocab, ...currentVocab];
 
         if (!englishText) {
             alert("Không có nội dung để xem trước PDF. Vui lòng nhập văn bản hoặc dịch một bài viết trước.");
             return;
-        }
-
-        if (highlights.length === 0) {
-            try {
-                highlights = this.highlighter ? (this.highlighter.getAllHighlightedItems() || []) : [];
-            } catch (e) {}
-        }
-
-        if (vocabList.length === 0) {
-            vocabList = this.currentVocabData || [];
         }
 
         const englishHTML = rawEnHTML.trim()
@@ -2020,14 +2016,18 @@ class LinguaApp {
         const defaultTitle = `${docName}` + (session.preview ? ` — ${session.preview.slice(0, 45)}` : '');
         const activeFont = document.getElementById('fontFamilySelect') ? document.getElementById('fontFamilySelect').value : "'Lora', Georgia, serif";
 
+        const canvasHighlights = this.highlighter ? (this.highlighter.getAllHighlightedItems() || []) : [];
+        const mergedHighlights = [...(session.highlights || []), ...canvasHighlights];
+        const mergedVocab = [...(session.vocabList || []), ...(this.currentVocabData || [])];
+
         await this.pdfExporter.previewPDF({
             documentTitle: defaultTitle,
             englishText: session.sourceText || '',
             vietnameseText: session.vietnameseText || '',
             englishHTML: session.readingHTML || session.sourceText || '',
             vietnameseHTML: session.vietnameseHTML || '',
-            vocabList: session.vocabList || [],
-            highlights: session.highlights || [],
+            vocabList: mergedVocab,
+            highlights: mergedHighlights,
             fontFamily: activeFont
         });
     }
@@ -2043,31 +2043,27 @@ class LinguaApp {
         let highlights = [];
         let vocabList = [];
 
-        // Auto-resolve from active session if the text box is empty
-        if (this.vocabSessions && this.vocabSessions.length > 0) {
-            const activeS = this.vocabSessions.find(s => s.id === this.activeSessionId) || this.vocabSessions[0];
-            if (activeS) {
-                if (!englishText) englishText = activeS.sourceText || '';
-                if (!vietnameseText) vietnameseText = activeS.vietnameseText || '';
-                if (!vietnameseHTML) vietnameseHTML = activeS.vietnameseHTML || '';
-                highlights = activeS.highlights || [];
-                vocabList = activeS.vocabList || [];
-            }
+        const activeS = (this.vocabSessions && this.vocabSessions.length > 0)
+            ? (this.vocabSessions.find(s => s.id === this.activeSessionId) || this.vocabSessions[0])
+            : null;
+
+        if (activeS) {
+            if (!englishText) englishText = activeS.sourceText || '';
+            if (!vietnameseText) vietnameseText = activeS.vietnameseText || '';
+            if (!vietnameseHTML) vietnameseHTML = activeS.vietnameseHTML || '';
         }
+
+        const sessionHighlights = activeS ? (activeS.highlights || []) : [];
+        const canvasHighlights = this.highlighter ? (this.highlighter.getAllHighlightedItems() || []) : [];
+        highlights = [...sessionHighlights, ...canvasHighlights];
+
+        const sessionVocab = activeS ? (activeS.vocabList || []) : [];
+        const currentVocab = this.currentVocabData || [];
+        vocabList = [...sessionVocab, ...currentVocab];
 
         if (!englishText) {
             alert("Không có nội dung để xuất PDF. Vui lòng nhập văn bản hoặc dịch một bài viết trước.");
             return;
-        }
-
-        if (highlights.length === 0) {
-            try {
-                highlights = this.highlighter ? (this.highlighter.getAllHighlightedItems() || []) : [];
-            } catch (e) {}
-        }
-
-        if (vocabList.length === 0) {
-            vocabList = this.currentVocabData || [];
         }
 
         const englishHTML = rawEnHTML.trim()
