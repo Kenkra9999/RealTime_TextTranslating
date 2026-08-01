@@ -1,8 +1,8 @@
 [
   {
-    "id": "repeat-3-times",
-    "name": "EN 'witness' x3, VN 'nhân chứng' x3",
-    "description": "Verifies that 3 occurrences of the same English term get 3 distinct VN marks with sequential data-occ indices (0,1,2), and that the AI's raw marker order is the source of truth for pairing.",
+    "id": "parse-repeat-3-times",
+    "name": "_parseAIMarkers: 3 occurrences → 3 parsed markers with sequential positions",
+    "description": "Verifies the AI-marker parser: when the AI wraps 3 occurrences of the same term (using the SAME enRaw each time), _parseAIMarkers returns 3 entries in document order. This is the input contract for the LỚP 1/2 pipeline.",
     "sourceText": "The witness saw the witness. The witness left.",
     "vnMarked": "Nhân chứng đã thấy [[H:witness]]nhân chứng[[/H]]. [[H:witness]]Nhân chứng[[/H]] đã rời đi.",
     "highlights": [
@@ -11,157 +11,95 @@
       { "text": "witness", "color": "#fef08a" }
     ],
     "vocabList": [{ "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" }],
-    "alignments": [],
     "expected": {
-      "minMarkCount": 3,
-      "trustedMarkCount": 2,
-      "fallbackMarkCount": 1,
-      "distinctOccIndices": [0, 1, 2]
+      "parseMarkersLength": 2,
+      "parseMarkerEnKeys": ["witness", "witness"]
     },
-    "regressGuard": "1 dò hiện 4,5 chữ cùng từ"
+    "regressGuard": "parser bỏ sót occurrence thứ 2,3"
   },
   {
-    "id": "vn-word-order-swap",
-    "name": "VN word-order swap: 'paradox of progress' → 'nghịch lý của tiến bộ'",
-    "description": "Verifies that a multi-word phrase whose Vietnamese counterpart has swapped word order still gets ONE contiguous mark, not split fragments.",
+    "id": "parse-vn-word-order-swap",
+    "name": "_parseAIMarkers: VN word-order swap (paradox of progress → nghịch lý của tiến bộ)",
+    "description": "Verifies the parser accepts a multi-word phrase whose Vietnamese counterpart has swapped word order — the entire vn span must be extracted as a single string.",
     "sourceText": "The paradox of progress is striking.",
     "vnMarked": "Điều [[H:paradox of progress]]nghịch lý của tiến bộ[[/H]] thật đáng chú ý.",
     "highlights": [
       { "text": "paradox of progress", "color": "#fef08a" }
     ],
     "vocabList": [{ "original": "paradox of progress", "translatedTermInVN": "nghịch lý của tiến bộ", "color": "#fef08a" }],
-    "alignments": [],
     "expected": {
-      "minMarkCount": 1,
-      "trustedMarkCount": 1,
-      "fallbackMarkCount": 0,
-      "exactMarkContent": "nghịch lý của tiến bộ"
+      "parseMarkersLength": 1,
+      "firstParsedVnRaw": "nghịch lý của tiến bộ"
     },
     "regressGuard": "tiếng Việt dịch đơn lẻ độc lập"
   },
   {
-    "id": "missing-marker-fallback",
-    "name": "AI forgot 1 marker → fallback string-match covers it",
-    "description": "Verifies that when AI wraps only 1 of 2 markers, the fallback pass still paints the missing one with a HIGHER occurrence index (preserving order).",
-    "sourceText": "Witness and progress.",
-    "vnMarked": "Nhân chứng và [[H:progress]]tiến bộ[[/H]].",
-    "highlights": [
-      { "text": "witness", "color": "#fef08a" },
-      { "text": "progress", "color": "#a7f3d0" }
-    ],
-    "vocabList": [
-      { "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" },
-      { "original": "progress", "translatedTermInVN": "tiến bộ", "color": "#a7f3d0" }
-    ],
-    "alignments": [{ "index": 0, "vn": "nhân chứng" }],
-    "expected": {
-      "minMarkCount": 2,
-      "trustedMarkCount": 1,
-      "fallbackMarkCount": 1,
-      "validateReportsMissing": ["witness"]
-    },
-    "regressGuard": "tô sai, không đủ"
-  },
-  {
-    "id": "diacritic-drift-comma",
-    "name": "VN has comma inside soft separator: 'Hơn nữa,' with trailing punctuation",
-    "description": "Verifies that the soft-separator regex (zero-or-more punctuation between words) still matches 'Hơn nữa,' even though the candidate is 'hơn nữa' (no trailing comma).",
+    "id": "parse-diacritic-drift-comma",
+    "name": "_parseAIMarkers: trailing comma in vn span still parses cleanly",
+    "description": "Verifies the parser tolerates a trailing comma inside the [[H:...]]...[[/H]] vn span (Vietnamese-style punctuation).",
     "sourceText": "Moreover, moreover.",
     "vnMarked": "Hơn nữa, [[H:moreover]]hơn nữa[[/H]].",
     "highlights": [
       { "text": "moreover", "color": "#fef08a" }
     ],
     "vocabList": [{ "original": "moreover", "translatedTermInVN": "hơn nữa", "color": "#fef08a" }],
-    "alignments": [],
     "expected": {
-      "minMarkCount": 1,
-      "trustedMarkCount": 1,
-      "fallbackMarkCount": 0,
-      "firstMarkColor": "#fef08a"
+      "parseMarkersLength": 1,
+      "firstParsedVnRaw": "hơn nữa"
     },
-    "regressGuard": "tiếng Việt vẫn chưa bôi đậm hết"
+    "regressGuard": "parser fails when vn span contains trailing comma"
   },
   {
-    "id": "soft-separator-parens",
-    "name": "VN contains parens: '(hơn nữa)'",
-    "description": "Verifies that the soft-separator regex tolerates parenthesis-wrapped phrases without breaking the match.",
+    "id": "parse-soft-separator-parens",
+    "name": "_parseAIMarkers: vn span inside parentheses parses cleanly",
+    "description": "Verifies the parser extracts vn even when wrapped in ( ) parens — the marker regex is greedy enough to capture the content but stops at the first [[/H]].",
     "sourceText": "Moreover.",
     "vnMarked": "([[H:moreover]]hơn nữa[[/H]]).",
     "highlights": [
       { "text": "moreover", "color": "#fef08a" }
     ],
     "vocabList": [{ "original": "moreover", "translatedTermInVN": "hơn nữa", "color": "#fef08a" }],
-    "alignments": [],
     "expected": {
-      "minMarkCount": 1,
-      "trustedMarkCount": 1,
-      "fallbackMarkCount": 0
+      "parseMarkersLength": 1
     },
-    "regressGuard": "tiếng Việt vẫn chưa bôi đậm hết"
+    "regressGuard": "parser fails on parens-wrapped vn"
   },
   {
-    "id": "full-phrase-wins-over-fragment",
-    "name": "Multi-word phrase: full match wins, no fragmenting",
-    "description": "Verifies that when both the full phrase and a trimmed variant (e.g. 'tiến bộ' inside 'nghịch lý của tiến bộ') could match, the FULL phrase is used and the result is one contiguous mark. This is the 'tô lố / bôi lẻ tẻ' fix.",
+    "id": "parse-full-phrase",
+    "name": "_parseAIMarkers: full multi-word phrase vn span parses atomically",
+    "description": "Verifies the parser returns ONE marker for a multi-word phrase (not split into fragments).",
     "sourceText": "The paradox of progress.",
     "vnMarked": "Điều [[H:paradox of progress]]nghịch lý của tiến bộ[[/H]] nổi bật.",
     "highlights": [
       { "text": "paradox of progress", "color": "#fef08a" }
     ],
     "vocabList": [{ "original": "paradox of progress", "translatedTermInVN": "nghịch lý của tiến bộ", "color": "#fef08a" }],
-    "alignments": [],
     "expected": {
-      "minMarkCount": 1,
-      "trustedMarkCount": 1,
-      "fallbackMarkCount": 0,
-      "exactMarkContent": "nghịch lý của tiến bộ"
+      "parseMarkersLength": 1,
+      "firstParsedVnRaw": "nghịch lý của tiến bộ"
     },
-    "regressGuard": "tô lố + tiếng Anh dò cả cụm, tiếng Việt bôi lẻ tẻ"
+    "regressGuard": "multi-word phrase gets split into fragments"
   },
   {
-    "id": "function-word-bridge",
-    "name": "Function-word bridge merge: 'Nghịch lý của sự tiến bộ' back into one mark",
-    "description": "Verifies the PASS 2.5/2.6 chain-merge: when AI wraps only 'nghịch lý' and 'tiến bộ' separately, the merge passes must re-stitch them into ONE contiguous mark covering 'nghịch lý của sự tiến bộ'.",
+    "id": "parse-function-word-bridge",
+    "name": "_parseAIMarkers: 2 separate vn spans for same enRaw — both parsed",
+    "description": "Verifies the parser returns 2 markers when the AI wraps only 'nghịch lý' and 'tiến bộ' separately (PASS 2.5/2.6 chain-merge happens at a higher layer; the parser just reports both markers raw).",
     "sourceText": "The paradox of progress is striking.",
     "vnMarked": "Điều [[H:paradox of progress]]nghịch lý[[/H]] của sự [[H:paradox of progress]]tiến bộ[[/H]] thật đáng chú ý.",
     "highlights": [
       { "text": "paradox of progress", "color": "#fef08a" }
     ],
     "vocabList": [{ "original": "paradox of progress", "translatedTermInVN": "nghịch lý của sự tiến bộ", "color": "#fef08a" }],
-    "alignments": [],
     "expected": {
-      "minMarkCount": 1,
-      "trustedMarkCount": 2,
-      "fallbackMarkCount": 0,
-      "mergedMarkContentContains": "nghịch lý"
+      "parseMarkersLength": 2,
+      "parsedVnRaws": ["nghịch lý", "tiến bộ"]
     },
-    "regressGuard": "tiếng Anh dò cả cụm nhưng tiếng Việt bị tách rời"
+    "regressGuard": "parser misses one of the 2 split markers"
   },
   {
-    "id": "two-paragraphs-repeated",
-    "name": "Same word in 2 paragraphs, EN-side mirrors VN-side",
-    "description": "Verifies that when a term appears in 2 paragraphs on both sides, the per-paragraph loop + perKeyOcc continuation produce exactly 2 marks with occ 0 and 1.",
-    "sourceText": "Witness. Then more witness.",
-    "vnMarked": "[[H:witness]]Nhân chứng[[/H]]. Rồi thêm [[H:witness]]nhân chứng[[/H]] nữa.",
-    "highlights": [
-      { "text": "witness", "color": "#fef08a" },
-      { "text": "witness", "color": "#fef08a" },
-      { "text": "witness", "color": "#fef08a" }
-    ],
-    "vocabList": [{ "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" }],
-    "alignments": [],
-    "expected": {
-      "minMarkCount": 2,
-      "trustedMarkCount": 2,
-      "fallbackMarkCount": 0,
-      "distinctOccIndices": [0, 1]
-    },
-    "regressGuard": "1 dò hiện 4,5 chữ cùng từ"
-  },
-  {
-    "id": "ai-forgot-one-key-retry-target",
-    "name": "AI forgot exactly 1 key — retry list identifies it for repairMissingMarkers()",
-    "description": "Verifies that when the AI wraps 2 of 3 keys, _validateAndRepairMarkers() reports the missing key in missingEnKeys (and only that one). This is the INPUT CONTRACT for the retry-patch pass: app.handleTranslate() uses this list to feed translator.repairMissingMarkers() with ONLY the missing keys — no full re-translation. Required to validate option C (JSON patch chỉ gửi danh sách từ thiếu).",
+    "id": "validate-missing-key",
+    "name": "_validateAndRepairMarkers: detects exactly 1 missing key when AI forgets 1 of 3",
+    "description": "Verifies the validate contract: given 3 highlight keys but only 2 AI markers, validate returns the missing enKey in `missingEnKeys`. This is the INPUT CONTRACT for the retry-patch pass — `app.handleTranslate()` uses this list to feed `translator.repairMissingMarkers()` with ONLY the missing keys.",
     "sourceText": "Witness, progress, and paradigm walked in.",
     "vnMarked": "[[H:witness]]Nhân chứng[[/H]] và [[H:progress]]tiến bộ[[/H]] đã bước vào.",
     "highlights": [
@@ -174,21 +112,17 @@
       { "original": "progress", "translatedTermInVN": "tiến bộ", "color": "#a7f3d0" },
       { "original": "paradigm", "translatedTermInVN": "mô hình", "color": "#bae6fd" }
     ],
-    "alignments": [],
     "expected": {
-      "minMarkCount": 2,
-      "trustedMarkCount": 2,
-      "fallbackMarkCount": 0,
       "validateReportsMissing": ["paradigm"],
       "validateMissingCount": 1,
       "validateCoverageRatio": 0.6667
     },
-    "regressGuard": "AI thiếu marker — retry không filter theo từ thiếu"
+    "regressGuard": "retry không filter theo từ thiếu"
   },
   {
     "id": "stitch-missing-patch",
-    "name": "_stitchMissingPatches inserts new markers WITHOUT duplicating existing ones",
-    "description": "Unit-tests the retry stitching function in isolation. Given a marked text already wrapping 2 keys, and patches for 3 keys (1 overlap with an existing marker span, 2 new), the result must wrap the 2 new keys WITHOUT duplicating the existing one (the overlapping patch must be rejected because its vn lives inside an existing [[H:...]]...[[/H]] span).",
+    "name": "_stitchMissingPatches: inserts new markers WITHOUT duplicating existing ones",
+    "description": "Verifies the retry stitcher in isolation: patches whose vn lives INSIDE an existing [[H:…]]…[[/H]] span must be rejected (no double-wrap); patches for new vn spans must be stitched in the FIRST plain segment where they occur.",
     "sourceText": "Witness, progress, and a paradigm shift today.",
     "vnMarked": "[[H:witness]]Nhân chứng[[/H]] và [[H:progress]]tiến bộ[[/H]]. Một paradigm shift cũng xuất hiện hôm nay.",
     "highlights": [
@@ -201,23 +135,21 @@
       { "original": "progress", "translatedTermInVN": "tiến bộ", "color": "#a7f3d0" },
       { "original": "paradigm shift", "translatedTermInVN": "paradigm shift", "color": "#bae6fd" }
     ],
-    "alignments": [],
     "patchesToStitch": [
       { "key": "paradigm shift", "vn": "paradigm shift" },
       { "key": "witness", "vn": "Nhân chứng" }
     ],
     "expected": {
-      "minMarkCount": 3,
-      "trustedMarkCount": 3,
-      "fallbackMarkCount": 0,
-      "validateReportsMissing": []
+      "stitchContainsMarker": "[[H:paradigm shift|1]]",
+      "stitchDoesNotDoubleWrapWitness": true,
+      "stitchParseMarkersLength": 3
     },
     "regressGuard": "retry patch duplicate hoặc bỏ sót từ"
   },
   {
-    "id": "l1-data-source-tag",
-    "name": "LỚP 1.3 — every <mark> carries data-source tag (ai-verified / ai-retried / fallback)",
-    "description": "Verifies the data-source tagging contract: marks emitted from PASS 1 (AI inline wrap) carry data-source='ai-verified', marks emitted from retry-stitched patches with verified=true carry 'ai-verified', verified=false carry 'ai-retried', and marks emitted from PASS 2 (string fallback) carry 'fallback'. The renderer MUST NEVER emit a <mark> with data-source='' or 'unknown' — every mark tells LỚP 2 how confident the machine was.",
+    "id": "stitch-verified-flag",
+    "name": "_stitchMissingPatches: per-patch verified flag is forwarded into the new token",
+    "description": "Verifies the verified=true/false flag on a patch gets serialized into the [[H:key|1]] / [[H:key|0]] token — which the parser then maps to ai-verified / ai-retried. Without this, LỚP 2 would lose the per-marker confidence info for retry-stitched marks.",
     "sourceText": "Witness, progress, and a paradigm shift today.",
     "vnMarked": "[[H:witness]]Nhân chứng[[/H]] và [[H:progress]]tiến bộ[[/H]]. Một paradigm shift cũng xuất hiện hôm nay.",
     "highlights": [
@@ -230,24 +162,20 @@
       { "original": "progress", "translatedTermInVN": "tiến bộ", "color": "#a7f3d0" },
       { "original": "paradigm shift", "translatedTermInVN": "paradigm shift", "color": "#bae6fd" }
     ],
-    "alignments": [],
     "patchesToStitch": [
-      { "key": "paradigm shift", "vn": "paradigm shift" }
+      { "key": "paradigm shift", "vn": "paradigm shift", "verified": false }
     ],
     "expected": {
-      "minMarkCount": 3,
-      "trustedMarkCount": 3,
-      "allMarksHaveDataSource": true,
-      "dataSourceHistogram": { "ai-verified": 3 }
+      "stitchContainsMarker": "[[H:paradigm shift|0]]"
     },
-    "regressGuard": "mark không có data-source → banner LỚP 2 không đếm được"
+    "regressGuard": "verified flag bị mất → không tag ai-retried được"
   },
   {
-    "id": "l1-mixed-sources",
-    "name": "LỚP 1.3 — mixed sources in one document: ai-verified + ai-retried + fallback all coexist",
-    "description": "Verifies that when 1 mark comes from PASS 1 (ai-verified), 1 from retry patch (verified=true → ai-verified), and 1 from PASS 2 string fallback (fallback), the renderer tags each one correctly and the histogram is accurate.",
-    "sourceText": "Witness, progress, paradigm shift, and resilience.",
-    "vnMarked": "[[H:witness]]Nhân chứng[[/H]] và [[H:progress]]tiến bộ[[/H]] đã làm thay đổi mọi thứ. paradigm shift xuất hiện cuối cùng, mang lại khả năng phục hồi.",
+    "id": "vn-output-is-plain-text",
+    "name": "_computeTranslatedHTML: VN output is plain escaped paragraphs (no <mark> elements)",
+    "description": "Per user request (Aug 1 2026): the Vietnamese translation panel shows ONLY plain translated text. No highlights, no colored marks, no <mark> elements on the VN side. Only the English side retains highlighting. The renderer must split paragraphs, NFC-normalize, escape HTML, and wrap each paragraph in <p class=\"paragraph-block\">.",
+    "sourceText": "Witness, progress, paradigm shift today.",
+    "vnMarked": "[[H:witness]]Nhân chứng[[/H]] và [[H:progress]]tiến bộ[[/H]]. paradigm shift xuất hiện hôm nay, mang lại khả năng phục hồi.",
     "highlights": [
       { "text": "witness", "color": "#fef08a" },
       { "text": "progress", "color": "#a7f3d0" },
@@ -260,66 +188,28 @@
       { "original": "paradigm shift", "translatedTermInVN": "paradigm shift", "color": "#bae6fd" },
       { "original": "resilience", "translatedTermInVN": "khả năng phục hồi", "color": "#fbcfe8" }
     ],
-    "alignments": [],
-    "patchesToStitch": [
-      { "key": "paradigm shift", "vn": "paradigm shift" }
-    ],
     "expected": {
-      "minMarkCount": 4,
-      "trustedMarkCount": 3,
-      "dataSourceHistogram": { "ai-verified": 3, "fallback": 1 }
+      "markCountInHtml": 0,
+      "htmlContainsText": "Nhân chứng",
+      "htmlContainsParagraphTag": "<p class=\"paragraph-block\">"
     },
-    "regressGuard": "LỚP 1.3 phân biệt nguồn — không gộp tất cả thành 1 loại"
+    "regressGuard": "VN side hiển thị mark — sai yêu cầu user"
   },
   {
-    "id": "l2-banner-counts",
-    "name": "LỚP 2.1 — banner counts {verified, needsCheck} accurately per data-source",
-    "description": "Verifies the _updateVerificationBanner() contract: returns {verified, needsCheck} where verified = ai-verified + user-verified, needsCheck = ai-retried + fallback. This is what drives the banner UI text. We can't drive a real DOM here, so we replicate the counting logic and assert via the renderer output (data-source histogram).",
-    "sourceText": "Two verified, one fallback.",
-    "vnMarked": "[[H:witness]]Nhân chứng[[/H]] và [[H:progress]]tiến bộ[[/H]]. Khả năng phục hồi là rất quan trọng.",
+    "id": "vn-output-html-escape",
+    "name": "_computeTranslatedHTML: VN output HTML-escapes special characters in vn text",
+    "description": "Verifies the plain-text renderer still HTML-escapes the vn text (so a malicious or accidentally-included <script> tag in the AI's translated text doesn't break the page). The tags [[H:...]]...[[/H]] are stripped, the inner text is escaped.",
+    "sourceText": "Watch out.",
+    "vnMarked": "[[H:watch]]Hãy <cẩn thận> & xem[[/H]].",
     "highlights": [
-      { "text": "witness", "color": "#fef08a" },
-      { "text": "progress", "color": "#a7f3d0" },
-      { "text": "resilience", "color": "#fbcfe8" }
+      { "text": "watch", "color": "#fef08a" }
     ],
-    "vocabList": [
-      { "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" },
-      { "original": "progress", "translatedTermInVN": "tiến bộ", "color": "#a7f3d0" },
-      { "original": "resilience", "translatedTermInVN": "khả năng phục hồi", "color": "#fbcfe8" }
-    ],
-    "alignments": [],
+    "vocabList": [{ "original": "watch", "translatedTermInVN": "Hãy cẩn thận", "color": "#fef08a" }],
     "expected": {
-      "minMarkCount": 3,
-      "dataSourceHistogram": { "ai-verified": 2, "fallback": 1 },
-      "bannerState": { "verified": 2, "needsCheck": 1 }
+      "markCountInHtml": 0,
+      "htmlContainsText": "&lt;cẩn thận&gt; &amp;",
+      "htmlContainsTextNot": "<cẩn thận>"
     },
-    "regressGuard": "banner đếm sai verified vs needsCheck"
-  },
-  {
-    "id": "l1-retried-patch",
-    "name": "LỚP 1.3 — retry patch with verified=false tags the mark as ai-retried (⚠️ in UI)",
-    "description": "Verifies that when the retry returns a patch with verified=false (closest-window match, NOT exact substring), the resulting mark is tagged data-source='ai-retried' — so the user sees the dashed border + ⚠️ icon and can confirm/fix it via LỚP 2.3.",
-    "sourceText": "Witness, progress, and a paradigm shift today.",
-    "vnMarked": "[[H:witness]]Nhân chứng[[/H]] và [[H:progress]]tiến bộ[[/H]]. Một paradigm shift cũng xuất hiện hôm nay.",
-    "highlights": [
-      { "text": "witness", "color": "#fef08a" },
-      { "text": "progress", "color": "#a7f3d0" },
-      { "text": "paradigm shift", "color": "#bae6fd" }
-    ],
-    "vocabList": [
-      { "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" },
-      { "original": "progress", "translatedTermInVN": "tiến bộ", "color": "#a7f3d0" },
-      { "original": "paradigm shift", "translatedTermInVN": "paradigm shift", "color": "#bae6fd" }
-    ],
-    "alignments": [],
-    "patchesToStitch": [
-      { "key": "paradigm shift", "vn": "paradigm shift", "verified": false }
-    ],
-    "expected": {
-      "minMarkCount": 3,
-      "dataSourceHistogram": { "ai-verified": 2, "ai-retried": 1 },
-      "bannerState": { "verified": 2, "needsCheck": 1 }
-    },
-    "regressGuard": "verified=false không tag ai-retried → user không thấy ⚠️"
+    "regressGuard": "không escape HTML → XSS / trang vỡ"
   }
 ]

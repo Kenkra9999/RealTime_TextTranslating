@@ -2,12 +2,15 @@
  * Standalone test runner for the bilingual highlight pipeline.
  *
  * Loads `js/app.js` in a sandboxed Node VM with stub `window`, `document`, `localStorage`,
- * invokes the (post-refactor) `_computeTranslatedHTML` on each fixture, and asserts:
- *   - minMarkCount    : at least N <mark> elements produced
- *   - trustedMarkCount: matches the AI's inline marker count
- *   - fallbackMarkCount: matches expected fallback (PASS 2) count
- *   - distinctOccIndices: every data-occ is unique per enKey
- *   - exactMarkContent / mergedMarkContentContains: covers the regress guards
+ * invokes the API primitives directly, and asserts:
+ *   - _parseAIMarkers        : returns the right {enKey, vnRaw, verified} for each [[H:...]]vn[[/H]]
+ *   - _stitchMissingPatches  : inserts new markers without double-wrapping existing ones
+ *   - _validateAndRepairMarkers : reports the right missing enKeys + coverage ratio
+ *   - _computeTranslatedHTML : renders plain escaped paragraphs (NO <mark> elements)
+ *
+ * PER USER REQUEST (Aug 1 2026): the VN side no longer renders any highlights — it's just
+ * clean translated text. So tests check the renderer output for absence of <mark>, not
+ * presence. The pipeline primitives (parser, stitcher, validator) are still tested.
  *
  * Run:  node test/highlight.test.js
  * Exit: 0 on all pass, non-zero on any failure.
@@ -22,27 +25,13 @@ const FIXTURES_PATH = path.resolve(__dirname, 'fixtures', 'highlight-cases.json'
 
 /* ──────────────── Stub browser globals ──────────────── */
 
-const stubElement = () => {
-  const el = {
-    innerHTML: '',
-    dataset: {},
-    textContent: '',
-    style: {},
-    children: [],
-    appendChild() {},
-    replaceChild() {},
-    querySelectorAll: () => [],
-    querySelector: () => null,
-    setAttribute() {},
-    getAttribute() { return null; },
-    removeAttribute() {},
-    addEventListener() {},
-    contains: () => false,
-    cloneNode: () => stubElement(),
-    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
-  };
-  return el;
-};
+const stubElement = () => ({
+  innerHTML: '', dataset: {}, textContent: '', style: {}, children: [],
+  appendChild() {}, replaceChild() {}, querySelectorAll: () => [], querySelector: () => null,
+  setAttribute() {}, getAttribute() { return null; }, removeAttribute() {}, addEventListener() {},
+  contains: () => false, cloneNode: () => stubElement(),
+  classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+});
 
 const highlighterInstance = {
   _getTranslucentColor: (color) => `rgba(250, 204, 21, 0.62)`,
@@ -98,30 +87,20 @@ const sandbox = {
   fetch: () => Promise.reject(new Error('fetch disabled in test')),
   TextHighlighter: function () { return highlighterInstance; },
 };
-
 vm.createContext(sandbox);
-
-/* ──────────────── Load app.js into the sandbox ──────────────── */
 
 const appJsSrc = fs.readFileSync(path.join(ROOT, 'js', 'app.js'), 'utf8');
 const highlighterJsSrc = fs.readFileSync(path.join(ROOT, 'js', 'highlighter.js'), 'utf8');
 
-// Append a self-exposing trailer so the test harness can reach the LinguaApp class.
-// In a real browser, `window.app = new LinguaApp()` is set by DOMContentLoaded; for the test
-// we just need the class reference.
 const APP_TRAILER = `\n;window.LinguaApp = typeof LinguaApp !== 'undefined' ? LinguaApp : undefined;`;
 const HIGH_TRAILER = `;window.TextHighlighter = typeof TextHighlighter !== 'undefined' ? TextHighlighter : undefined;`;
 
 vm.runInContext(highlighterJsSrc + HIGH_TRAILER, sandbox, { filename: 'highlighter.js' });
 vm.runInContext(appJsSrc + APP_TRAILER, sandbox, { filename: 'app.js' });
 
-// The app.js source is wrapped in either a top-level class declaration or an IIFE. Inspect
-// the runInContext result to find LinguaApp.
 function findLinguaApp(sandbox) {
-  // 1) direct on global
   if (typeof sandbox.LinguaApp === 'function') return sandbox.LinguaApp;
   if (typeof sandbox.window.LinguaApp === 'function') return sandbox.window.LinguaApp;
-  // 2) dump sandbox to look for it
   for (const k of Object.keys(sandbox)) {
     if (k === 'window' || k === 'document') continue;
     try {
@@ -129,7 +108,6 @@ function findLinguaApp(sandbox) {
       if (typeof v === 'function' && v.name === 'LinguaApp') return v;
     } catch (e) {}
   }
-  // 3) hidden behind getOwnPropertyDescriptor / non-enumerable
   try {
     const desc = Object.getOwnPropertyDescriptor(sandbox, 'LinguaApp');
     if (desc && typeof desc.value === 'function') return desc.value;
@@ -139,24 +117,14 @@ function findLinguaApp(sandbox) {
 const LinguaApp = findLinguaApp(sandbox);
 if (typeof LinguaApp !== 'function') {
   console.error('FAIL: LinguaApp class not loaded.');
-  console.error('sandbox keys:', Object.keys(sandbox));
-  console.error('sandbox.window keys:', Object.keys(sandbox.window));
-  console.error('LinguaApp in sandbox:', typeof sandbox.LinguaApp);
-  console.error('window.LinguaApp in sandbox:', typeof sandbox.window.LinguaApp);
   process.exit(1);
 }
-
-/* ──────────────── Build a minimal app instance ──────────────── */
 
 const app = Object.create(LinguaApp.prototype);
 app.highlighter = highlighterInstance;
 app.currentSourceText = '';
 app.currentVocabData = [];
-app.els = {
-  translationCanvas: stubElement(),
-  readingCanvas: stubElement(),
-  fontFamilySelect: null,
-};
+app.els = { translationCanvas: stubElement(), readingCanvas: stubElement() };
 app.translator = translatorMock;
 
 /* ──────────────── Test runner ──────────────── */
@@ -195,187 +163,152 @@ process.exit(0);
 
 function runFixture(app, fx) {
   const failures = [];
-  // If the fixture specifies a list of patches to stitch into the marked text BEFORE rendering,
-  // do that now. This mimics what handleTranslate() does between the first render and the retry
-  // call: the renderer sees the freshly-stitched markedText and downstream pass counts reflect it.
+  const exp = fx.expected || {};
+
+  // ── Branch A: fixtures that test _parseAIMarkers directly (no full render) ──
+  // These use markedText as input, no patchesToStitch needed.
+  const wantsParse = typeof exp.parseMarkersLength === 'number'
+                  || exp.firstParsedVnRaw
+                  || Array.isArray(exp.parseMarkerEnKeys)
+                  || Array.isArray(exp.parsedVnRaws);
+  // ── Branch B: fixtures that test _stitchMissingPatches ──
+  const wantsStitch = Array.isArray(fx.patchesToStitch)
+                   && (exp.stitchContainsMarker
+                       || typeof exp.stitchParseMarkersLength === 'number'
+                       || exp.stitchDoesNotDoubleWrapWitness);
+  // ── Branch C: fixtures that test _validateAndRepairMarkers ──
+  const wantsValidate = Array.isArray(exp.validateReportsMissing)
+                     || typeof exp.validateMissingCount === 'number'
+                     || typeof exp.validateCoverageRatio === 'number';
+  // ── Branch D: fixtures that test _computeTranslatedHTML (plain VN output) ──
+  const wantsRender = typeof exp.markCountInHtml === 'number'
+                   || exp.htmlContainsText
+                   || exp.htmlContainsParagraphTag
+                   || exp.htmlContainsTextNot;
+
   let markedText = fx.vnMarked;
+  let html = '';
+  let parsedMarkers = [];
+  let stitchedText = '';
+  let validate = null;
+
+  // If we need to stitch, do it first.
   if (Array.isArray(fx.patchesToStitch) && fx.patchesToStitch.length > 0) {
     try {
       markedText = app._stitchMissingPatches(fx.vnMarked, fx.patchesToStitch);
+      stitchedText = markedText;
     } catch (err) {
       failures.push(`_stitchMissingPatches threw: ${err.message}`);
       return { failures };
     }
   }
 
-  let html;
-  try {
-    html = app._computeTranslatedHTML(
-      markedText,
-      fx.highlights || [],
-      fx.vocabList || [],
-      fx.alignments || [],
-      fx.sourceText || ''
-    );
-  } catch (err) {
-    failures.push(`Threw: ${err.message}`);
-    return { failures };
-  }
-
-  // Parse the HTML output for <mark> elements
-  const marks = extractMarks(html);
-
-  const exp = fx.expected || {};
-  if (typeof exp.minMarkCount === 'number' && marks.length < exp.minMarkCount) {
-    failures.push(`expected at least ${exp.minMarkCount} <mark>, got ${marks.length}`);
-  }
-
-  // Count trusted vs fallback. Trusted count comes from the AI's emitted markers (parsed
-  // before the renderer runs) — this is the canonical "what the AI actually marked" count.
-  // The renderer adds fallback marks for any extra occurrences it found via string matching,
-  // so total = trusted + fallback. We can't reliably count fallback by text-content alone
-  // because the fallback may reproduce the same text the AI used (e.g. "nhân chứng" both
-  // trusted and fallback).
-  //
-  // IMPORTANT: when patchesToStitch was applied, the stitched markers are part of the AI
-  // markers too (the AI returned the vn spans verbatim). We parse the STITCHED markedText so
-  // the trustedCount reflects the post-retry state, not the pre-retry state.
-  const parsedMarkers = app._parseAIMarkers(markedText, fx.highlights || [], fx.vocabList || []);
-  const trustedCount = parsedMarkers.length;
-  const fallbackCount = Math.max(0, marks.length - trustedCount);
-
-  if (typeof exp.trustedMarkCount === 'number' && trustedCount !== exp.trustedMarkCount) {
-    failures.push(`expected ${exp.trustedMarkCount} trusted marks, got ${trustedCount}`);
-  }
-  if (typeof exp.fallbackMarkCount === 'number' && fallbackCount !== exp.fallbackMarkCount) {
-    failures.push(`expected ${exp.fallbackMarkCount} fallback marks, got ${fallbackCount}`);
-  }
-
-  // Distinct occ indices per enKey
-  if (Array.isArray(exp.distinctOccIndices)) {
-    const occs = new Set(marks.map(m => `${m.dataEn}::${m.dataOcc}`));
-    if (occs.size !== marks.length) {
-      failures.push(`data-occ not unique per enKey: ${marks.length} marks, ${occs.size} unique (en,occ) pairs`);
+  if (wantsParse || wantsValidate) {
+    try {
+      parsedMarkers = app._parseAIMarkers(markedText, fx.highlights || [], fx.vocabList || []);
+    } catch (err) {
+      failures.push(`_parseAIMarkers threw: ${err.message}`);
+      return { failures };
     }
-    const allOccs = marks.map(m => parseInt(m.dataOcc, 10)).sort((a,b) => a-b);
-    for (const want of exp.distinctOccIndices) {
-      if (!allOccs.includes(want)) {
-        failures.push(`expected data-occ ${want} to appear; got [${allOccs.join(',')}]`);
+  }
+
+  if (wantsValidate && parsedMarkers) {
+    validate = app._validateAndRepairMarkers(parsedMarkers, fx.highlights || [], fx.vocabList || []);
+  }
+
+  if (wantsRender) {
+    try {
+      html = app._computeTranslatedHTML(
+        markedText, fx.highlights || [], fx.vocabList || [], fx.alignments || [], fx.sourceText || ''
+      );
+    } catch (err) {
+      failures.push(`_computeTranslatedHTML threw: ${err.message}`);
+      return { failures };
+    }
+  }
+
+  // ── Assertions ──
+
+  if (typeof exp.parseMarkersLength === 'number' && parsedMarkers.length !== exp.parseMarkersLength) {
+    failures.push(`parseMarkersLength expected ${exp.parseMarkersLength}, got ${parsedMarkers.length}`);
+  }
+  if (Array.isArray(exp.parseMarkerEnKeys)) {
+    const got = parsedMarkers.map(p => p.enKey);
+    for (let i = 0; i < exp.parseMarkerEnKeys.length; i++) {
+      if (got[i] !== exp.parseMarkerEnKeys[i]) {
+        failures.push(`parseMarkerEnKeys[${i}] expected "${exp.parseMarkerEnKeys[i]}", got "${got[i]}"`);
+      }
+    }
+  }
+  if (exp.firstParsedVnRaw && (!parsedMarkers[0] || parsedMarkers[0].vnRaw !== exp.firstParsedVnRaw)) {
+    failures.push(`firstParsedVnRaw expected "${exp.firstParsedVnRaw}", got "${parsedMarkers[0] && parsedMarkers[0].vnRaw}"`);
+  }
+  if (Array.isArray(exp.parsedVnRaws)) {
+    const got = parsedMarkers.map(p => p.vnRaw);
+    for (let i = 0; i < exp.parsedVnRaws.length; i++) {
+      if (got[i] !== exp.parsedVnRaws[i]) {
+        failures.push(`parsedVnRaws[${i}] expected "${exp.parsedVnRaws[i]}", got "${got[i]}"`);
       }
     }
   }
 
-  // exactMarkContent
-  if (exp.exactMarkContent) {
-    const found = marks.some(m => stripWhitespace(m.textContent) === stripWhitespace(exp.exactMarkContent));
-    if (!found) {
-      failures.push(`expected a mark with text "${exp.exactMarkContent}", got: ${marks.map(m => m.textContent).join(' | ')}`);
+  // Stitch assertions
+  if (exp.stitchContainsMarker && !stitchedText.includes(exp.stitchContainsMarker)) {
+    failures.push(`stitched text should contain "${exp.stitchContainsMarker}"; full: ${stitchedText}`);
+  }
+  if (typeof exp.stitchParseMarkersLength === 'number') {
+    const reStitched = app._parseAIMarkers(stitchedText, fx.highlights || [], fx.vocabList || []);
+    if (reStitched.length !== exp.stitchParseMarkersLength) {
+      failures.push(`stitchParseMarkersLength expected ${exp.stitchParseMarkersLength}, got ${reStitched.length}`);
+    }
+  }
+  if (exp.stitchDoesNotDoubleWrapWitness) {
+    // Re-parse and count witness occurrences — must be exactly 1 even though both
+    // original + patch tried to add it.
+    const reStitched = app._parseAIMarkers(stitchedText, fx.highlights || [], fx.vocabList || []);
+    const witnessCount = reStitched.filter(p => (p.enKey || '').toLowerCase() === 'witness').length;
+    if (witnessCount > 1) {
+      failures.push(`stitchDoesNotDoubleWrapWitness: found ${witnessCount} witness markers after stitch, should be ≤ 1`);
     }
   }
 
-  // mergedMarkContentContains
-  if (exp.mergedMarkContentContains) {
-    const found = marks.some(m => m.textContent.includes(exp.mergedMarkContentContains));
-    if (!found) {
-      failures.push(`expected a mark containing "${exp.mergedMarkContentContains}", got: ${marks.map(m => m.textContent).join(' | ')}`);
-    }
-  }
-
-  // firstMarkColor
-  if (exp.firstMarkColor && marks[0] && marks[0].dataColor !== exp.firstMarkColor) {
-    failures.push(`expected first mark color ${exp.firstMarkColor}, got ${marks[0].dataColor}`);
-  }
-
-  // Validate report: missingEnKeys / missingCount / coverageRatio
-  const validate = app._validateAndRepairMarkers(
-    parsedMarkers,
-    fx.highlights || [],
-    fx.vocabList || []
-  );
-  if (Array.isArray(exp.validateReportsMissing)) {
-    for (const want of exp.validateReportsMissing) {
-      if (!validate.missingEnKeys.includes(want)) {
-        failures.push(`validate.missingEnKeys should include "${want}", got [${validate.missingEnKeys.join(',')}]`);
+  // Validate assertions
+  if (validate) {
+    if (Array.isArray(exp.validateReportsMissing)) {
+      for (const want of exp.validateReportsMissing) {
+        if (!validate.missingEnKeys.includes(want)) {
+          failures.push(`validate.missingEnKeys should include "${want}", got [${validate.missingEnKeys.join(',')}]`);
+        }
       }
     }
-  }
-  if (typeof exp.validateMissingCount === 'number' && validate.missingEnKeys.length !== exp.validateMissingCount) {
-    failures.push(`validate.missingEnKeys.length expected ${exp.validateMissingCount}, got ${validate.missingEnKeys.length}`);
-  }
-  if (typeof exp.validateCoverageRatio === 'number') {
-    const got = validate.coverageRatio;
-    const want = exp.validateCoverageRatio;
-    if (Math.abs(got - want) > 0.005) {
-      failures.push(`validate.coverageRatio expected ~${want}, got ${got}`);
+    if (typeof exp.validateMissingCount === 'number' && validate.missingEnKeys.length !== exp.validateMissingCount) {
+      failures.push(`validate.missingEnKeys.length expected ${exp.validateMissingCount}, got ${validate.missingEnKeys.length}`);
     }
-  }
-  // Universal invariant: coverageRatio from STAGE 1 must always be in [0, 1].
-  // (It can never go above 1 by construction now — covered/required.)
-  if (validate.coverageRatio < 0 || validate.coverageRatio > 1) {
-    failures.push(`validate.coverageRatio out of [0,1]: got ${validate.coverageRatio}`);
-  }
-
-  // No-double-wrap guard: if the fixture stitched patches, count distinct enKeys rendered
-  // for each `key` — must be ≤ 1 (we never duplicate an existing marker via a patch that
-  // claims a span inside it). The "witness" patch in the stitch-missing-patch fixture is
-  // exactly this regression.
-  if (Array.isArray(fx.patchesToStitch) && marks.length > 0) {
-    const enCounts = new Map();
-    for (const m of marks) {
-      if (!m.dataEn) continue;
-      enCounts.set(m.dataEn, (enCounts.get(m.dataEn) || 0) + 1);
-    }
-    for (const p of fx.patchesToStitch) {
-      const key = (p.key || '').toLowerCase();
-      const count = enCounts.get(key) || 0;
-      if (count > 1) {
-        failures.push(`no-double-wrap: rendered ${count} marks for "${p.key}" after stitch — should be ≤ 1`);
+    if (typeof exp.validateCoverageRatio === 'number') {
+      if (Math.abs(validate.coverageRatio - exp.validateCoverageRatio) > 0.005) {
+        failures.push(`validate.coverageRatio expected ~${exp.validateCoverageRatio}, got ${validate.coverageRatio}`);
       }
+    }
+    if (validate.coverageRatio < 0 || validate.coverageRatio > 1) {
+      failures.push(`validate.coverageRatio out of [0,1]: got ${validate.coverageRatio}`);
     }
   }
 
-  // LỚP 1.3 — data-source tagging contract: every mark must carry a known data-source.
-  const KNOWN_SOURCES = new Set(['ai-verified', 'ai-retried', 'fallback', 'user-verified']);
-  if (exp.allMarksHaveDataSource && marks.length > 0) {
-    const missing = marks.filter(m => !m.dataSource || !KNOWN_SOURCES.has(m.dataSource));
-    if (missing.length) {
-      failures.push(`allMarksHaveDataSource: ${missing.length}/${marks.length} marks have unknown/empty data-source`);
+  // Render assertions
+  if (typeof exp.markCountInHtml === 'number') {
+    const cnt = (html.match(/<mark\b/g) || []).length;
+    if (cnt !== exp.markCountInHtml) {
+      failures.push(`markCountInHtml expected ${exp.markCountInHtml}, got ${cnt}`);
     }
   }
-  // LỚP 1.3 — histogram of data-source values must match expected.
-  if (exp.dataSourceHistogram && typeof exp.dataSourceHistogram === 'object') {
-    const hist = {};
-    for (const m of marks) {
-      const s = m.dataSource || 'unknown';
-      hist[s] = (hist[s] || 0) + 1;
-    }
-    for (const want of Object.keys(exp.dataSourceHistogram)) {
-      const got = hist[want] || 0;
-      const expCount = exp.dataSourceHistogram[want];
-      if (got !== expCount) {
-        failures.push(`dataSourceHistogram["${want}"] expected ${expCount}, got ${got} (full: ${JSON.stringify(hist)})`);
-      }
-    }
-    // Also assert NO unexpected sources appear.
-    for (const got of Object.keys(hist)) {
-      if (!(got in exp.dataSourceHistogram)) {
-        failures.push(`dataSourceHistogram: unexpected source "${got}" appeared (${hist[got]}×) — expected only ${JSON.stringify(Object.keys(exp.dataSourceHistogram))}`);
-      }
-    }
+  if (exp.htmlContainsText && !html.includes(exp.htmlContainsText)) {
+    failures.push(`html should contain "${exp.htmlContainsText}"; got: ${html.slice(0, 300)}`);
   }
-  // LỚP 2.1 — banner state (verified / needsCheck) derived from data-source.
-  if (exp.bannerState && typeof exp.bannerState === 'object') {
-    let verified = 0, needsCheck = 0;
-    for (const m of marks) {
-      if (m.dataSource === 'ai-verified' || m.dataSource === 'user-verified') verified++;
-      else needsCheck++;
-    }
-    if (exp.bannerState.verified !== undefined && verified !== exp.bannerState.verified) {
-      failures.push(`bannerState.verified expected ${exp.bannerState.verified}, got ${verified}`);
-    }
-    if (exp.bannerState.needsCheck !== undefined && needsCheck !== exp.bannerState.needsCheck) {
-      failures.push(`bannerState.needsCheck expected ${exp.bannerState.needsCheck}, got ${needsCheck}`);
-    }
+  if (exp.htmlContainsTextNot && html.includes(exp.htmlContainsTextNot)) {
+    failures.push(`html should NOT contain "${exp.htmlContainsTextNot}" (must be HTML-escaped); got: ${html.slice(0, 300)}`);
+  }
+  if (exp.htmlContainsParagraphTag && !html.includes(exp.htmlContainsParagraphTag)) {
+    failures.push(`html should contain paragraph tag "${exp.htmlContainsParagraphTag}"; got: ${html.slice(0, 300)}`);
   }
 
   return { failures };
@@ -383,52 +316,7 @@ function runFixture(app, fx) {
 
 /* ──────────────── Helpers ──────────────── */
 
-function extractMarks(html) {
-  const out = [];
-  const re = /<mark[^>]*>/g;
-  let m;
-  while ((m = re.exec(html)) !== null) {
-    const tag = m[0];
-    const end = html.indexOf('</mark>', m.index);
-    if (end < 0) continue;
-    const inner = html.slice(m.index + tag.length, end);
-    out.push({
-      dataColor: extractAttr(tag, 'data-color') || '',
-      dataEn: extractAttr(tag, 'data-en') || '',
-      dataOcc: extractAttr(tag, 'data-occ') || '0',
-      dataSource: extractAttr(tag, 'data-source') || 'fallback',
-      textContent: decodeEntities(inner),
-    });
-  }
-  return out;
-}
-
-function extractAttr(tag, name) {
-  const re = new RegExp(`${name}="([^"]*)"`);
-  const m = re.exec(tag);
-  return m ? m[1] : null;
-}
-
 function decodeEntities(s) {
-  return s
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, ' ');
-}
-
-function stripWhitespace(s) {
-  return (s || '').replace(/\s+/g, ' ').trim();
-}
-
-function extractAIMarkerTexts(rawText) {
-  const out = new Set();
-  const re = /\[\[H:[^\]]*?\]\]([\s\S]*?)\[\[\/H\]\]/g;
-  let m;
-  while ((m = re.exec(rawText)) !== null) {
-    out.add(stripWhitespace(m[1]).toLowerCase());
-  }
-  return out;
+  return s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ');
 }

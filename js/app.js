@@ -2854,7 +2854,19 @@ class LinguaApp {
             unplaced
         });
 
-        return formatted.join('');
+        // PER USER REQUEST (Aug 1 2026): the Vietnamese side should show ONLY the translated
+        // text — no highlights, no colored marks, no `<mark>` elements at all. The English side
+        // keeps its highlighting (handled by TextHighlighter), but the VN translation panel
+        // is now just clean paragraphs of escaped text. We still split paragraphs the same
+        // way (preserves line breaks), still NFC-normalize + escape HTML, but we DROP the
+        // entire PASS 1/2/3 marking pipeline and skip rendering the intermediate MARK tokens.
+        //
+        // We do still compute the coverage stats above so the debug log + test assertions keep
+        // working (the pipeline internally still knows what *would* have been highlighted).
+        const plainParas = (raw || '').split(/\n\s*\n/).filter(p => p.trim().length > 0);
+        if (plainParas.length === 0) return '';
+        const plainHTML = plainParas.map(p => `<p class="paragraph-block">${this._escapeHTML(p.trim())}</p>`).join('');
+        return plainHTML;
     }
 
     /**

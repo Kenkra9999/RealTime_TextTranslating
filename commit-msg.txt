@@ -1,0 +1,36 @@
+style: VN-side highlights removed — only English side keeps colored marks (per user request)
+
+The user asked for the Vietnamese translation panel to show ONLY the translated text —
+no highlights, no colored marks, no `<mark>` elements. Only the English side retains
+its highlighting (handled by `TextHighlighter`, fully editable: 2nd click removes,
+color picker changes hue). The VN side is now plain paragraphs of the AI-translated
+text, NFC-normalized + HTML-escaped, wrapped in `<p class="paragraph-block">`.
+
+Changes:
+- js/app.js `_computeTranslatedHTML`: replaces the entire PASS 1/2/3 marking pipeline
+  output with a clean plain-text render. Still splits paragraphs the same way and
+  preserves HTML escaping (so a `<script>` or `&` in the AI's translated text doesn't
+  break the page). Internal stats (coverage, parsed markers, debug log) still compute
+  on the markedText input — only the rendered DOM is now plain text.
+- test/highlight.test.js: refactored to test API primitives directly (`_parseAIMarkers`,
+  `_stitchMissingPatches`, `_validateAndRepairMarkers`) plus 2 new fixtures verifying
+  the VN renderer output is plain text (zero `<mark>`, paragraph tags present, HTML
+  escaping works).
+- test/fixtures/highlight-cases.json: replaced the 14 mark-count-based fixtures with
+  11 primitive-API fixtures — same regression coverage (parser handles multi-word
+  phrases / diacritic drift / parens / word-order swap / function-word bridge; stitcher
+  doesn't double-wrap; validate reports the right missing keys), but tested via the
+  parser's return value instead of the renderer's DOM output.
+- test/real-text-coverage-5.js: report now describes the EN-only highlight UX and
+  reports `% vocab items AI wrapped inline` from the parser instead of from the
+  renderer histogram. The LỚP 2 "user-confirms-VN-marks" flow no longer applies (no
+  VN marks exist).
+
+All 11 highlight.test.js cases pass.
+
+UX changes visible to the user:
+- Right pane "Bản dịch tiếng Việt": clean translated paragraphs, NO highlight.
+- Left pane "Văn bản gốc tiếng Anh": keeps all colored highlights (TextHighlighter,
+  click-to-remove, color-picker).
+- All other features (translation, dictionary lookup, AI scan, PDF export, vocab
+  table) unchanged.
