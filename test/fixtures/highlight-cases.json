@@ -1,0 +1,161 @@
+[
+  {
+    "id": "repeat-3-times",
+    "name": "EN 'witness' x3, VN 'nhân chứng' x3",
+    "description": "Verifies that 3 occurrences of the same English term get 3 distinct VN marks with sequential data-occ indices (0,1,2), and that the AI's raw marker order is the source of truth for pairing.",
+    "sourceText": "The witness saw the witness. The witness left.",
+    "vnMarked": "Nhân chứng đã thấy [[H:witness]]nhân chứng[[/H]]. [[H:witness]]Nhân chứng[[/H]] đã rời đi.",
+    "highlights": [
+      { "text": "witness", "color": "#fef08a" },
+      { "text": "witness", "color": "#fef08a" },
+      { "text": "witness", "color": "#fef08a" }
+    ],
+    "vocabList": [{ "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" }],
+    "alignments": [],
+    "expected": {
+      "minMarkCount": 3,
+      "trustedMarkCount": 2,
+      "fallbackMarkCount": 1,
+      "distinctOccIndices": [0, 1, 2]
+    },
+    "regressGuard": "1 dò hiện 4,5 chữ cùng từ"
+  },
+  {
+    "id": "vn-word-order-swap",
+    "name": "VN word-order swap: 'paradox of progress' → 'nghịch lý của tiến bộ'",
+    "description": "Verifies that a multi-word phrase whose Vietnamese counterpart has swapped word order still gets ONE contiguous mark, not split fragments.",
+    "sourceText": "The paradox of progress is striking.",
+    "vnMarked": "Điều [[H:paradox of progress]]nghịch lý của tiến bộ[[/H]] thật đáng chú ý.",
+    "highlights": [
+      { "text": "paradox of progress", "color": "#fef08a" }
+    ],
+    "vocabList": [{ "original": "paradox of progress", "translatedTermInVN": "nghịch lý của tiến bộ", "color": "#fef08a" }],
+    "alignments": [],
+    "expected": {
+      "minMarkCount": 1,
+      "trustedMarkCount": 1,
+      "fallbackMarkCount": 0,
+      "exactMarkContent": "nghịch lý của tiến bộ"
+    },
+    "regressGuard": "tiếng Việt dịch đơn lẻ độc lập"
+  },
+  {
+    "id": "missing-marker-fallback",
+    "name": "AI forgot 1 marker → fallback string-match covers it",
+    "description": "Verifies that when AI wraps only 1 of 2 markers, the fallback pass still paints the missing one with a HIGHER occurrence index (preserving order).",
+    "sourceText": "Witness and progress.",
+    "vnMarked": "Nhân chứng và [[H:progress]]tiến bộ[[/H]].",
+    "highlights": [
+      { "text": "witness", "color": "#fef08a" },
+      { "text": "progress", "color": "#a7f3d0" }
+    ],
+    "vocabList": [
+      { "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" },
+      { "original": "progress", "translatedTermInVN": "tiến bộ", "color": "#a7f3d0" }
+    ],
+    "alignments": [{ "index": 0, "vn": "nhân chứng" }],
+    "expected": {
+      "minMarkCount": 2,
+      "trustedMarkCount": 1,
+      "fallbackMarkCount": 1,
+      "validateReportsMissing": ["witness"]
+    },
+    "regressGuard": "tô sai, không đủ"
+  },
+  {
+    "id": "diacritic-drift-comma",
+    "name": "VN has comma inside soft separator: 'Hơn nữa,' with trailing punctuation",
+    "description": "Verifies that the soft-separator regex (zero-or-more punctuation between words) still matches 'Hơn nữa,' even though the candidate is 'hơn nữa' (no trailing comma).",
+    "sourceText": "Moreover, moreover.",
+    "vnMarked": "Hơn nữa, [[H:moreover]]hơn nữa[[/H]].",
+    "highlights": [
+      { "text": "moreover", "color": "#fef08a" }
+    ],
+    "vocabList": [{ "original": "moreover", "translatedTermInVN": "hơn nữa", "color": "#fef08a" }],
+    "alignments": [],
+    "expected": {
+      "minMarkCount": 1,
+      "trustedMarkCount": 1,
+      "fallbackMarkCount": 0,
+      "firstMarkColor": "#fef08a"
+    },
+    "regressGuard": "tiếng Việt vẫn chưa bôi đậm hết"
+  },
+  {
+    "id": "soft-separator-parens",
+    "name": "VN contains parens: '(hơn nữa)'",
+    "description": "Verifies that the soft-separator regex tolerates parenthesis-wrapped phrases without breaking the match.",
+    "sourceText": "Moreover.",
+    "vnMarked": "([[H:moreover]]hơn nữa[[/H]]).",
+    "highlights": [
+      { "text": "moreover", "color": "#fef08a" }
+    ],
+    "vocabList": [{ "original": "moreover", "translatedTermInVN": "hơn nữa", "color": "#fef08a" }],
+    "alignments": [],
+    "expected": {
+      "minMarkCount": 1,
+      "trustedMarkCount": 1,
+      "fallbackMarkCount": 0
+    },
+    "regressGuard": "tiếng Việt vẫn chưa bôi đậm hết"
+  },
+  {
+    "id": "full-phrase-wins-over-fragment",
+    "name": "Multi-word phrase: full match wins, no fragmenting",
+    "description": "Verifies that when both the full phrase and a trimmed variant (e.g. 'tiến bộ' inside 'nghịch lý của tiến bộ') could match, the FULL phrase is used and the result is one contiguous mark. This is the 'tô lố / bôi lẻ tẻ' fix.",
+    "sourceText": "The paradox of progress.",
+    "vnMarked": "Điều [[H:paradox of progress]]nghịch lý của tiến bộ[[/H]] nổi bật.",
+    "highlights": [
+      { "text": "paradox of progress", "color": "#fef08a" }
+    ],
+    "vocabList": [{ "original": "paradox of progress", "translatedTermInVN": "nghịch lý của tiến bộ", "color": "#fef08a" }],
+    "alignments": [],
+    "expected": {
+      "minMarkCount": 1,
+      "trustedMarkCount": 1,
+      "fallbackMarkCount": 0,
+      "exactMarkContent": "nghịch lý của tiến bộ"
+    },
+    "regressGuard": "tô lố + tiếng Anh dò cả cụm, tiếng Việt bôi lẻ tẻ"
+  },
+  {
+    "id": "function-word-bridge",
+    "name": "Function-word bridge merge: 'Nghịch lý của sự tiến bộ' back into one mark",
+    "description": "Verifies the PASS 2.5/2.6 chain-merge: when AI wraps only 'nghịch lý' and 'tiến bộ' separately, the merge passes must re-stitch them into ONE contiguous mark covering 'nghịch lý của sự tiến bộ'.",
+    "sourceText": "The paradox of progress is striking.",
+    "vnMarked": "Điều [[H:paradox of progress]]nghịch lý[[/H]] của sự [[H:paradox of progress]]tiến bộ[[/H]] thật đáng chú ý.",
+    "highlights": [
+      { "text": "paradox of progress", "color": "#fef08a" }
+    ],
+    "vocabList": [{ "original": "paradox of progress", "translatedTermInVN": "nghịch lý của sự tiến bộ", "color": "#fef08a" }],
+    "alignments": [],
+    "expected": {
+      "minMarkCount": 1,
+      "trustedMarkCount": 2,
+      "fallbackMarkCount": 0,
+      "mergedMarkContentContains": "nghịch lý"
+    },
+    "regressGuard": "tiếng Anh dò cả cụm nhưng tiếng Việt bị tách rời"
+  },
+  {
+    "id": "two-paragraphs-repeated",
+    "name": "Same word in 2 paragraphs, EN-side mirrors VN-side",
+    "description": "Verifies that when a term appears in 2 paragraphs on both sides, the per-paragraph loop + perKeyOcc continuation produce exactly 2 marks with occ 0 and 1.",
+    "sourceText": "Witness. Then more witness.",
+    "vnMarked": "[[H:witness]]Nhân chứng[[/H]]. Rồi thêm [[H:witness]]nhân chứng[[/H]] nữa.",
+    "highlights": [
+      { "text": "witness", "color": "#fef08a" },
+      { "text": "witness", "color": "#fef08a" },
+      { "text": "witness", "color": "#fef08a" }
+    ],
+    "vocabList": [{ "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" }],
+    "alignments": [],
+    "expected": {
+      "minMarkCount": 2,
+      "trustedMarkCount": 2,
+      "fallbackMarkCount": 0,
+      "distinctOccIndices": [0, 1]
+    },
+    "regressGuard": "1 dò hiện 4,5 chữ cùng từ"
+  }
+]

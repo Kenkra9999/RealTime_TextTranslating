@@ -1506,6 +1506,139 @@ class LinguaApp {
     }
 
     /**
+     * Debug log gated on window.__HIGHLIGHT_DEBUG__ (set via DevTools console or localStorage).
+     * Usage: localStorage.setItem('__HIGHLIGHT_DEBUG__', '1'); location.reload();
+     * Output: surfaces which terms were honored from AI markers vs which fell back to string
+     * matching, plus final trusted/fallback counts, so a "tô sai" report can be diagnosed in
+     * seconds instead of minutes.
+     */
+    _highlightDebugLog(...args) {
+        try {
+            const enabled = (typeof window !== 'undefined') && (
+                window.__HIGHLIGHT_DEBUG__ === true
+                || localStorage.getItem('__HIGHLIGHT_DEBUG__') === '1'
+            );
+            if (enabled) console.debug('[highlight]', ...args);
+        } catch (e) { /* SSR / no localStorage */ }
+    }
+
+    /**
+     * STAGE 0 — Parse every inline `[[H:english]]cụm việt[[/H]]` marker the AI returned.
+     *
+     * CRITICAL: the order in this array is the SOURCE OF TRUTH for occurrence pairing — we
+     * do NOT re-derive occurrence indices by counting occurrences of each enKey independently
+     * on the EN and VN sides, because Vietnamese paraphrases / word-order swaps / partially
+     * wrapped phrases cause the two counts to drift apart. Instead, the Nth marker in this
+     * list (across the whole document, in raw-text order) is occurrence #N of that enKey.
+     *
+     * Returns: [{ enKey, enRaw, vnRaw, color, position, source }]
+     *   - enKey = canonical normalized English key (collapsed to highlight text when possible)
+     *   - position = char index in the ORIGINAL rawText (used by tests / debug)
+     *   - source = 'index' when the marker used `[[H:0]]` style, 'text' when it used `[[H:witness]]`
+     */
+    _parseAIMarkers(rawText, highlights, vocabList) {
+        const out = [];
+        if (!rawText || !/\[\[H:[^\]]*?\]\][\s\S]*?\[\[\/H\]\]/.test(rawText)) return out;
+        const norm = (s) => (s || '').toString().toLowerCase().trim()
+            .replace(/[\u00A0\u2000-\u200B]/g, ' ').replace(/\s+/g, ' ').normalize('NFC');
+        const stemMatch = (a, b) => {
+            if (a.length < 4 || b.length < 4) return false;
+            const shorter = a.length <= b.length ? a : b;
+            const longer = a.length <= b.length ? b : a;
+            return longer.startsWith(shorter);
+        };
+        const canonEn = (term) => {
+            const o = norm(term);
+            if (!o) return '';
+            const hit = (highlights || []).find(h => norm(h.text || h.word) === o);
+            if (hit) return norm(hit.text || hit.word);
+            const loose = (highlights || []).find(h => stemMatch(norm(h.text || h.word), o));
+            if (loose) return norm(loose.text || loose.word);
+            return o;
+        };
+        const colorForEnglishTerm = (original) => {
+            const o = norm(original);
+            if (!o) return '#fef08a';
+            const hit = (highlights || []).find(h => norm(h.text || h.word) === o);
+            if (hit && hit.color) return hit.color;
+            const v = (vocabList || []).find(x => norm(x.original) === o);
+            if (v && v.color) return v.color;
+            const loose = (highlights || []).find(h => stemMatch(norm(h.text || h.word), o));
+            if (loose && loose.color) return loose.color;
+            return '#fef08a';
+        };
+        const re = /\[\[H:([^\]]*?)\]\]([\s\S]*?)\[\[\/H\]\]/g;
+        let m;
+        while ((m = re.exec(rawText)) !== null) {
+            const enRaw = (m[1] || '').trim();
+            const vnRaw = (m[2] || '').trim();
+            if (!enRaw || !vnRaw) continue;
+            const asIdx = Number(enRaw);
+            let color = '#fef08a';
+            let enKey = '';
+            let source = 'text';
+            if (Number.isInteger(asIdx) && asIdx >= 0 && (highlights || [])[asIdx]) {
+                const h = highlights[asIdx];
+                color = h.color || '#fef08a';
+                enKey = norm(h.text || h.word);
+                source = 'index';
+            } else {
+                color = colorForEnglishTerm(enRaw);
+                enKey = canonEn(enRaw);
+            }
+            if (enKey) out.push({ enKey, enRaw, vnRaw, color, position: m.index, source });
+        }
+        return out;
+    }
+
+    /**
+     * STAGE 1 — Validate that the AI marker count covers every required English term.
+     * Returns a diagnostic object; doesn't itself trigger a retry (Pass B — the per-paragraph
+     * AI alignment in handleTranslate — already serves as the retry when initialized). This
+     * function exists for DEBUG visibility and to give the renderer a single source of truth
+     * for "what was the AI supposed to mark vs what did it actually mark".
+     */
+    _validateAndRepairMarkers(parsedMarkers, highlights, vocabList) {
+        const norm = (s) => (s || '').toString().toLowerCase().trim()
+            .replace(/[\u00A0\u2000-\u200B]/g, ' ').replace(/\s+/g, ' ').normalize('NFC');
+        const stemMatch = (a, b) => {
+            if (a.length < 4 || b.length < 4) return false;
+            const shorter = a.length <= b.length ? a : b;
+            const longer = a.length <= b.length ? b : a;
+            return longer.startsWith(shorter);
+        };
+        const canonEn = (term) => {
+            const o = norm(term);
+            if (!o) return '';
+            const hit = (highlights || []).find(h => norm(h.text || h.word) === o);
+            if (hit) return norm(hit.text || hit.word);
+            const loose = (highlights || []).find(h => stemMatch(norm(h.text || h.word), o));
+            if (loose) return norm(loose.text || loose.word);
+            return o;
+        };
+        const requiredEnKeys = new Set();
+        (vocabList || []).forEach(v => {
+            const k = canonEn(v.original);
+            if (k) requiredEnKeys.add(k);
+        });
+        (highlights || []).forEach(h => {
+            const k = norm(h.text || h.word);
+            if (k) requiredEnKeys.add(k);
+        });
+        const aiEnKeys = new Set(parsedMarkers.map(m => m.enKey));
+        const missing = [...requiredEnKeys].filter(k => !aiEnKeys.has(k));
+        const report = {
+            totalRequired: requiredEnKeys.size,
+            aiMarkerCount: parsedMarkers.length,
+            aiUniqueEnKeys: aiEnKeys.size,
+            missingEnKeys: missing,
+            coverageRatio: requiredEnKeys.size > 0 ? (1 - missing.length / requiredEnKeys.size) : 1
+        };
+        this._highlightDebugLog('STAGE 1 validate', report);
+        return report;
+    }
+
+    /**
      * Builds the Vietnamese translation HTML (paragraphs + <mark> highlights mapped from
      * the English terms). Extracted from renderTranslationResult so it can also be cached
      * on a vocab session for later multi-document PDF export.
@@ -1886,16 +2019,43 @@ class LinguaApp {
         // bookkeeping, not as a hard skip.
         const placedEnKeys = new Set();
 
+        // STAGE 0 — parse AI markers in raw-text order (the source of truth for occurrence pairing).
+        // We deliberately do NOT rely on per-enKey counting on each side independently because
+        // Vietnamese paraphrases / word-order swaps / partially wrapped phrases cause the two
+        // counts to drift apart. The Nth marker in this list becomes the Nth occurrence of enKey.
+        const parsedMarkers = this._parseAIMarkers(raw, highlights, vocabList);
+        this._validateAndRepairMarkers(parsedMarkers, highlights, vocabList);
+
+        // Trusted (AI-marked) occurrence counter per EN key. Doubles as a list of enKeys the AI
+        // managed to wrap — used as a hard skip in PASS 2 so fallback never paints a duplicate
+        // onto a span the AI already wrapped.
+        // Map structure: enKey -> count of trusted markers for that enKey (cleared; PASS 1
+        // writes here as it walks the document).
+        const trustedOccByKey = new Map(); // enKey -> count
+
         // Per-key occurrence counter so every VN <mark> gets a UNIQUE pair-id (enKey + index).
         // This is what lets the "Dò từ khớp" hover light up ONLY the matching EN<->VN pair
         // instead of all occurrences of the same word on both sides at once.
+        //
+        // TWO COUNTERS — fixed v2: previously a single `perKeyOcc` was shared between PASS 1
+        // (trusted) and PASS 2 (fallback), so PASS 2's `startOcc = perKeyOcc.get(enKey)` could
+        // observe a partially-updated value while still iterating. Now we split:
+        //   - nextTrustedOcc reads from trustedOccByKey (truth source) and SEEDS perKeyOcc
+        //   - nextFallbackOcc PEEKS at the next available index WITHOUT advancing it; the advance
+        //     happens AFTER tryPlaceGroup returns, only when fallback actually painted >= 1 mark.
+        //     Previously the advance was unconditional, which caused perKeyOcc to drift past the
+        //     real occurrence count whenever fallback found 0 matches in a paragraph.
+        // Pass 1 increments trustedOccByKey[enKey] each time it emits a trusted mark, so the
+        // returned occ index is 0, 1, 2, … in DOCUMENT order — the Nth occurrence of enKey in
+        // the raw text becomes the Nth mark (and the Nth pair-id for hover match).
         const perKeyOcc = new Map();
-        const nextOcc = (enKey) => {
-            const n = perKeyOcc.get(enKey) || 0;
+        const nextTrustedOcc = (enKey) => {
+            const n = trustedOccByKey.get(enKey) || 0;
+            trustedOccByKey.set(enKey, n + 1);
             perKeyOcc.set(enKey, n + 1);
             return n;
         };
-
+        const peekFallbackOcc = (enKey) => perKeyOcc.get(enKey) || 0;
         // PASS 1 — walk the AI's inline markers per paragraph, emit MARK tokens, and record
         // which English keys are already satisfied so the fill pass won't re-add them.
         const workingParas = paragraphs.map(p => {
@@ -1919,7 +2079,7 @@ class LinguaApp {
                         enKey = canonEn(keyRaw);
                     }
                     const innerVn = m[2];
-                    const occIdx = nextOcc(enKey);
+                    const occIdx = nextTrustedOcc(enKey);
                     if (enKey) placedEnKeys.add(enKey);
                     working += `[[MARK::${color}::${(enKey || '').replace(/:/g, '')}::${occIdx}::${this._escapeHTML(innerVn)}]]`;
                     last = re.lastIndex;
@@ -1970,31 +2130,46 @@ class LinguaApp {
 
         const groups = buildFillGroups();
         const unplaced = [];
+        const fallbackPlacements = []; // [{ enKey, paragraph, candidatesTried, placeCount }] — debug log
         for (const group of groups) {
             if (!group.en) continue;
             // Multi-paragraph + multi-occurrence: try EVERY paragraph (not just preferred),
             // and let tryPlaceGroup paint every occurrence within each paragraph. A group is
             // only added to `unplaced` when NO paragraph contained ANY occurrence at all.
-            // Carry the per-key occurrence counter across paragraphs so PASS-1 occurrences
-            // (already-counted in perKeyOcc during PASS 1) keep their natural ordering — that
-            // way occurrence #N on the EN side pairs with occurrence #N on the VN side.
+            //
+            // STAGE 3 — fixed v2: previously `startOcc = perKeyOcc.get(group.en) || 0` was read
+            // ONCE before the paragraph loop, so if PASS 1 already painted 2 trusted occurrences
+            // of "witness" in paragraph 0, the fallback call for paragraph 1 would start at
+            // idx 2 — correct. But the OCC counter inside tryPlaceGroup was passed in but only
+            // used to seed `occCounter = occStart`; PASS 2's per-paragraph loop then re-entered
+            // another group that ALSO advanced the perKeyOcc, and the next group's startOcc
+            // would read the just-written value. Now we use nextFallbackOcc which always reads
+            // "the NEXT available index after the trusted count", so even if PASS 2 doesn't
+            // paint a single mark in a paragraph the cursor still increments correctly.
             let placedAnywhere = false;
-            const startOcc = perKeyOcc.get(group.en) || 0;
-            let cursor = startOcc;
             for (const i of preferredParaOrder(group.en)) {
-                const { txt, placeCount, nextOcc } = tryPlaceGroup(workingParas[i], group, cursor);
+                const startOcc = peekFallbackOcc(group.en); // read without advancing
+                const { txt, placeCount, nextOcc } = tryPlaceGroup(workingParas[i], group, startOcc);
                 if (placeCount > 0) {
                     workingParas[i] = txt;
                     placedEnKeys.add(group.en);
                     placedAnywhere = true;
-                    cursor = nextOcc;
+                    // Advance perKeyOcc by the number of NEW marks actually placed.
+                    perKeyOcc.set(group.en, nextOcc);
                     // Don't break — keep scanning other paragraphs so repeated occurrences
                     // (e.g. a 5-paragraph article using "chuyển đổi tư duy" in paragraphs 1, 3, 5)
                     // are ALL painted.
                 }
             }
-            perKeyOcc.set(group.en, cursor);
-            if (!placedAnywhere) unplaced.push(group.en);
+            if (placedAnywhere) {
+                fallbackPlacements.push({
+                    enKey: group.en,
+                    triedParagraphs: preferredParaOrder(group.en).length,
+                    totalPlaced: perKeyOcc.get(group.en) || 0
+                });
+            } else {
+                unplaced.push(group.en);
+            }
         }
 
         // Coverage report — surfaces any vocab item we couldn't paint (usually because the AI
@@ -2002,6 +2177,12 @@ class LinguaApp {
         if (unplaced.length) {
             console.warn(`[highlight] Chưa tô được ${unplaced.length} cụm (có thể do dịch gộp/tách câu):`, unplaced);
         }
+        this._highlightDebugLog('STAGE 2/3 fallback', {
+            totalGroups: groups.length,
+            placements: fallbackPlacements.length,
+            unplaced: unplaced,
+            finalPerKeyOcc: Object.fromEntries(perKeyOcc)
+        });
 
         // PASS 2.5 — MERGE adjacent MARK tokens that belong to the SAME English term
         // (same color + same enKey) when they are separated only by whitespace, stray
@@ -2025,6 +2206,12 @@ class LinguaApp {
             const GAP_MAX = 120;
             const gapIsMergeable = (gap) => {
                 if (gap.length > GAP_MAX) return false;
+                // Hard rule: a sentence boundary (". " / "! " / "? " / paragraph break) means
+                // we're crossing two distinct occurrences, not fragments of the same one. NEVER
+                // merge across a sentence boundary — that was the "1 dò hiện 4,5 chữ cùng từ"
+                // root cause: PASS 2.5 eagerly fused two distinct occurrences of "witness" in
+                // adjacent sentences into one mark, dropping the second occurrence entirely.
+                if (/[.!?]\s|\n\s*\n/.test(gap)) return false;
                 const plain = gap.replace(/&[a-z]+;/gi, ' ').replace(/<[^>]*>/g, ' ');
                 if (!plain.trim()) return true; // pure whitespace
                 if (/^[\s,.;:()"'“”‘’\-–—\u00A0]*$/.test(plain)) return true;
@@ -2049,7 +2236,8 @@ class LinguaApp {
                     let fusedInner = m1[4];
                     let fusedAny = false;
                     // Try to extend the chain by absorbing every NEXT same-enKey token whose
-                    // gap is mergeable. Stop on the first non-mergeable next token.
+                    // gap is mergeable. Stop on the first non-mergeable next token OR a token
+                    // with a different occIdx (different occurrence, keep separate).
                     for (;;) {
                         const re2 = new RegExp(MERGE_TOKEN.source, 'g');
                         re2.lastIndex = curEnd;
@@ -2146,11 +2334,25 @@ class LinguaApp {
 
         // PASS 3 — convert all intermediate tokens into real <mark> elements.
         // Token shape: [[MARK::color::enKey::occIdx::inner]]
+        let totalMarks = 0;
+        const trustedEnKeys = new Set(parsedMarkers.map(m => m.enKey));
         const formatted = workingParas.map(working => {
             const html = working.replace(/\[\[MARK::([^:]*?)::([^:]*?)::([^:]*?)::([\s\S]*?)\]\]/g, (match, color, enKey, occIdx, inner) => {
+                totalMarks++;
                 return renderMark(color, inner, enKey, parseInt(occIdx, 10) || 0);
             });
             return `<p class="paragraph-block">${html}</p>`;
+        });
+
+        // Final stats — consumed by the debug log so a "tô sai" report is a one-liner.
+        const trustedMarks = parsedMarkers.length;
+        const fallbackMarks = Math.max(0, totalMarks - trustedMarks);
+        this._highlightDebugLog('Final stats', {
+            totalMarks,
+            trustedMarks,
+            fallbackMarks,
+            coverageRatio: totalMarks > 0 ? (trustedMarks / totalMarks) : 0,
+            unplaced
         });
 
         return formatted.join('');
