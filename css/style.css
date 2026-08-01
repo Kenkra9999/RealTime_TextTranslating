@@ -735,6 +735,167 @@ body.vocab-resize-dragging { user-select: none; cursor: row-resize !important; }
 
 .pane-body.mode-brush-active { cursor: crosshair; }
 
+/* ========== LỚP 2 — VERIFICATION BANNER ========== */
+/* Small persistent status strip shown above the translation. Counts AI-verified marks vs
+   marks still requiring user confirmation (data-source = "ai-retried" / "fallback"). When Y
+   drops to 0 the banner promotes to a celebratory "100% confirmed" state. */
+.verification-banner {
+    margin: 0 0 12px 0;
+    padding: 8px 12px;
+    border-radius: 10px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; line-height: 1.4;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-main);
+    transition: background-color .25s ease, border-color .25s ease, color .25s ease;
+}
+.verification-banner__icon { font-size: 16px; line-height: 1; }
+.verification-banner__text { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.verification-banner__hint { color: var(--text-muted); font-size: 12px; }
+.verification-banner--idle { border-color: var(--border-color); }
+.verification-banner--partial {
+    border-color: rgba(234, 88, 12, 0.55);
+    background: linear-gradient(180deg, rgba(254, 215, 170, 0.35), rgba(254, 215, 170, 0.12));
+}
+.verification-banner--partial .verification-banner__icon::before { content: "⚠️"; }
+.verification-banner--partial .verification-banner__icon { font-size: 0; }
+.verification-banner--complete {
+    border-color: rgba(34, 197, 94, 0.85);
+    background: linear-gradient(180deg, rgba(187, 247, 208, 0.55), rgba(187, 247, 208, 0.18));
+    color: #166534;
+}
+.verification-banner--complete .verification-banner__icon::before { content: "✅"; }
+.verification-banner--complete .verification-banner__icon { font-size: 0; }
+[data-theme="dark"] .verification-banner--partial { background: rgba(124, 45, 18, 0.30); }
+[data-theme="dark"] .verification-banner--complete { background: rgba(20, 83, 45, 0.30); color: #bbf7d0; }
+
+/* ========== LỚP 2 — VERIFICATION POPUP + RESELECT FLOW ========== */
+/* Popup that appears when user clicks a dashed-border / ⚠️ mark. Small floating card with
+   "Đúng rồi" / "Sai, để tôi chọn lại" actions. Lightweight, no shadow stack — uses the
+   existing glass-card class for consistency with the rest of the UI. */
+.verification-popup {
+    position: absolute;
+    width: 280px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 12.5px;
+    line-height: 1.4;
+    z-index: 9999;
+    background: var(--bg-card);
+    border: 1px solid rgba(234, 88, 12, 0.45);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.verification-popup__row {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    flex-wrap: wrap;
+}
+.verification-popup__label {
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    flex-shrink: 0;
+}
+.verification-popup__en {
+    color: var(--text-main);
+    font-weight: 600;
+}
+.verification-popup__vn {
+    color: var(--primary-dark);
+    font-style: italic;
+}
+.verification-popup__actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+}
+.verification-popup__actions .btn {
+    flex: 1;
+    font-size: 11.5px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+.verification-popup__actions .btn-success {
+    background: rgba(34, 197, 94, 0.18);
+    color: #166534;
+    border-color: rgba(34, 197, 94, 0.6);
+}
+.verification-popup__actions .btn-success:hover { background: rgba(34, 197, 94, 0.32); }
+.verification-popup__actions .btn-warning {
+    background: rgba(234, 88, 12, 0.16);
+    color: #9a3412;
+    border-color: rgba(234, 88, 12, 0.55);
+}
+.verification-popup__actions .btn-warning:hover { background: rgba(234, 88, 12, 0.28); }
+[data-theme="dark"] .verification-popup__actions .btn-success { color: #bbf7d0; }
+[data-theme="dark"] .verification-popup__actions .btn-warning { color: #fed7aa; }
+
+/* Awaiting-reselect state: visual cue that the next selection will REPLACE an existing mark.
+   Used after user clicks "Sai, để tôi chọn lại" — the canvas border pulses orange. */
+.text-display-content.awaiting-reselect {
+    outline: 2px dashed rgba(234, 88, 12, 0.75);
+    outline-offset: -4px;
+    border-radius: 6px;
+    cursor: text !important;
+    animation: awaitingReselectPulse 1.4s ease-in-out infinite;
+}
+@keyframes awaitingReselectPulse {
+    0%, 100% { outline-color: rgba(234, 88, 12, 0.55); }
+    50%      { outline-color: rgba(234, 88, 12, 1.0); }
+}
+
+/* ========== LỚP 2 — DASHED BORDER + ⚠️ INDICATOR FOR UNVERIFIED MARKS ==========
+   Applies to every <mark> the renderer tagged with data-source != "ai-verified". The dashed
+   border alone is subtle; the ⚠️ pseudo-element (positioned top-right corner) is the
+   unmistakable cue telling the user "machine was unsure here — please verify". Hover lifts
+   the badge slightly so users notice it. */
+mark.highlight-mark[data-source="ai-retried"],
+mark.highlight-mark[data-source="fallback"] {
+    position: relative;
+    outline-offset: 1px;
+}
+mark.highlight-mark[data-source="ai-retried"]::after,
+mark.highlight-mark[data-source="fallback"]::after {
+    content: "⚠️";
+    position: absolute;
+    top: -10px; right: -10px;
+    font-size: 11px;
+    line-height: 1;
+    pointer-events: none;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.18));
+    transform: translateZ(0);
+    transition: transform .15s ease;
+}
+mark.highlight-mark[data-source="ai-retried"]:hover::after,
+mark.highlight-mark[data-source="fallback"]:hover::after {
+    transform: translateZ(0) scale(1.18);
+}
+/* User-verified marks: solid green ring + small ✓ badge — celebrate confirmation. */
+mark.highlight-mark[data-source="user-verified"] {
+    position: relative;
+}
+mark.highlight-mark[data-source="user-verified"]::after {
+    content: "✓";
+    position: absolute;
+    top: -10px; right: -10px;
+    font-size: 10px;
+    line-height: 1;
+    color: #166534;
+    background: #bbf7d0;
+    border-radius: 50%;
+    width: 14px; height: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+}
+
 /* ========== DICTIONARY LOOKUP MODE ========== */
 .lookup-mode-active { cursor: help; }
 .lookup-mode-active mark.highlight-mark { cursor: help; }

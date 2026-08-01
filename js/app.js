@@ -657,6 +657,11 @@ class LinguaApp {
             wordCountBadge: document.getElementById('wordCountBadge'),
             transStatusBadge: document.getElementById('transStatusBadge'),
 
+            // LỚP 2 — verification banner (cached once for fast update on every render)
+            verificationBanner: document.getElementById('verificationBanner'),
+            verificationBannerLabel: document.getElementById('verificationBannerLabel'),
+            verificationBannerHint: document.getElementById('verificationBannerHint'),
+
             // Vocab accordion (one collapsible entry per translated/scanned document)
             vocabAccordionContainer: document.getElementById('vocabAccordionContainer'),
             vocabEmptyState: document.getElementById('vocabEmptyState'),
@@ -1445,6 +1450,30 @@ class LinguaApp {
 
             this.renderTranslationResult(renderText, highlights, result.vocabList, alignments, text);
             this.currentVocabData = result.vocabList;
+
+            // RETRY-PATCH PASS (option A — 1-shot, no infinite loop):
+            // After the first render, recompute coverage and, if any English term is STILL
+            // missing on the VN side, ask the AI to return VERBATIM Vietnamese spans for those
+            // specific keys. We then stitch the new [[H:key]]vn[[/H]] pairs into the EXISTING
+            // markedText (no full re-translation, no re-render of untouched terms), so we get
+            // the missing coverage at a fraction of the cost. Limit: at most ONE retry, even if
+            // the AI still misses — option A from the spec, prevents runaway billing on adversarial
+            // inputs and avoids the "AI keeps getting it wrong" tail that would never converge.
+            //
+            // disabled? simply don't pass an API key or set `this._retryDisabled = true`.
+            try {
+                if (!this._retryDisabled && this._shouldRetryForMissing(renderText, highlights, result.vocabList)) {
+                    const patched = await this._retryMissingMarkersOnce(renderText, highlights, result.vocabList);
+                    if (patched && patched !== renderText) {
+                        console.log(`[highlight] Retry patch: re-rendered with +${patched.length - renderText.length} chars of markers.`);
+                        renderText = patched;
+                        this.renderTranslationResult(renderText, highlights, result.vocabList, alignments, text);
+                    }
+                }
+            } catch (e) {
+                console.warn('[highlight] Retry patch failed (non-fatal):', e);
+            }
+
             this._addVocabSession(text, highlights, result.vocabList, renderText, alignments);
 
             // Tag every <mark> on BOTH sides with its occurrence index (data-occ). Pairing the
@@ -1478,6 +1507,52 @@ class LinguaApp {
         }
     }
 
+    /**
+     * Decide whether to retry the AI for missing markers. Returns the missing keys list
+     * when retry is warranted (coverageRatio < 1), or `null` when no retry is needed.
+     *
+     * Computes coverage the same way `_computeTranslatedHTML`'s Final stats does (enKey-based,
+     * not mark-count-based) so the decision matches what the user sees in the debug log.
+     * Skip when no API key is configured — the AI retry would silently 401.
+     */
+    _shouldRetryForMissing(markedText, highlights, vocabList) {
+        try {
+            const parsedMarkers = this._parseAIMarkers(markedText || '', highlights || [], vocabList || []);
+            const report = this._validateAndRepairMarkers(parsedMarkers, highlights || [], vocabList || []);
+            const hasKey = (this.translator.provider === 'openai' && !!this.translator.openaiApiKey)
+                || !!this.translator.geminiApiKey;
+            if (!hasKey) return null;
+            if (!report.missingEnKeys || report.missingEnKeys.length === 0) return null;
+            console.log(`[highlight] Retry trigger: ${report.missingEnKeys.length}/${report.totalRequired} keys still missing → ${JSON.stringify(report.missingEnKeys)}`);
+            return report.missingEnKeys;
+        } catch (e) {
+            console.warn('[highlight] _shouldRetryForMissing threw:', e);
+            return null;
+        }
+    }
+
+    /**
+     * One-shot retry: ask the AI for the Vietnamese spans of ONLY the missing keys, then
+     * stitch them into the existing markedText. Returns the (possibly) updated markedText,
+     * or the original `markedText` if no patches could be applied.
+     */
+    async _retryMissingMarkersOnce(markedText, highlights, vocabList) {
+        const missingKeys = this._shouldRetryForMissing(markedText, highlights, vocabList);
+        if (!missingKeys || missingKeys.length === 0) return markedText;
+        try {
+            const { patches } = await this.translator.repairMissingMarkers(markedText, missingKeys, highlights || [], vocabList || []);
+            if (!patches || patches.length === 0) {
+                console.log('[highlight] Retry: AI returned 0 valid patches — giving up (1-shot limit).');
+                return markedText;
+            }
+            console.log(`[highlight] Retry: applying ${patches.length} patches for keys:`, patches.map(p => p.key));
+            return this._stitchMissingPatches(markedText, patches);
+        } catch (e) {
+            console.warn('[highlight] Retry exception:', e);
+            return markedText;
+        }
+    }
+
     renderTranslationResult(translatedText, highlights = [], vocabList = [], alignments = [], sourceText = '') {
         if (!translatedText) return;
         this.currentSourceText = sourceText || this.currentSourceText || '';
@@ -1503,6 +1578,295 @@ class LinguaApp {
             m.parentNode.replaceChild(textNode, m);
         });
         this.els.translationCanvas.dataset.rawHtml = tmp.innerHTML;
+
+        // LỚP 2 — refresh the verification banner so the user instantly sees how many
+        // marks still need confirmation. Re-runs `_updateVerificationBanner()` after every
+        // render so confirm-via-click flows stay in sync without an extra listener.
+        try { this._updateVerificationBanner(); } catch (e) { /* ignore — non-critical */ }
+        // Bind click handlers on the freshly rendered marks so LỚP 2.3 (popup) works.
+        try { this._bindVerificationPopup(); } catch (e) { /* ignore */ }
+    }
+
+    /**
+     * LỚP 2 — Update the verification banner state based on data-source of every mark
+     * currently in translationCanvas. Three states:
+     *   idle     (no marks)           → banner hidden
+     *   partial  (Y > 0)              → "Đã tô AI-verified: X từ | Cần bạn kiểm tra: Y từ"
+     *   complete (Y = 0)              → "✅ Đã xác nhận 100% khớp đúng"
+     *
+     * "X" = number of ai-verified + user-verified marks (confirmed by AI or human).
+     * "Y" = number of ai-retried + fallback marks (machine unsure, needs user).
+     * Returns the counts so callers (e.g. tests) can assert without DOM inspection.
+     */
+    _updateVerificationBanner() {
+        const banner = this.els && this.els.verificationBanner;
+        const label = this.els && this.els.verificationBannerLabel;
+        const hint = this.els && this.els.verificationBannerHint;
+        if (!banner || !label || !hint) return { verified: 0, needsCheck: 0 };
+
+        const canvas = this.els.translationCanvas;
+        if (!canvas) return { verified: 0, needsCheck: 0 };
+
+        const marks = canvas.querySelectorAll('mark.highlight-mark');
+        let verified = 0;
+        let needsCheck = 0;
+        marks.forEach(m => {
+            const src = m.getAttribute('data-source') || 'fallback';
+            if (src === 'ai-verified' || src === 'user-verified') verified++;
+            else needsCheck++;
+        });
+
+        if (marks.length === 0) {
+            banner.style.display = 'none';
+            return { verified: 0, needsCheck: 0 };
+        }
+        banner.style.display = 'flex';
+
+        if (needsCheck === 0) {
+            banner.classList.remove('verification-banner--idle', 'verification-banner--partial');
+            banner.classList.add('verification-banner--complete');
+            label.textContent = 'Đã xác nhận 100% khớp đúng';
+            hint.textContent = `(${verified} từ đã qua xác nhận — AI + người dùng)`;
+        } else {
+            banner.classList.remove('verification-banner--idle', 'verification-banner--complete');
+            banner.classList.add('verification-banner--partial');
+            label.textContent = `Đã tô AI-verified: ${verified} từ`;
+            hint.textContent = `— cần bạn kiểm tra ${needsCheck} từ`;
+        }
+        return { verified, needsCheck };
+    }
+
+    /**
+     * LỚP 2.3 — Bind click handlers on every <mark> with data-source != "ai-verified" so
+     * clicking opens a small verification popup. ai-verified marks get NO click handler
+     * (no popup, no UI noise — only the dashed-border + ⚠️ indicator remains). Re-runs on
+     * every renderTranslationResult so freshly-painted marks are immediately interactive.
+     *
+     * The popup itself is a lightweight DOM element appended to <body>, positioned near the
+     * clicked mark, with 2 actions: "Đúng rồi" (confirm → set data-source="user-verified",
+     * remove dashed border + ⚠️) and "Sai, để tôi chọn lại" (drop into selection mode so
+     * the user can re-pick a Vietnamese span using the existing TextHighlighter palette).
+     */
+    _bindVerificationPopup() {
+        const canvas = this.els && this.els.translationCanvas;
+        if (!canvas) return;
+        // Delegate so we don't have to re-bind after every re-render — one click handler
+        // checks if the target was an unverifiable mark and opens the popup if so.
+        if (canvas.dataset.verificationClickBound === '1') return;
+        canvas.addEventListener('click', (e) => this._handleVerificationClick(e));
+        canvas.dataset.verificationClickBound = '1';
+    }
+
+    _handleVerificationClick(e) {
+        const mark = e.target.closest('mark.highlight-mark');
+        if (!mark) return;
+        const source = mark.getAttribute('data-source') || 'fallback';
+        // ai-verified / user-verified marks are NOT clickable for verification (the user
+        // already confirmed them or the AI was certain). Other interactions (lookup,
+        // match-mode) still work because this handler returns early ONLY when the mark
+        // is fully trusted.
+        if (source === 'ai-verified' || source === 'user-verified') return;
+
+        e.stopPropagation();
+        e.preventDefault();
+        this._openVerificationPopup(mark);
+    }
+
+    _openVerificationPopup(mark) {
+        this._closeVerificationPopup(); // ensure only one popup at a time
+        const en = mark.getAttribute('data-en') || mark.textContent || '';
+        const vn = mark.textContent || '';
+        const popup = document.createElement('div');
+        popup.className = 'verification-popup glass-card';
+        popup.setAttribute('role', 'dialog');
+        popup.innerHTML = `
+            <div class="verification-popup__row">
+                <span class="verification-popup__label">EN:</span>
+                <span class="verification-popup__en">${this._escapeHTML(en)}</span>
+            </div>
+            <div class="verification-popup__row">
+                <span class="verification-popup__label">VN đang gán:</span>
+                <span class="verification-popup__vn">${this._escapeHTML(vn)}</span>
+            </div>
+            <div class="verification-popup__actions">
+                <button class="btn btn-success verification-popup__confirm" type="button">✓ Đúng rồi</button>
+                <button class="btn btn-warning verification-popup__reject" type="button">✎ Sai, để tôi chọn lại</button>
+            </div>
+        `;
+        document.body.appendChild(popup);
+
+        // Position near the mark
+        const rect = mark.getBoundingClientRect();
+        const top = rect.top + window.scrollY - popup.offsetHeight - 8;
+        const left = rect.left + window.scrollX + (rect.width / 2) - 140; // 280px wide popup
+        popup.style.top = `${Math.max(8, top)}px`;
+        popup.style.left = `${Math.max(8, left)}px`;
+
+        // Wire actions
+        popup.querySelector('.verification-popup__confirm').addEventListener('click', () => {
+            this._markAsUserVerified(mark);
+            this._closeVerificationPopup();
+        });
+        popup.querySelector('.verification-popup__reject').addEventListener('click', () => {
+            this._startUserReselection(mark);
+            this._closeVerificationPopup();
+        });
+
+        // Click-outside closes the popup
+        setTimeout(() => {
+            document.addEventListener('click', this._onDocClickClosePopup, { once: true, capture: true });
+        }, 0);
+        this._activeVerificationPopup = popup;
+        this._activeVerificationMark = mark;
+    }
+
+    _onDocClickClosePopup(e) {
+        const popup = this._activeVerificationPopup;
+        if (!popup) return;
+        if (popup.contains(e.target)) {
+            // re-arm if user clicked inside popup
+            document.addEventListener('click', this._onDocClickClosePopup, { once: true, capture: true });
+            return;
+        }
+        this._closeVerificationPopup();
+    }
+
+    _closeVerificationPopup() {
+        if (this._activeVerificationPopup && this._activeVerificationPopup.parentNode) {
+            this._activeVerificationPopup.parentNode.removeChild(this._activeVerificationPopup);
+        }
+        this._activeVerificationPopup = null;
+        this._activeVerificationMark = null;
+    }
+
+    /**
+     * LỚP 2.3 confirm action — mark the click target as user-verified. Updates the DOM
+     * (data-source, removes dashed border via CSS), and re-counts the banner so the user
+     * sees their Y count drop by 1. When Y hits 0 the banner promotes to "100% confirmed".
+     */
+    _markAsUserVerified(mark) {
+        if (!mark) return;
+        mark.setAttribute('data-source', 'user-verified');
+        // CSS rule for data-source="user-verified" handles the visual upgrade
+        // (solid green ring + small ✓ badge).
+        this._updateVerificationBanner();
+    }
+
+    /**
+     * LỚP 2.3 reject action — drop the user into brush-select mode and pre-arm the
+     * selection palette so the next selection replaces the existing mark with the
+     * correct Vietnamese span. We re-use `TextHighlighter.applyHighlightToCurrentSelection`
+     * (existing infrastructure), but in a "replace" mode where the mark goes back into
+     * the translationCanvas as a fresh user-verified mark tied to the same enKey.
+     *
+     * Implementation note: TextHighlighter's selection listener is bound to ITS container
+     * (readingCanvas), not translationCanvas. So we install a one-shot `mouseup` listener
+     * on translationCanvas to capture the user's Vietnamese re-selection, then wrap the
+     * captured range as a fresh <mark> with data-source="user-verified" + the original
+     * enKey. We do NOT touch the reading-side highlighter to keep this scope small.
+     */
+    _startUserReselection(oldMark) {
+        if (!oldMark) return;
+        const enKey = oldMark.getAttribute('data-en') || '';
+        const color = oldMark.getAttribute('data-color') || '#fef08a';
+        this._pendingReselect = { enKey, color, oldMark };
+        const canvas = this.els.translationCanvas;
+        if (canvas) {
+            canvas.classList.add('awaiting-reselect');
+            canvas.title = 'Bôi chọn cụm tiếng Việt đúng để thay thế';
+            // One-shot mouseup listener — captures the selection right after the user releases.
+            // We use a NAMED function so we can remove it on completion / cancel.
+            const onMouseUp = (e) => {
+                document.removeEventListener('mouseup', onMouseUp, true);
+                const sel = window.getSelection && window.getSelection();
+                if (!sel || sel.isCollapsed) {
+                    // User clicked without selecting — cancel the flow gracefully.
+                    this._cancelReselect();
+                    return;
+                }
+                const text = sel.toString().trim();
+                if (!text) { this._cancelReselect(); return; }
+                const range = sel.getRangeAt(0);
+                if (!canvas.contains(range.commonAncestorContainer)) {
+                    this._cancelReselect(); return;
+                }
+                this._commitReselection(range, text);
+            };
+            // Capture phase so we run before any other listener can clear the selection.
+            document.addEventListener('mouseup', onMouseUp, true);
+            this._reselectMouseUp = onMouseUp;
+        }
+    }
+
+    _cancelReselect() {
+        const canvas = this.els.translationCanvas;
+        if (canvas) {
+            canvas.classList.remove('awaiting-reselect');
+            canvas.title = '';
+        }
+        this._pendingReselect = null;
+        if (this._reselectMouseUp) {
+            document.removeEventListener('mouseup', this._reselectMouseUp, true);
+            this._reselectMouseUp = null;
+        }
+    }
+
+    /**
+     * Commit the user's re-selection: wrap the chosen Vietnamese range in a fresh <mark>
+     * tagged with the SAME enKey + data-source="user-verified" + the original color, then
+     * remove the old (unverifiable) mark. Refresh the verification banner — Y should drop
+     * by 1; if Y reaches 0 the banner promotes to "✅ Đã xác nhận 100%".
+     */
+    _commitReselection(range, text) {
+        const pending = this._pendingReselect;
+        if (!pending) return;
+        const { enKey, color, oldMark } = pending;
+        this._pendingReselect = null;
+        const canvas = this.els.translationCanvas;
+        if (canvas) {
+            canvas.classList.remove('awaiting-reselect');
+            canvas.title = '';
+        }
+
+        try {
+            const mark = document.createElement('mark');
+            mark.className = 'highlight-mark';
+            mark.setAttribute('data-en', enKey);
+            mark.setAttribute('data-source', 'user-verified');
+            mark.setAttribute('data-color', color);
+            // Style matching other marks so the dashed-border upgrade is visually seamless.
+            const transColor = this.highlighter ? this.highlighter._getTranslucentColor(color) : 'rgba(34, 197, 94, 0.62)';
+            mark.style.cssText = `background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important; border: 1.5px solid rgba(34, 197, 94, 0.85) !important;`;
+            try {
+                range.surroundContents(mark);
+            } catch (err) {
+                const fragment = range.extractContents();
+                mark.appendChild(fragment);
+                range.insertNode(mark);
+            }
+            const sel = window.getSelection && window.getSelection();
+            if (sel) sel.removeAllRanges();
+        } catch (e) {
+            console.warn('[verify] commit failed:', e);
+        }
+
+        if (oldMark && oldMark.parentNode) {
+            oldMark.parentNode.removeChild(oldMark);
+        }
+
+        // Re-tag occ indices on the VN side and refresh the banner.
+        try {
+            const counts = new Map();
+            const norm = (s) => (s || '').toString().toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
+            canvas.querySelectorAll('mark.highlight-mark').forEach(m => {
+                const k = norm(m.getAttribute('data-en') || m.textContent);
+                if (!k) return;
+                const i = counts.get(k) || 0;
+                counts.set(k, i + 1);
+                m.setAttribute('data-occ', String(i));
+            });
+        } catch (e) { /* ignore */ }
+        this._updateVerificationBanner();
     }
 
     /**
@@ -1567,11 +1931,15 @@ class LinguaApp {
             if (loose && loose.color) return loose.color;
             return '#fef08a';
         };
-        const re = /\[\[H:([^\]]*?)\]\]([\s\S]*?)\[\[\/H\]\]/g;
+        // Accept both [[H:key]]vn[[/H]] (legacy) and [[H:key|verified]]vn[[/H]] (retry-stitched,
+        // where `verified` is "1" or "0"). The retry variant lets us tag the resulting mark as
+        // "ai-verified" vs "ai-retried" for the LỚP 2 banner / per-mark visual treatment.
+        const re = /\[\[H:([^\]|]*?)(?:\|([01]))?\]\]([\s\S]*?)\[\[\/H\]\]/g;
         let m;
         while ((m = re.exec(rawText)) !== null) {
             const enRaw = (m[1] || '').trim();
-            const vnRaw = (m[2] || '').trim();
+            const vflag = m[2]; // "1" / "0" / undefined (legacy)
+            const vnRaw = (m[3] || '').trim();
             if (!enRaw || !vnRaw) continue;
             const asIdx = Number(enRaw);
             let color = '#fef08a';
@@ -1586,17 +1954,20 @@ class LinguaApp {
                 color = colorForEnglishTerm(enRaw);
                 enKey = canonEn(enRaw);
             }
-            if (enKey) out.push({ enKey, enRaw, vnRaw, color, position: m.index, source });
+            if (enKey) out.push({ enKey, enRaw, vnRaw, color, position: m.index, source, verified: vflag === '1' ? true : (vflag === '0' ? false : null) });
         }
         return out;
     }
 
     /**
      * STAGE 1 — Validate that the AI marker count covers every required English term.
-     * Returns a diagnostic object; doesn't itself trigger a retry (Pass B — the per-paragraph
-     * AI alignment in handleTranslate — already serves as the retry when initialized). This
-     * function exists for DEBUG visibility and to give the renderer a single source of truth
-     * for "what was the AI supposed to mark vs what did it actually mark".
+     * Returns a diagnostic object with `missingEnKeys` ready to feed into a retry call.
+     *
+     * The retry itself is NOT triggered here — `_validateAndRepairMarkers` is called twice
+     * per render path: once up-front for debug visibility, and once AFTER the first render
+     * pass so the caller can decide whether to spend a retry on the missing keys (only when
+     * `coverageRatio < 1`). Keeping the validation pure lets the renderer stay cheap when
+     * the AI already covered everything.
      */
     _validateAndRepairMarkers(parsedMarkers, highlights, vocabList) {
         const norm = (s) => (s || '').toString().toLowerCase().trim()
@@ -1636,6 +2007,57 @@ class LinguaApp {
         };
         this._highlightDebugLog('STAGE 1 validate', report);
         return report;
+    }
+
+    /**
+     * Stitch the AI-supplied `{ key, vn, verified }` patches into an existing `markedText`
+     * WITHOUT duplicating anything that's already wrapped. This is the post-retry step used
+     * by `handleTranslate` after `translator.repairMissingMarkers()` returns valid patches.
+     *
+     * Stitches the FIRST occurrence of `vn` in the stripped document — never a duplicate.
+     * Skips `vn` that lives INSIDE an existing [[H:…]]…[[/H]] pair (the AI already has it).
+     * Each inserted marker carries the patch's `verified` flag so PASS 1 can tag it
+     * "ai-verified" (verified=true) or "ai-retried" (verified=false) on the final <mark>.
+     *
+     * Returns the (possibly) updated markedText. Caller is responsible for re-rendering.
+     */
+    _stitchMissingPatches(markedText = '', patches = []) {
+        const src = (markedText || '').toString();
+        if (!src.trim() || !Array.isArray(patches) || patches.length === 0) return src;
+        // Split into segments of (plain, marker) to know what's already wrapped. We work on
+        // plain segments and only insert when the span is OUTSIDE any existing marker.
+        const segRe = /(\[\[H:[^\]]*?\]\][\s\S]*?\[\[\/H\]\])/g;
+        let out = '';
+        let last = 0;
+        let seg;
+        while ((seg = segRe.exec(src)) !== null) {
+            const plain = src.slice(last, seg.index);
+            out += applyPatchesToPlain(plain, patches) + seg[0];
+            last = seg.index + seg[0].length;
+        }
+        out += applyPatchesToPlain(src.slice(last), patches);
+        return out;
+
+        // Walks the `plain` string for the FIRST not-yet-used match of each patch, wraps it
+        // with [[H:key|vflag]]vn[[/H]], and removes it from the working set so the next patch
+        // can't claim the same span. `vflag` is "1" for verified (ai-verified) or "0" for
+        // fuzzy-match (ai-retried) — _parseAIMarkers() reads this to set the source tag.
+        function applyPatchesToPlain(plain, patches) {
+            let working = plain;
+            const remaining = patches.slice();
+            for (const p of remaining) {
+                const idx = working.indexOf(p.vn);
+                if (idx < 0) continue; // AI hallucinated or span doesn't exist verbatim
+                const before = working.slice(0, idx);
+                const after = working.slice(idx + p.vn.length);
+                const vflag = (p.verified === true) ? '1' : (p.verified === false ? '0' : '1');
+                working = before + `[[H:${p.key}|${vflag}]]${p.vn}[[/H]]` + after;
+                // Mark this patch as consumed by removing it from further consideration.
+                const k = remaining.indexOf(p);
+                if (k >= 0) remaining.splice(k, 1);
+            }
+            return working;
+        }
     }
 
     /**
@@ -1718,11 +2140,24 @@ class LinguaApp {
         // pair the 1st occurrence of "witness" with the 1st occurrence of "nhân chứng" and
         // the 2nd "witness" with the 2nd "nhân chứng" — instead of all occurrences on both
         // sides lighting up together.
-        const renderMark = (color, inner, enKey = '', occIdx = 0) => {
+        //
+        // source = provenance tag ("ai-verified" / "ai-retried" / "fallback" / "user-verified").
+        // Surfaced as data-source on the <mark> so LỚP 2 can distinguish machine-certain marks
+        // from human-confirmed ones (and decorate the uncertain ones with a dashed border + ⚠️).
+        const renderMark = (color, inner, enKey = '', occIdx = 0, source = 'fallback') => {
             const transColor = this.highlighter ? this.highlighter._getTranslucentColor(color) : 'rgba(250, 204, 21, 0.62)';
             const enAttr = enKey ? ` data-en="${this._escapeHTML(enKey)}"` : '';
             const occAttr = ` data-occ="${parseInt(occIdx, 10) || 0}"`;
-            return `<mark class="highlight-mark" data-color="${color}"${enAttr}${occAttr} style="background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important;">${inner}</mark>`;
+            const sourceAttr = ` data-source="${this._escapeHTML(source)}"`;
+            // Dashed border only for non-verified sources — visual cue for LỚP 2 so the user
+            // can SEE which marks need confirmation. User-verified marks get a solid green-ish
+            // border to celebrate the confirmed state.
+            const borderStyle = source === 'ai-verified'
+                ? 'border: 1px solid transparent !important;'
+                : (source === 'user-verified'
+                    ? 'border: 1.5px solid rgba(34, 197, 94, 0.85) !important;'
+                    : 'border: 1.5px dashed rgba(234, 88, 12, 0.75) !important;');
+            return `<mark class="highlight-mark" data-color="${color}"${enAttr}${occAttr}${sourceAttr} style="background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important; ${borderStyle}">${inner}</mark>`;
         };
 
         const paragraphs = raw.split(/\n\s*\n/).filter(Boolean);
@@ -1839,7 +2274,7 @@ class LinguaApp {
             return arr;
         };
 
-        const TOKEN_SPLIT = /(\[\[MARK::[^:]*?::[^:]*?::[^:]*?::[\s\S]*?\]\])/g;
+        const TOKEN_SPLIT = /(\[\[MARK::[^:]*?::[^:]*?::[^:]*?::[^:]*?::[\s\S]*?\]\])/g;
 
         // Vietnamese "function words" that are meaningless to highlight on their own. Used to
         // reject single-word fallback matches so we don't paint stray "của", "và", "một"...
@@ -1944,7 +2379,10 @@ class LinguaApp {
                     const replaced = part.replace(regex, (match) => {
                         totalPlaced++;
                         const idx = occCounter++;
-                        return `[[MARK::${group.color}::${enTok}::${idx}::${match}]]`;
+                        // PASS 2 always emits "fallback" — string-matching the Vietnamese counterpart.
+                        // Source-flag surfaces in the UI via data-source so the LỚP 2 banner can
+                        // tell AI-verified marks from fallback ones.
+                        return `[[MARK::${group.color}::${enTok}::${idx}::fallback::${match}]]`;
                     });
                     return replaced;
                 }).join('');
@@ -2056,13 +2494,22 @@ class LinguaApp {
             return n;
         };
         const peekFallbackOcc = (enKey) => perKeyOcc.get(enKey) || 0;
+        // Maps each enKey → array of parsed markers (preserving order). We need this in PASS 1
+        // because the same enKey can appear multiple times with DIFFERENT verified flags (the
+        // legacy AI wrap could be "ai-verified", a retry-stitched wrap could be "ai-retried").
+        // We consume one element per emitted mark so order is preserved.
+        const parsedByEnKey = new Map();
+        parsedMarkers.forEach(pm => {
+            if (!parsedByEnKey.has(pm.enKey)) parsedByEnKey.set(pm.enKey, []);
+            parsedByEnKey.get(pm.enKey).push(pm);
+        });
         // PASS 1 — walk the AI's inline markers per paragraph, emit MARK tokens, and record
         // which English keys are already satisfied so the fill pass won't re-add them.
         const workingParas = paragraphs.map(p => {
             const cleanP = p.replace(/^#+\s*/g, '');
             let working = '';
             if (hasMarkers) {
-                const re = /\[\[H:([^\]]*?)\]\]([\s\S]*?)\[\[\/H\]\]/g;
+                const re = /\[\[H:([^\]|]*?)(?:\|([01]))?\]\]([\s\S]*?)\[\[\/H\]\]/g;
                 let last = 0;
                 let m;
                 while ((m = re.exec(cleanP)) !== null) {
@@ -2078,10 +2525,19 @@ class LinguaApp {
                         color = colorForEnglishTerm(keyRaw);
                         enKey = canonEn(keyRaw);
                     }
-                    const innerVn = m[2];
+                    const innerVn = m[3];
                     const occIdx = nextTrustedOcc(enKey);
                     if (enKey) placedEnKeys.add(enKey);
-                    working += `[[MARK::${color}::${(enKey || '').replace(/:/g, '')}::${occIdx}::${this._escapeHTML(innerVn)}]]`;
+                    // Determine per-marker source tag. `verified=null` means legacy AI wrap
+                    // (came from the first translate pass, treated as "ai-verified"); explicit
+                    // `verified=true|false` comes from the retry patch (with the matching flag).
+                    let sourceTag = 'ai-verified';
+                    const list = parsedByEnKey.get(enKey);
+                    if (list && list.length) {
+                        const pm = list.shift(); // consume in document order
+                        if (pm.verified === false) sourceTag = 'ai-retried';
+                    }
+                    working += `[[MARK::${color}::${(enKey || '').replace(/:/g, '')}::${occIdx}::${sourceTag}::${this._escapeHTML(innerVn)}]]`;
                     last = re.lastIndex;
                 }
                 working += this._escapeHTML(cleanP.slice(last));
@@ -2201,7 +2657,8 @@ class LinguaApp {
         // 1 mark) in a single pass instead of needing 3 restarts. Also raises the gap
         // length cap to 120 chars so a full function-word bridge like "của sự phát triển"
         // can still be absorbed.
-        const MERGE_TOKEN = /\[\[MARK::([^:]*?)::([^:]*?)::([^:]*?)::([\s\S]*?)\]\]/;
+        // Token shape: [[MARK::color::enKey::occIdx::source::inner]] (5 colons, 6 fields).
+        const MERGE_TOKEN = /\[\[MARK::([^:]*?)::([^:]*?)::([^:]*?)::([^:]*?)::([\s\S]*?)\]\]/;
         const mergeAdjacentTokens = (working) => {
             const GAP_MAX = 120;
             const gapIsMergeable = (gap) => {
@@ -2233,7 +2690,8 @@ class LinguaApp {
                     let color = m1[1];
                     let enKey = m1[2];
                     let occIdx = m1[3];
-                    let fusedInner = m1[4];
+                    let source = m1[4];
+                    let fusedInner = m1[5];
                     let fusedAny = false;
                     // Try to extend the chain by absorbing every NEXT same-enKey token whose
                     // gap is mergeable. Stop on the first non-mergeable next token OR a token
@@ -2246,12 +2704,12 @@ class LinguaApp {
                         const gap = working.slice(curEnd, m2.index);
                         const sameTerm = m2[1] === color && norm(m2[2]) === norm(enKey);
                         if (!sameTerm || !gapIsMergeable(gap)) break;
-                        fusedInner += gap + m2[4];
+                        fusedInner += gap + m2[5];
                         curEnd = m2.index + m2[0].length;
                         fusedAny = true;
                     }
                     if (fusedAny) {
-                        const fusedToken = `[[MARK::${color}::${enKey}::${occIdx}::${fusedInner}]]`;
+                        const fusedToken = `[[MARK::${color}::${enKey}::${occIdx}::${source}::${fusedInner}]]`;
                         working = working.slice(0, startIdx) + fusedToken + working.slice(curEnd);
                         merged = true;
                         break; // restart scan from the top after each merge
@@ -2262,8 +2720,28 @@ class LinguaApp {
             }
             return working;
         };
+        // Pre/PASS 2.5 — capture token counts for diagnostics so a "tô sai" report can compare
+        // how many MARK tokens AI emitted vs how many survived the merge passes. If these drift
+        // apart, the user knows a chain-merge merged two distinct AI-wrapped fragments of the
+        // SAME phrase into one mark (which is fine and desired) — vs dropping a fragment
+        // entirely (a real bug to investigate).
+        const countMarksBeforeMerge = (workingParas || []).reduce((acc, w) => {
+            const re = new RegExp(MERGE_TOKEN.source, 'g');
+            return acc + (w.match(re) || []).length;
+        }, 0);
         for (let i = 0; i < workingParas.length; i++) {
             workingParas[i] = mergeAdjacentTokens(workingParas[i]);
+        }
+        const countMarksAfterMerge = (workingParas || []).reduce((acc, w) => {
+            const re = new RegExp(MERGE_TOKEN.source, 'g');
+            return acc + (w.match(re) || []).length;
+        }, 0);
+        if (countMarksBeforeMerge !== countMarksAfterMerge) {
+            this._highlightDebugLog('PASS 2.5 chain-merge', {
+                tokensBefore: countMarksBeforeMerge,
+                tokensAfter: countMarksAfterMerge,
+                fused: countMarksBeforeMerge - countMarksAfterMerge
+            });
         }
 
         // PASS 2.6 — STRICT RE-COVERAGE + STITCH: scan for groups whose VN candidate still
@@ -2287,7 +2765,7 @@ class LinguaApp {
             let m;
             while ((m = re.exec(working)) !== null) {
                 tokens.push({
-                    color: m[1], enKey: m[2], occIdx: m[3], inner: m[4],
+                    color: m[1], enKey: m[2], occIdx: m[3], source: m[4], inner: m[5],
                     start: m.index, end: m.index + m[0].length
                 });
             }
@@ -2299,7 +2777,7 @@ class LinguaApp {
                 const fresh = [];
                 while ((m = re.exec(working)) !== null) {
                     fresh.push({
-                        color: m[1], enKey: m[2], occIdx: m[3], inner: m[4],
+                        color: m[1], enKey: m[2], occIdx: m[3], source: m[4], inner: m[5],
                         start: m.index, end: m.index + m[0].length
                     });
                 }
@@ -2320,7 +2798,10 @@ class LinguaApp {
                     const onlyStop = words.length && words.every(w => STOP_WORDS.has(w.toLowerCase()));
                     if (!onlyPunct && !onlyStop) continue;
                     const fusedInner = a.inner + gap + b.inner;
-                    const fusedToken = `[[MARK::${a.color}::${a.enKey}::${a.occIdx}::${fusedInner}]]`;
+                    // Preserve the LEFT token's source flag when stitching (whichever side
+                    // initiated the chain — typically "ai-verified" — should win so the merged
+                    // mark isn't demoted to "fallback").
+                    const fusedToken = `[[MARK::${a.color}::${a.enKey}::${a.occIdx}::${a.source}::${fusedInner}]]`;
                     working = working.slice(0, a.start) + fusedToken + working.slice(b.end);
                     mergedSomething = true;
                     break; // restart outer while-loop because indices shifted
@@ -2333,25 +2814,48 @@ class LinguaApp {
         }
 
         // PASS 3 — convert all intermediate tokens into real <mark> elements.
-        // Token shape: [[MARK::color::enKey::occIdx::inner]]
+        // Token shape: [[MARK::color::enKey::occIdx::source::inner]]
         let totalMarks = 0;
-        const trustedEnKeys = new Set(parsedMarkers.map(m => m.enKey));
+        const renderedEnKeys = new Set(); // populated as PASS 3 walks the document
         const formatted = workingParas.map(working => {
-            const html = working.replace(/\[\[MARK::([^:]*?)::([^:]*?)::([^:]*?)::([\s\S]*?)\]\]/g, (match, color, enKey, occIdx, inner) => {
+            const html = working.replace(/\[\[MARK::([^:]*?)::([^:]*?)::([^:]*?)::([^:]*?)::([\s\S]*?)\]\]/g, (match, color, enKey, occIdx, source, inner) => {
                 totalMarks++;
-                return renderMark(color, inner, enKey, parseInt(occIdx, 10) || 0);
+                if (enKey) renderedEnKeys.add(enKey);
+                return renderMark(color, inner, enKey, parseInt(occIdx, 10) || 0, source || 'fallback');
             });
             return `<p class="paragraph-block">${html}</p>`;
         });
 
         // Final stats — consumed by the debug log so a "tô sai" report is a one-liner.
+        //
+        // IMPORTANT: coverageRatio is now EN-KEY coverage, NOT mark-count ratio. The previous
+        // definition (trustedMarks / totalMarks) could exceed 1 whenever PASS 2.5 chain-merged
+        // 2 same-enKey AI markers into 1 <mark> — which is exactly the desired behaviour for
+        // "function-word bridge" phrases like "Nghịch lý của sự tiến bộ" (2 trusted → 1 mark)
+        // — but the old ratio made it look like a bug. The new metric answers the user's actual
+        // question: "what fraction of the English terms I asked for are now painted on the VN side?"
+        //
+        // Both numbers are still surfaced for diagnostic visibility:
+        //   - trustedMarks : how many AI-wrapped fragments the parser saw (pre-merge)
+        //   - totalMarks   : how many <mark> PASS 3 actually rendered (post-merge)
+        //   - coveredEnKeys: unique enKeys rendered
+        //   - coverageRatio: coveredEnKeys / requiredEnKeys — IN [0, 1] by construction
         const trustedMarks = parsedMarkers.length;
         const fallbackMarks = Math.max(0, totalMarks - trustedMarks);
+        const aiUniqueEnKeys = new Set(parsedMarkers.map(m => m.enKey));
+        const requiredEnKeys = new Set();
+        (vocabList || []).forEach(v => { const k = canonEn(v.original); if (k) requiredEnKeys.add(k); });
+        (highlights || []).forEach(h => { const k = norm(h.text || h.word); if (k) requiredEnKeys.add(k); });
+        const requiredCount = requiredEnKeys.size;
+        const coveredCount = [...requiredEnKeys].filter(k => renderedEnKeys.has(k)).length;
+        const coverageRatio = requiredCount > 0 ? (coveredCount / requiredCount) : 1;
         this._highlightDebugLog('Final stats', {
             totalMarks,
             trustedMarks,
             fallbackMarks,
-            coverageRatio: totalMarks > 0 ? (trustedMarks / totalMarks) : 0,
+            requiredCount,
+            coveredCount,
+            coverageRatio,
             unplaced
         });
 

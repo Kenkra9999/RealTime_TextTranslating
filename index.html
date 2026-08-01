@@ -294,6 +294,16 @@
                         sàng</span>
                 </div>
                 <div class="pane-body" id="paneBodyRight">
+                    <!-- LỚP 2 — Verification banner. Counts ai-verified marks vs ones the user
+                         still needs to confirm (data-source = "ai-retried" / "fallback").
+                         When Y = 0 the banner promotes to "✅ Đã xác nhận 100%". -->
+                    <div id="verificationBanner" class="verification-banner verification-banner--idle" style="display: none;" role="status" aria-live="polite">
+                        <span class="verification-banner__icon" aria-hidden="true">🤖</span>
+                        <span class="verification-banner__text">
+                            <strong id="verificationBannerLabel">Đã tô AI-verified: 0 từ</strong>
+                            <span class="verification-banner__hint" id="verificationBannerHint">— cần bạn xác nhận 0 từ</span>
+                        </span>
+                    </div>
                     <div class="text-display-content font-serif-reading" id="translationCanvas">
                         <em style="color: var(--text-light);">Bản dịch tiếng Việt và các từ được tô đậm tương ứng sẽ
                             hiển thị ở đây sau khi bạn nhấn "Dịch & Phân Tích".</em>

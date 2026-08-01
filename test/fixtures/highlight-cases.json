@@ -157,5 +157,169 @@
       "distinctOccIndices": [0, 1]
     },
     "regressGuard": "1 dò hiện 4,5 chữ cùng từ"
+  },
+  {
+    "id": "ai-forgot-one-key-retry-target",
+    "name": "AI forgot exactly 1 key — retry list identifies it for repairMissingMarkers()",
+    "description": "Verifies that when the AI wraps 2 of 3 keys, _validateAndRepairMarkers() reports the missing key in missingEnKeys (and only that one). This is the INPUT CONTRACT for the retry-patch pass: app.handleTranslate() uses this list to feed translator.repairMissingMarkers() with ONLY the missing keys — no full re-translation. Required to validate option C (JSON patch chỉ gửi danh sách từ thiếu).",
+    "sourceText": "Witness, progress, and paradigm walked in.",
+    "vnMarked": "[[H:witness]]Nhân chứng[[/H]] và [[H:progress]]tiến bộ[[/H]] đã bước vào.",
+    "highlights": [
+      { "text": "witness", "color": "#fef08a" },
+      { "text": "progress", "color": "#a7f3d0" },
+      { "text": "paradigm", "color": "#bae6fd" }
+    ],
+    "vocabList": [
+      { "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" },
+      { "original": "progress", "translatedTermInVN": "tiến bộ", "color": "#a7f3d0" },
+      { "original": "paradigm", "translatedTermInVN": "mô hình", "color": "#bae6fd" }
+    ],
+    "alignments": [],
+    "expected": {
+      "minMarkCount": 2,
+      "trustedMarkCount": 2,
+      "fallbackMarkCount": 0,
+      "validateReportsMissing": ["paradigm"],
+      "validateMissingCount": 1,
+      "validateCoverageRatio": 0.6667
+    },
+    "regressGuard": "AI thiếu marker — retry không filter theo từ thiếu"
+  },
+  {
+    "id": "stitch-missing-patch",
+    "name": "_stitchMissingPatches inserts new markers WITHOUT duplicating existing ones",
+    "description": "Unit-tests the retry stitching function in isolation. Given a marked text already wrapping 2 keys, and patches for 3 keys (1 overlap with an existing marker span, 2 new), the result must wrap the 2 new keys WITHOUT duplicating the existing one (the overlapping patch must be rejected because its vn lives inside an existing [[H:...]]...[[/H]] span).",
+    "sourceText": "Witness, progress, and a paradigm shift today.",
+    "vnMarked": "[[H:witness]]Nhân chứng[[/H]] và [[H:progress]]tiến bộ[[/H]]. Một paradigm shift cũng xuất hiện hôm nay.",
+    "highlights": [
+      { "text": "witness", "color": "#fef08a" },
+      { "text": "progress", "color": "#a7f3d0" },
+      { "text": "paradigm shift", "color": "#bae6fd" }
+    ],
+    "vocabList": [
+      { "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" },
+      { "original": "progress", "translatedTermInVN": "tiến bộ", "color": "#a7f3d0" },
+      { "original": "paradigm shift", "translatedTermInVN": "paradigm shift", "color": "#bae6fd" }
+    ],
+    "alignments": [],
+    "patchesToStitch": [
+      { "key": "paradigm shift", "vn": "paradigm shift" },
+      { "key": "witness", "vn": "Nhân chứng" }
+    ],
+    "expected": {
+      "minMarkCount": 3,
+      "trustedMarkCount": 3,
+      "fallbackMarkCount": 0,
+      "validateReportsMissing": []
+    },
+    "regressGuard": "retry patch duplicate hoặc bỏ sót từ"
+  },
+  {
+    "id": "l1-data-source-tag",
+    "name": "LỚP 1.3 — every <mark> carries data-source tag (ai-verified / ai-retried / fallback)",
+    "description": "Verifies the data-source tagging contract: marks emitted from PASS 1 (AI inline wrap) carry data-source='ai-verified', marks emitted from retry-stitched patches with verified=true carry 'ai-verified', verified=false carry 'ai-retried', and marks emitted from PASS 2 (string fallback) carry 'fallback'. The renderer MUST NEVER emit a <mark> with data-source='' or 'unknown' — every mark tells LỚP 2 how confident the machine was.",
+    "sourceText": "Witness, progress, and a paradigm shift today.",
+    "vnMarked": "[[H:witness]]Nhân chứng[[/H]] và [[H:progress]]tiến bộ[[/H]]. Một paradigm shift cũng xuất hiện hôm nay.",
+    "highlights": [
+      { "text": "witness", "color": "#fef08a" },
+      { "text": "progress", "color": "#a7f3d0" },
+      { "text": "paradigm shift", "color": "#bae6fd" }
+    ],
+    "vocabList": [
+      { "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" },
+      { "original": "progress", "translatedTermInVN": "tiến bộ", "color": "#a7f3d0" },
+      { "original": "paradigm shift", "translatedTermInVN": "paradigm shift", "color": "#bae6fd" }
+    ],
+    "alignments": [],
+    "patchesToStitch": [
+      { "key": "paradigm shift", "vn": "paradigm shift" }
+    ],
+    "expected": {
+      "minMarkCount": 3,
+      "trustedMarkCount": 3,
+      "allMarksHaveDataSource": true,
+      "dataSourceHistogram": { "ai-verified": 3 }
+    },
+    "regressGuard": "mark không có data-source → banner LỚP 2 không đếm được"
+  },
+  {
+    "id": "l1-mixed-sources",
+    "name": "LỚP 1.3 — mixed sources in one document: ai-verified + ai-retried + fallback all coexist",
+    "description": "Verifies that when 1 mark comes from PASS 1 (ai-verified), 1 from retry patch (verified=true → ai-verified), and 1 from PASS 2 string fallback (fallback), the renderer tags each one correctly and the histogram is accurate.",
+    "sourceText": "Witness, progress, paradigm shift, and resilience.",
+    "vnMarked": "[[H:witness]]Nhân chứng[[/H]] và [[H:progress]]tiến bộ[[/H]] đã làm thay đổi mọi thứ. paradigm shift xuất hiện cuối cùng, mang lại khả năng phục hồi.",
+    "highlights": [
+      { "text": "witness", "color": "#fef08a" },
+      { "text": "progress", "color": "#a7f3d0" },
+      { "text": "paradigm shift", "color": "#bae6fd" },
+      { "text": "resilience", "color": "#fbcfe8" }
+    ],
+    "vocabList": [
+      { "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" },
+      { "original": "progress", "translatedTermInVN": "tiến bộ", "color": "#a7f3d0" },
+      { "original": "paradigm shift", "translatedTermInVN": "paradigm shift", "color": "#bae6fd" },
+      { "original": "resilience", "translatedTermInVN": "khả năng phục hồi", "color": "#fbcfe8" }
+    ],
+    "alignments": [],
+    "patchesToStitch": [
+      { "key": "paradigm shift", "vn": "paradigm shift" }
+    ],
+    "expected": {
+      "minMarkCount": 4,
+      "trustedMarkCount": 3,
+      "dataSourceHistogram": { "ai-verified": 3, "fallback": 1 }
+    },
+    "regressGuard": "LỚP 1.3 phân biệt nguồn — không gộp tất cả thành 1 loại"
+  },
+  {
+    "id": "l2-banner-counts",
+    "name": "LỚP 2.1 — banner counts {verified, needsCheck} accurately per data-source",
+    "description": "Verifies the _updateVerificationBanner() contract: returns {verified, needsCheck} where verified = ai-verified + user-verified, needsCheck = ai-retried + fallback. This is what drives the banner UI text. We can't drive a real DOM here, so we replicate the counting logic and assert via the renderer output (data-source histogram).",
+    "sourceText": "Two verified, one fallback.",
+    "vnMarked": "[[H:witness]]Nhân chứng[[/H]] và [[H:progress]]tiến bộ[[/H]]. Khả năng phục hồi là rất quan trọng.",
+    "highlights": [
+      { "text": "witness", "color": "#fef08a" },
+      { "text": "progress", "color": "#a7f3d0" },
+      { "text": "resilience", "color": "#fbcfe8" }
+    ],
+    "vocabList": [
+      { "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" },
+      { "original": "progress", "translatedTermInVN": "tiến bộ", "color": "#a7f3d0" },
+      { "original": "resilience", "translatedTermInVN": "khả năng phục hồi", "color": "#fbcfe8" }
+    ],
+    "alignments": [],
+    "expected": {
+      "minMarkCount": 3,
+      "dataSourceHistogram": { "ai-verified": 2, "fallback": 1 },
+      "bannerState": { "verified": 2, "needsCheck": 1 }
+    },
+    "regressGuard": "banner đếm sai verified vs needsCheck"
+  },
+  {
+    "id": "l1-retried-patch",
+    "name": "LỚP 1.3 — retry patch with verified=false tags the mark as ai-retried (⚠️ in UI)",
+    "description": "Verifies that when the retry returns a patch with verified=false (closest-window match, NOT exact substring), the resulting mark is tagged data-source='ai-retried' — so the user sees the dashed border + ⚠️ icon and can confirm/fix it via LỚP 2.3.",
+    "sourceText": "Witness, progress, and a paradigm shift today.",
+    "vnMarked": "[[H:witness]]Nhân chứng[[/H]] và [[H:progress]]tiến bộ[[/H]]. Một paradigm shift cũng xuất hiện hôm nay.",
+    "highlights": [
+      { "text": "witness", "color": "#fef08a" },
+      { "text": "progress", "color": "#a7f3d0" },
+      { "text": "paradigm shift", "color": "#bae6fd" }
+    ],
+    "vocabList": [
+      { "original": "witness", "translatedTermInVN": "nhân chứng", "color": "#fef08a" },
+      { "original": "progress", "translatedTermInVN": "tiến bộ", "color": "#a7f3d0" },
+      { "original": "paradigm shift", "translatedTermInVN": "paradigm shift", "color": "#bae6fd" }
+    ],
+    "alignments": [],
+    "patchesToStitch": [
+      { "key": "paradigm shift", "vn": "paradigm shift", "verified": false }
+    ],
+    "expected": {
+      "minMarkCount": 3,
+      "dataSourceHistogram": { "ai-verified": 2, "ai-retried": 1 },
+      "bannerState": { "verified": 2, "needsCheck": 1 }
+    },
+    "regressGuard": "verified=false không tag ai-retried → user không thấy ⚠️"
   }
 ]

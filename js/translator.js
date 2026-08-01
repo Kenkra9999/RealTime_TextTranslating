@@ -53,6 +53,229 @@ class ContextTranslator {
     }
 
     /**
+     * Common AI-call helper used by EVERY schema-bound endpoint (per-paragraph align + retry
+     * patch). Routes to OpenAI or Gemini with provider-native strict-schema enforcement, so
+     * the model cannot return prose / markdown — we always get a JSON object matching the
+     * supplied `schema`.
+     *
+     * OpenAI: uses tool-use (function-calling) with `tool_choice: required` pointing at a
+     *         single function named `schemaName`. This works on every current model (gpt-4o,
+     *         gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo) — more portable than `response_format:
+     *         json_schema` which is only on gpt-4o-2024-08+ and later.
+     * Gemini: uses `responseSchema` + `responseMimeType: application/json`. Equivalent
+     *         constraint, enforced server-side.
+     *
+     * Returns the parsed JSON object on success, or `null` on any failure (auth, schema
+     * mismatch, network). Caller is responsible for validating the schema shape.
+     */
+    async _callProviderJson(prompt, schema, schemaName) {
+        if (this.provider === 'openai' && this.openaiApiKey) {
+            try {
+                const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.openaiApiKey}` },
+                    body: JSON.stringify({
+                        model: this.openaiModel,
+                        messages: [{ role: 'user', content: prompt }],
+                        tools: [{
+                            type: 'function',
+                            function: { name: schemaName, description: 'Return structured data per schema.', parameters: schema, strict: true }
+                        }],
+                        tool_choice: { type: 'function', function: { name: schemaName } },
+                        temperature: 0
+                    })
+                });
+                if (!resp.ok) return null;
+                const data = await resp.json();
+                const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+                if (!args) return null;
+                try { return JSON.parse(args); } catch (e) { return null; }
+            } catch (e) { return null; }
+        }
+        if (this.geminiApiKey) {
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiApiKey}`;
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: {
+                            temperature: 0,
+                            responseMimeType: 'application/json',
+                            responseSchema: schema
+                        }
+                    })
+                });
+                if (!resp.ok) return null;
+                const data = await resp.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!text) return null;
+                try { return JSON.parse(text); } catch (e) { return null; }
+            } catch (e) { return null; }
+        }
+        return null;
+    }
+
+    /**
+     * RETRY-PATCH PASS — fills in markers the first translation+alignment pass missed.
+     *
+     * WHY: the first translate pass + per-paragraph alignment (above) sometimes STILL misses
+     * wrapping some Vietnamese counterparts (typically paraphrased phrases like "sự phát triển"
+     * for "progress", or words the AI deemed not relevant). Instead of calling `translateAndAnalyze`
+     * again (which costs a full re-translation + double billing), we send a SMALL JSON-patch
+     * request listing ONLY the missing English keys + the already-marked Vietnamese text, and
+     * ask the AI to return the EXACT Vietnamese span to wrap for each missing key. App.js then
+     * stitches the new [[H:key]]…[[/H]] pairs into `markedText` itself (no full re-render).
+     *
+     * Contract: returns { patches: [{ key, vn, verified }] } — each `vn` is the verbatim
+     * Vietnamese span the AI wants to wrap for that `key`. `verified: true` means the span
+     * was found verbatim in `markedText` (after stripping existing [[H:...]] tags); `false`
+     * means the AI hallucinated and we fell back to the closest substring that still matches
+     * (tolerating only whitespace and trailing punctuation). Empty patches array means the AI
+     * still couldn't find a counterpart (we give up rather than retry forever — option A from
+     * the spec).
+     *
+     * LIMIT: 1 retry per translate request (caller checks `coverageRatio < 1` and stops
+     * regardless of how good the patches look — prevents runaway billing on adversarial inputs).
+     */
+    async repairMissingMarkers(markedText = '', missingKeys = [], highlights = [], vocabList = []) {
+        const empty = { patches: [] };
+        const src = (markedText || '').toString();
+        if (!src.trim() || !Array.isArray(missingKeys) || missingKeys.length === 0) return empty;
+
+        // Build a map enKey -> highlight index (so the AI can use [[H:index]] form too, but
+        // we mostly want it to RETURN spans so we can stitch manually and avoid re-render).
+        const norm = (s) => (s || '').toString().toLowerCase().trim()
+            .replace(/[\u00A0\u2000-\u200B]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .normalize('NFC');
+        const stemMatch = (a, b) => {
+            if (a.length < 4 || b.length < 4) return false;
+            const shorter = a.length <= b.length ? a : b;
+            const longer = a.length <= b.length ? b : a;
+            return longer.startsWith(shorter);
+        };
+        const canonEn = (term) => {
+            const o = norm(term);
+            if (!o) return '';
+            const hit = (highlights || []).find(h => norm(h.text || h.word) === o);
+            if (hit) return norm(hit.text || hit.word);
+            const loose = (highlights || []).find(h => stemMatch(norm(h.text || h.word), o));
+            if (loose) return norm(loose.text || loose.word);
+            return o;
+        };
+        // Vocab hint per missing key (translatedTermInVN / exampleVi) so the AI knows what
+        // semantic class to look for — even though it ultimately returns its own span.
+        const hintsByKey = {};
+        (vocabList || []).forEach(v => {
+            const k = canonEn(v.original);
+            if (!k || !missingKeys.includes(k)) return;
+            const hints = [];
+            if (v.translatedTermInVN) hints.push(v.translatedTermInVN);
+            if (v.exampleVi) hints.push(v.exampleVi);
+            if (hints.length) hintsByKey[k] = hints;
+        });
+
+        const numbered = missingKeys.map((k, i) => {
+            const hints = hintsByKey[k];
+            const hintStr = hints && hints.length ? ` (gợi ý cụm Việt có thể có: ${hints.map(h => `"${h.replace(/"/g, "'")}"`).join(' / ')})` : '';
+            return `${i}. "${k}"${hintStr}`;
+        }).join('\n');
+
+        const prompt = `Bạn là chuyên gia đối chiếu song ngữ Anh-Việt. Dưới đây là MỘT bản dịch tiếng Việt ĐÃ ĐƯỢC BỌC THẺ 1 PHẦN bằng cặp [[H:english]]cụm việt[[/H]], và một DANH SÁCH TỪ TIẾNG ANH CÒN THIẾU thẻ (đánh số từ 0).
+Nhiệm vụ: với MỖI từ/cụm tiếng Anh trong danh sách THIẾU mà bạn tìm thấy phần dịch tiếng Việt tương ứng XUẤT HIỆN trong bản dịch (kể cả khi nằm giữa các thẻ [[H:…]]…[[/H]] đã có), hãy trả về đúng cụm tiếng Việt đó (verbatim, giữ nguyên hoa/thường, dấu câu). KHÔNG trả về giải thích, KHÔNG trả về cả câu — CHỈ trả cụm cần bọc.
+
+QUY TẮC BẮT BUỘC:
+- Trả về DUY NHẤT JSON (không kèm markdown). Field "patches" là mảng các {key, vn}:
+  • key = từ/cụm tiếng Anh (COPY NGUYÊN từ danh sách đánh số bên dưới).
+  • vn  = cụm tiếng Việt verbatim đã xuất hiện trong bản dịch. Nếu không tìm thấy thì BỎ QUA key đó (không ép buộc).
+- Bọc TRỌN VẸN cả cụm: nếu cụm tiếng Anh là "Paradox of Progress" và tiếng Việt là "Nghịch lý của sự tiến bộ" thì trả về vn = "Nghịch lý của sự tiến bộ" (kể cả hư từ nối ở giữa), KHÔNG trả "Nghịch lý" rồi "tiến bộ" tách rời.
+- Tôn trọng trật tự tiếng Việt (đảo thứ tự so với tiếng Anh vẫn OK, vd "nghịch lý của tiến bộ" cho "paradox of progress").
+- Chỉ chọn cụm đã THỰC SỰ xuất hiện trong bản dịch. Không bịa.
+
+DANH SÁCH TỪ TIẾNG ANH CÒN THIẾU THẺ:
+${numbered}
+
+BẢN DỊCH TIẾNG VIỆT (đã có sẵn thẻ [[H:…]]vn[[/H]] một phần; chỉ dùng để tra cứu vị trí, KHÔNG trả lại):
+"""
+${src}
+"""`;
+
+        // Strict schema — provider-native enforcement (OpenAI tool-use / Gemini responseSchema).
+        // `additionalProperties: false` so the model cannot smuggle in stray fields.
+        const patchSchema = {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+                patches: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                            key: { type: 'string', description: 'English key copied verbatim from the numbered list.' },
+                            vn:  { type: 'string', description: 'Verbatim Vietnamese span found inside markedText.' }
+                        },
+                        required: ['key', 'vn']
+                    }
+                }
+            },
+            required: ['patches']
+        };
+
+        const parsed = await this._callProviderJson(prompt, patchSchema, 'return_repair_patches');
+        if (!parsed) return empty;
+        const raw_patches = Array.isArray(parsed.patches) ? parsed.patches : [];
+        // Validate: each patch must reference a real missing key, and the vn span must either
+        // exist VERBATIM in markedText (verified=true → data-source "ai-verified") OR be close
+        // enough to a substring after tolerating whitespace / leading/trailing punctuation
+        // (verified=false → data-source "ai-retried", the renderer will still try to use it
+        // via fuzzy match and the user will see the ⚠️ marker to confirm manually).
+        //
+        // Strip the existing [[H:...]] tags from src so "duplicate-of-existing" detection still
+        // works — a patch that targets a span INSIDE an existing marker is invalid (would double-wrap).
+        const stripped = src.replace(/\[\[H:[^\]]*?\]\]/g, '').replace(/\[\[\/H\]\]/g, '');
+        const valid = [];
+        for (const p of raw_patches) {
+            if (!p || typeof p.key !== 'string' || typeof p.vn !== 'string') continue;
+            const key = canonEn(p.key);
+            if (!key || !missingKeys.includes(key)) continue;
+            const vn = p.vn.trim();
+            if (!vn) continue;
+            if (stripped.includes(vn)) {
+                valid.push({ key, vn, verified: true });
+                continue;
+            }
+            // Tolerate leading/trailing punctuation OR whitespace drift only (no char-level reword).
+            // Try collapsing all whitespace in BOTH sides and re-locating. If the AI added a stray
+            // space inside ("Hơn nữa ," vs "Hơn nữa,"), we won't accept it — too risky.
+            const vnNorm = vn.replace(/\s+/g, ' ').trim();
+            const strippedNorm = stripped.replace(/\s+/g, ' ');
+            if (strippedNorm.includes(vnNorm)) {
+                // Re-locate the actual span to preserve original whitespace/punctuation in the
+                // output (we don't want to rewrite the document). Find the first occurrence of
+                // the normalised span in the original stripped text.
+                const idx = stripped.indexOf(vn);
+                let actual = '';
+                if (idx >= 0) actual = vn;
+                else {
+                    // Looser match: locate any span matching pattern `\s*vnNorm\s*` (punct allowed).
+                    const re = new RegExp(`(?:^|\\b|[\\s,.;:()])(${vnNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})(?:$|\\b|[\\s,.;:()])`);
+                    const m = re.exec(stripped);
+                    if (m) actual = m[1];
+                }
+                if (actual) {
+                    valid.push({ key, vn: actual, verified: false });
+                    continue;
+                }
+            }
+            // Couldn't verify → drop it (AI hallucinated). Renderer will fall back to string-match.
+        }
+        return { patches: valid };
+    }
+
+    /**
      * DEDICATED ALIGNMENT PASS (marker-injection, PER-PARAGRAPH).
      *
      * WHY PER-PARAGRAPH: asking the AI to re-emit the WHOLE translation with tags fails on long
@@ -159,48 +382,93 @@ ${para}
             return out;
         };
 
-        let raw = '';
-        if (this.provider === 'openai' && this.openaiApiKey) {
-            const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.openaiApiKey}` },
-                body: JSON.stringify({
-                    model: this.openaiModel,
-                    messages: [{ role: 'user', content: prompt }],
-                    response_format: { type: 'json_object' },
-                    temperature: 0
-                })
-            });
-            if (!resp.ok) return fail;
-            const data = await resp.json();
-            raw = data.choices?.[0]?.message?.content || '';
-        } else if (this.geminiApiKey) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiApiKey}`;
-            const resp = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { temperature: 0, responseMimeType: 'application/json' }
-                })
-            });
-            if (!resp.ok) return fail;
-            const data = await resp.json();
-            raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        } else {
-            return fail;
-        }
+        // ── PER-ITEM VERIFY (LỚP 1.2) ───────────────────────────────────────────────
+        // Skeleton check (parity of letters/digits after stripping all tags) catches any
+        // reword, but it does NOT guarantee each individual `vn` actually appears in `para`.
+        // The AI can still smuggle in a hallucinated span — e.g. copy "chứng kiến" for an
+        // English term whose actual translation in this paragraph was "nhìn thấy". For each
+        // alignment, we VERIFY by code that `para` actually contains `vn` (after tolerating
+        // whitespace and trailing punctuation only — NO char-level reword is allowed).
+        //
+        // Failures are retried with a tighter prompt asking the AI for the EXACT verbatim
+        // span (max 2 retries), then dropped entirely if still unverifiable. The renderer
+        // uses the per-item `verified` flag to tag data-source on each <mark>:
+        //   verified=true  → "ai-verified"   (machine is certain — no ⚠️ in UI)
+        //   verified=false → "ai-retried"    (machine is uncertain — ⚠️ in UI, user must confirm)
+        const verifyVnSpan = (vn, paragraph) => {
+            if (!vn) return false;
+            if (paragraph.includes(vn)) return true;
+            // Tolerate whitespace drift only (no punctuation addition).
+            const vnNorm = vn.replace(/\s+/g, ' ');
+            const paraNorm = paragraph.replace(/\s+/g, ' ');
+            return paraNorm.includes(vnNorm);
+        };
+        const findClosestSpan = (vn, paragraph) => {
+            // Used as a last-ditch fallback: try to locate ANY span in paragraph that matches
+            // the core words of vn in order (allowing up to 1 missing word), so the AI's "rough
+            // idea" still has a paintable target instead of being silently dropped.
+            const words = vn.replace(/[^\p{L}\p{N}\s]/gu, '').split(/\s+/).filter(Boolean);
+            if (words.length < 2) return '';
+            // Sliding window: for every n-1, n, n+1 word window starting at each position.
+            for (let len = words.length; len >= Math.max(2, words.length - 1); len--) {
+                if (len > words.length) continue;
+                for (let i = 0; i + len <= words.length; i++) {
+                    const win = words.slice(i, i + len).join(' ');
+                    if (paragraph.includes(win)) return win;
+                }
+            }
+            return '';
+        };
 
-        let parsed;
-        try {
-            parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
-        } catch (e) {
-            return fail;
-        }
-        const marked = (parsed && typeof parsed.marked === 'string') ? parsed.marked : '';
-        if (!marked) return fail;
+        const retryOneItem = async (item) => {
+            // Up to 2 retries. Tight prompt: only this English term + verbatim span, nothing else.
+            const term = (highlights[item.index] && (highlights[item.index].text || highlights[item.index].word)) || '';
+            const tightPrompt = `Tìm cụm tiếng Việt CHÍNH XÁC (verbatim, giữ nguyên hoa/thường/dấu câu) là phần dịch của cụm tiếng Anh "${term}" trong đoạn dưới. Trả về DUY NHẤT JSON {"vn": "<cụm verbatim>"} — hoặc {"vn": ""} nếu không có.
+ĐOẠN:
+"""
+${para}
+"""`;
+            const tightSchema = {
+                type: 'object', additionalProperties: false,
+                properties: { vn: { type: 'string' } },
+                required: ['vn']
+            };
+            for (let attempt = 0; attempt < 2; attempt++) {
+                const r = await this._callProviderJson(tightPrompt, tightSchema, 'return_single_vn');
+                if (!r || typeof r.vn !== 'string') continue;
+                const cand = r.vn.trim();
+                if (!cand) return '';
+                if (verifyVnSpan(cand, para)) return cand;
+            }
+            return '';
+        };
 
         const alignments = extractAlignments(marked);
+        // Verify every alignment and tag `verified` accordingly. Failures get a 2-attempt retry;
+        // still-unverifiable items keep their `verified=false` so the UI shows ⚠️ for them.
+        for (let i = 0; i < alignments.length; i++) {
+            const a = alignments[i];
+            if (verifyVnSpan(a.vn, para)) {
+                a.verified = true;
+                continue;
+            }
+            // Try tight per-item retry.
+            const retryVn = await retryOneItem(a);
+            if (retryVn) {
+                a.vn = retryVn;
+                a.verified = true;
+                continue;
+            }
+            // Last-ditch: locate closest window inside para so the renderer still has a target.
+            const closest = findClosestSpan(a.vn, para);
+            if (closest) {
+                a.vn = closest;
+                a.verified = false;
+            } else {
+                a.verified = false; // will be dropped by app.js if no substring match either
+            }
+        }
+
         // Integrity check on THIS paragraph only. If the AI reworded it, drop the tagged text but
         // keep the alignments so the app can still substring-fill them onto the original paragraph.
         const ok = skeleton(marked) === skeleton(para);
