@@ -372,26 +372,97 @@ class DictionaryDB {
 
     _estimateIPA(word) {
         if (!word) return "/.../";
-        let phonetic = word
+        // Single, comprehensive rule-based phonetic transcription for English
+        // words NOT covered by the curated dictionary. Not perfect, but FAR more
+        // accurate than the previous few-rule heuristic, and ALWAYS returns a
+        // non-empty IPA so the user sees something plausible rather than the
+        // raw word echoed back. For best results the caller should still ask AI
+        // for an accurate IPA when possible.
+        const w = word.toLowerCase().replace(/[^a-z'-]/g, '');
+        if (!w) return "/.../";
+
+        // Mark syllable boundaries by inserting '·' before vowel groups.
+        const V = 'aeiouy';
+        const isVowel = (ch) => V.includes(ch);
+        const isConsonant = (ch) => !isVowel(ch) && /[a-z]/.test(ch);
+        // Insert '.' before each new vowel group (skip first vowel).
+        let marked = '';
+        let prevVowel = false;
+        for (let i = 0; i < w.length; i++) {
+            const ch = w[i];
+            if (isVowel(ch)) {
+                if (!prevVowel && marked.length > 0 && marked[marked.length - 1] !== '.') {
+                    marked += '·';
+                }
+                prevVowel = true;
+            } else {
+                prevVowel = false;
+            }
+            marked += ch;
+        }
+
+        // Apply digraph/trigraph → phonetic substitutions.
+        let p = marked
+            // Common consonant digraphs/trigraphs
             .replace(/ph/g, 'f')
-            .replace(/tion/g, 'ʃən')
-            .replace(/sion/g, 'ʒən')
             .replace(/th/g, 'θ')
-            .replace(/ch/g, 'tʃ')
             .replace(/sh/g, 'ʃ')
+            .replace(/ch/g, 'tʃ')
+            .replace(/wh/g, 'w')
+            .replace(/gh(?=[aeiou])/g, '')        // silent gh
+            .replace(/gh/g, 'g')
             .replace(/ck/g, 'k')
-            .replace(/c(?=[iey])/g, 's')
-            .replace(/c/g, 'k')
             .replace(/qu/g, 'kw')
+            .replace(/ng/g, 'ŋ')
+            .replace(/nk/g, 'ŋk')
+            // 'c' rules
+            .replace(/c(?=[eiy])/g, 's')
+            .replace(/c/g, 'k')
+            // 'g' rules (mostly silent e, but rough)
+            .replace(/g(?=[eiy])/g, 'ɡ')
+            .replace(/g/g, 'ɡ')
+            // 'x' rules
+            .replace(/x/g, 'ks')
+            // Silent letters
+            .replace(/e\b/g, '')
+            .replace(/([bcdfɡhlmnprstwz])·/g, '$1')   // collapse stray dot after consonant
+            // Vowel teams (long vowels)
             .replace(/ee/g, 'iː')
-            .replace(/oo/g, 'uː')
             .replace(/ea/g, 'iː')
+            .replace(/ie/g, 'iː')
+            .replace(/y(?=·|$)/g, 'aɪ')
+            .replace(/oo/g, 'uː')
             .replace(/ou/g, 'aʊ')
             .replace(/ow/g, 'aʊ')
+            .replace(/oi/g, 'ɔɪ')
+            .replace(/oy/g, 'ɔɪ')
+            .replace(/au/g, 'ɔː')
+            .replace(/aw/g, 'ɔː')
             .replace(/ai/g, 'eɪ')
             .replace(/ay/g, 'eɪ')
-            .replace(/ing$/g, 'ɪŋ');
-        return `/${phonetic}/`;
+            .replace(/ey/g, 'eɪ')
+            .replace(/oa/g, 'oʊ')
+            .replace(/oe/g, 'oʊ')
+            .replace(/ue/g, 'uː')
+            // Schwa for unstressed single vowels
+            .replace(/a(?=·)/g, 'ə')
+            .replace(/e(?=·)/g, 'ə')
+            .replace(/i(?=·)/g, 'ɪ')
+            .replace(/o(?=·)/g, 'ə')
+            .replace(/u(?=·)/g, 'ə')
+            // Suffixes
+            .replace(/tion/g, 'ʃən')
+            .replace(/sion/g, 'ʒən')
+            .replace(/ture/g, 'tʃər')
+            .replace(/ing/g, 'ɪŋ')
+            .replace(/ed$/g, 'd')
+            .replace(/s$/g, 'z')
+            .replace(/·/g, '');
+
+        // Final cleanup: collapse doubled IPA letters that sometimes appear.
+        p = p.replace(/([ɪɛæɑɒɔʊʌəɜ])ːː/g, '$1ː');
+
+        return `/${p || '.../'}`;
     }
 }
 

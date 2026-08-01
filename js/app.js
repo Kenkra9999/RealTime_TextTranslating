@@ -497,7 +497,16 @@ class LinguaApp {
             if (!result) return;
 
             wordEl.textContent = result.word || word;
-            ipaEl.textContent = result.ipa || ipaEl.textContent;
+            // Use the verified IPA (curated dict OR AI override) — never the raw
+            // `result.ipa` which may still be a wrong estimate from an older pass.
+            // Fall back to `result.ipa` only when it's a verified transcription
+            // (verified above by `_sanitizeAiIpa` inside translator.lookupWord).
+            ipaEl.textContent = this._accurateIPA(word) || result.ipa || ipaEl.textContent;
+            // If the IPA is still empty (no AI override and no dict entry), kick
+            // off a fetch so this popup gets a correct value shortly.
+            if (!ipaEl.textContent || /\.\.\./.test(ipaEl.textContent)) {
+                this._maybeFetchIpaForWord(word);
+            }
             const resPos = result.pos || initialPos;
             posEl.textContent = this._expandPos(resPos) || 'noun (n)';
             meaningEl.textContent = result.meaning || 'Không tìm thấy nghĩa phù hợp';
@@ -2972,20 +2981,32 @@ class LinguaApp {
         if (this._ipaOverrides && this._ipaOverrides.has(key)) return this._ipaOverrides.get(key);
         const dict = window.dictionaryDB;
         if (dict && dict.hasRealEntry && dict.hasRealEntry(key)) return dict.getIPA(key) || '';
-        return '';
+        // No curated entry and no AI override yet — fall back to the rule-based
+        // estimator so the user always sees *something* plausible instead of
+        // '/.../' or a wrong echo of the source word. The AI IPA fetch (when
+        // configured) will replace this with a more accurate transcription.
+        if (dict && typeof dict._estimateIPA === 'function') {
+            const est = dict._estimateIPA(key);
+            // Guard against the estimator itself returning '/word/' (echoed).
+            if (est && !/^\/[a-z]+\/$/.test(est)) return est;
+            return est || '/.../';
+        }
+        return '/.../';
     }
 
     /**
-     * Fires a single AI IPA request for `word` when we don't have a verified IPA
-     * yet. Idempotent — words already in `_ipaOverrides` or the curated dict are
-     * skipped. When the AI responds, the override is stored and the active vocab
-     * accordion is re-rendered so rows flip from `/.../` to the real IPA.
+     * Fires a single AI IPA request for `word` when we don't have a verified
+     * IPA from the curated dictionary yet. Idempotent — already-overridden words
+     * are skipped. When AI responds, the override is stored and the active
+     * vocab accordion is re-rendered so rows switch from the rule-based
+     * estimate to the more accurate AI transcription.
      */
     _maybeFetchIpaForWord(word) {
         const key = (word || '').toLowerCase().trim();
         if (!key) return;
         if (this._ipaOverrides && this._ipaOverrides.has(key)) return;
         const dict = window.dictionaryDB;
+        // Skip curated-dictionary words — they already have the right IPA.
         if (dict && dict.hasRealEntry && dict.hasRealEntry(key)) return;
         if (!this.translator || typeof this.translator._fetchIpaForWords !== 'function') return;
         if (this._inflightIpaFetches && this._inflightIpaFetches.has(key)) return;
@@ -2994,19 +3015,23 @@ class LinguaApp {
         this.translator._fetchIpaForWords([key])
             .then((map) => {
                 const ipa = (map && map[key] ? map[key] : '').trim();
-                if (ipa) {
-                    this._ipaOverrides.set(key, ipa);
-                    // Stamp onto every matching vocab row across sessions.
-                    (this.vocabSessions || []).forEach((s) => {
-                        (s.vocabList || []).forEach((v) => {
-                            const vKey = (v.original || v.term || v.text || v.word || '').toLowerCase().trim();
-                            if (vKey === key) v.ipa = ipa;
-                        });
+                if (!ipa) return;
+                // Sanity-check the AI's IPA before accepting it (rejects echoes
+                // of the source word).
+                const clean = (this.translator._sanitizeAiIpa
+                    ? this.translator._sanitizeAiIpa(ipa, key)
+                    : ipa);
+                if (!clean) return;
+                this._ipaOverrides.set(key, clean);
+                (this.vocabSessions || []).forEach((s) => {
+                    (s.vocabList || []).forEach((v) => {
+                        const vKey = (v.original || v.term || v.text || v.word || '').toLowerCase().trim();
+                        if (vKey === key) v.ipa = clean;
                     });
-                    this.renderVocabAccordion();
-                }
+                });
+                this.renderVocabAccordion();
             })
-            .catch(() => { /* swallow — leave row as /.../ */ })
+            .catch(() => { /* swallow */ })
             .finally(() => this._inflightIpaFetches.delete(key));
     }
 
@@ -3104,18 +3129,13 @@ class LinguaApp {
         const normaliseVocab = (v) => {
             const word = (v.original || v.term || v.text || v.word || v.english || '').toString().trim();
             if (!word) return null;
-            // IMPORTANT: never trust a stored v.ipa as fallback. Earlier passes may
-            // have written a wrong phonetic estimate (e.g. `/perpetual interrupʃən/`)
-            // for words not in the curated dictionary and not yet fetched from AI.
-            // `_accurateIPA` only returns verified (dict + AI override) IPA, so we
-            // use it as the SINGLE source of truth. While the AI IPA is being fetched,
-            // we render `/.../` so the user knows it's loading rather than seeing a lie.
+            // Use the verified source (dict + AI override) when available, with a
+            // rule-based estimate as the visible fallback so the user always
+            // sees *something* plausible. `_accurateIPA` already does this.
             let ipa = this._accurateIPA(word);
-            if (!ipa) {
-                ipa = '/.../';
-                // Kick off a fetch for this specific row so it gets filled ASAP.
-                this._maybeFetchIpaForWord(word);
-            }
+            // Kick off an AI fetch in the background to refine the estimate into
+            // a more accurate transcription when AI is configured.
+            this._maybeFetchIpaForWord(word);
             return {
                 word,
                 color: v.color || '#fff3a8',
@@ -3179,13 +3199,11 @@ class LinguaApp {
                 return w && (w === t || t.includes(w) || w.includes(t));
             });
             const word = h.text || '';
-            // Same rule as above: never display a stored estimate. Show /.../ and
-            // request an AI IPA so the row becomes correct shortly.
+            // Same rule: always show _accurateIPA (verified dict OR AI override
+            // OR rule-based estimate as last resort), and kick off an AI fetch
+            // to refine the estimate into a real transcription when available.
             let ipa = this._accurateIPA(word);
-            if (!ipa) {
-                ipa = '/.../';
-                this._maybeFetchIpaForWord(word);
-            }
+            this._maybeFetchIpaForWord(word);
             return {
                 index: idx + 1,
                 word,

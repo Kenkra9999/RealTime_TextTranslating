@@ -934,7 +934,13 @@ ${textChunk}
         let result = {
             word: cleanWord,
             isPhrase: isPhrase,
-            ipa: dict ? dict.getIPA(cleanWord) : '/.../',
+            // Use curated IPA ONLY when the word has a real dictionary entry.
+            // Otherwise start from '/.../' so we never persist a wrong estimate;
+            // the per-word breakdown below (and `_correctIpaForSession`) will
+            // fill the correct value from AI shortly.
+            ipa: (dict && dict.hasRealEntry && dict.hasRealEntry(cleanWord))
+                ? (dict.getIPA(cleanWord) || '/.../')
+                : '/.../',
             pos: isPhrase ? 'phrase' : (dict ? dict.getPOS(cleanWord) : 'n.'),
             meaning: dict ? dict.getMeaning(cleanWord) : null,
             breakdown: [],
@@ -1005,11 +1011,15 @@ const dictHasPhrase = dict && dict.hasRealEntry(cleanWord);
 const aiGaveIpa = result.source === 'ai' && result.ipa && !/\.\.\./.test(result.ipa) && !!this._sanitizeAiIpa(result.ipa, cleanWord);
 if (!isPhrase && Array.isArray(result.breakdown) && result.breakdown[0] && result.breakdown[0].ipa && !/\.\.\./.test(result.breakdown[0].ipa)) {
     result.ipa = result.breakdown[0].ipa;
+} else if (!isPhrase && (!result.ipa || /\.\.\./.test(result.ipa))) {
+    // Single word but we still don't have a verified IPA — fetch one now.
+    const map = await this._fetchIpaForWords([cleanWord]).catch(() => ({}));
+    const fetched = map[cleanWord.toLowerCase()];
+    if (fetched && this._sanitizeAiIpa(fetched, cleanWord)) result.ipa = fetched;
 } else if (isPhrase && !aiGaveIpa && !dictHasPhrase) {
     const map = await this._fetchIpaForWords([cleanWord]).catch(() => ({}));
     const fetched = map[cleanWord.toLowerCase()];
     if (fetched && this._sanitizeAiIpa(fetched, cleanWord)) result.ipa = fetched;
-    else if (!result.ipa || /\.\.\./.test(result.ipa)) result.ipa = '/.../';
 }
 
         // Example sentence MUST be a natural, real English sentence containing the
