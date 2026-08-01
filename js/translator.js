@@ -125,7 +125,8 @@ QUY TẮC BẮT BUỘC:
 - ‼️ TUYỆT ĐỐI KHÔNG sửa/dịch lại/thêm/bớt bất kỳ chữ nào. CHỈ được CHÈN cặp thẻ [[H:INDEX]] và [[/H]]. Xóa hết thẻ đi thì phải GIỐNG HỆT đoạn gốc 100%.
 - Bọc thẻ cho MỌI cụm tiếng Anh mà bạn tìm thấy phần dịch tương ứng trong đoạn này. Hãy tìm KỸ, đừng bỏ sót cụm nào đang có mặt trong đoạn.
 - KHÔNG bắt buộc phải dùng hết mọi index: cụm nào KHÔNG xuất hiện trong đoạn này thì BỎ QUA (đừng bọc bừa, đừng bọc cụm không liên quan).
-- Bọc đúng cụm tiếng Việt LIỀN MẠCH, NGẮN GỌN, sát nghĩa nhất của riêng cụm đó (không bọc cả câu, không lấn sang cụm khác). INDEX phải TRÙNG đúng nghĩa của cụm. Các thẻ KHÔNG được chồng chéo.
+- Bọc đúng cụm tiếng Việt LIỀN MẠCH, sát nghĩa nhất của riêng cụm đó (không bọc cả câu, không lấn sang cụm khác). INDEX phải TRÙNG đúng nghĩa của cụm. Các thẻ KHÔNG được chồng chéo.
+- ‼️ BỌC TRỌN VẸN CẢ CỤM: nếu cụm tiếng Anh là một cụm nhiều chữ (VD "Paradox of Progress", "technological innovation", "instantaneous communication") thì phải bọc TOÀN BỘ cụm tiếng Việt tương ứng LIỀN MẠCH gồm CẢ các hư từ nối ở giữa (của, sự, và, các, những…). VD "Nghịch lý của sự tiến bộ" phải bọc trọn "[[H:i]]Nghịch lý của sự tiến bộ[[/H]]" — KHÔNG được bọc lẻ "Nghịch lý" rồi bỏ "của sự tiến bộ", KHÔNG được tách thành nhiều mảnh rời. Lưu ý tiếng Việt có thể ĐẢO thứ tự so với tiếng Anh (adj+noun ↔ noun+adj) — vẫn bọc trọn cụm liền mạch theo trật tự tiếng Việt.
 
 Trả về DUY NHẤT JSON (không kèm markdown), field "marked" là đoạn đã chèn thẻ:
 {

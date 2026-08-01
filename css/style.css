@@ -910,7 +910,10 @@ html[data-theme="midnight"] mark.highlight-mark.match-active {
 /* ========== HIGHLIGHTS ========== */
 /* Highlights: background fill is a soft gentle pastel, compact fitting around words without line spacing gaps */
 mark.highlight-mark, mark {
-    background-color: rgba(250, 204, 21, 0.45);
+    /* Bumped from 0.45 → 0.62 so the default (no inline color) highlight is also
+       visible on the light "classic" theme. Inline styles with !important always win,
+       so this only affects the rare "no inline color" path. */
+    background-color: rgba(250, 204, 21, 0.62);
     background-image: none !important;
     padding: 1px 3px !important;
     margin: 0 !important;

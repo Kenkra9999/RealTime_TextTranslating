@@ -582,23 +582,28 @@ class TextHighlighter {
     }
 
     _getTranslucentColor(hex) {
-        if (!hex || hex === 'transparent') return 'rgba(250, 204, 21, 0.45)';
+        // Bumped from 0.45 → 0.62 so the rendered highlight keeps its semantic colour
+        // (yellow / green / blue / purple / pink) instead of washing out into "almost-white"
+        // on the light backgrounds of the reading & translation panels. This is the fix
+        // for the "sai màu / màu quá nhạt" symptom the user reported.
+        const ALPHA = 0.62;
+        if (!hex || hex === 'transparent') return `rgba(250, 204, 21, ${ALPHA})`;
         const h = String(hex).toLowerCase().trim();
         if (h.startsWith('rgba')) {
             return h.replace(/rgba?\(([^)]+)\)/, (m, contents) => {
                 const parts = contents.split(',').map(s => s.trim());
                 if (parts.length >= 3) {
-                    return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, 0.45)`;
+                    return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${ALPHA})`;
                 }
                 return h;
             });
         }
-        if (h.includes('fef08a') || h.includes('fff3a8') || h.includes('fef9c3') || h.includes('yellow')) return 'rgba(250, 204, 21, 0.45)';
-        if (h.includes('bbf7d0') || h.includes('86efac') || h.includes('dcfce7') || h.includes('green')) return 'rgba(74, 222, 128, 0.45)';
-        if (h.includes('bae6fd') || h.includes('7dd3fc') || h.includes('e0f2fe') || h.includes('blue')) return 'rgba(56, 189, 248, 0.45)';
-        if (h.includes('e9d5ff') || h.includes('c084fc') || h.includes('f3e8ff') || h.includes('purple')) return 'rgba(192, 132, 252, 0.45)';
-        if (h.includes('fecdd3') || h.includes('fda4af') || h.includes('ffe4e6') || h.includes('pink')) return 'rgba(251, 113, 133, 0.45)';
-        return 'rgba(250, 204, 21, 0.45)';
+        if (h.includes('fef08a') || h.includes('fff3a8') || h.includes('fef9c3') || h.includes('yellow')) return `rgba(250, 204, 21, ${ALPHA})`;
+        if (h.includes('bbf7d0') || h.includes('86efac') || h.includes('dcfce7') || h.includes('green')) return `rgba(74, 222, 128, ${ALPHA})`;
+        if (h.includes('bae6fd') || h.includes('7dd3fc') || h.includes('e0f2fe') || h.includes('blue')) return `rgba(56, 189, 248, ${ALPHA})`;
+        if (h.includes('e9d5ff') || h.includes('c084fc') || h.includes('f3e8ff') || h.includes('purple')) return `rgba(192, 132, 252, ${ALPHA})`;
+        if (h.includes('fecdd3') || h.includes('fda4af') || h.includes('ffe4e6') || h.includes('pink')) return `rgba(251, 113, 133, ${ALPHA})`;
+        return `rgba(250, 204, 21, ${ALPHA})`;
     }
 
     /**
@@ -617,6 +622,30 @@ class TextHighlighter {
         } catch (err) {
             console.warn('onHighlightsChange callback failed:', err);
         }
+    }
+
+    /**
+     * Tag every <mark> in the container with `data-occ` = occurrence index among marks that
+     * share the same normalized text. Used by the "Dò từ khớp" match-tracking mode to pair
+     * EN<->VN marks 1-to-1 (occurrence #N on the English side lights up occurrence #N on the
+     * Vietnamese side, instead of lighting up every occurrence of the same word at once).
+     * Called by app.js after every rendering pass that touches highlights.
+     */
+    assignOccurrenceIndices() {
+        if (!this.container) return;
+        const norm = (s) => (s || '').toString().toLowerCase().trim()
+            .replace(/[\u00A0\u2000-\u200B]/g, ' ').replace(/\s+/g, ' ').normalize('NFC');
+        const counts = new Map();
+        const marks = Array.from(this.container.querySelectorAll('mark.highlight-mark'));
+        marks.forEach(mark => {
+            // Use data-en first (set by app.js on VN marks), fall back to data-text (set by
+            // applyHighlightToCurrentSelection / highlightCustomTerms on EN marks).
+            const key = norm(mark.getAttribute('data-en') || mark.getAttribute('data-text') || mark.textContent);
+            if (!key) return;
+            const idx = counts.get(key) || 0;
+            counts.set(key, idx + 1);
+            mark.setAttribute('data-occ', String(idx));
+        });
     }
 }
 

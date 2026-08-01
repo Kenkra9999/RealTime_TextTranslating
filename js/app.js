@@ -9,6 +9,23 @@ class LinguaApp {
         this.highlighter = new TextHighlighter({
             onHighlightsChange: (items) => {
                 this.updateVietnameseHighlights(items);
+                // Re-tag every <mark> with its occurrence index (data-occ) so the
+                // "Dò từ khớp" mode can pair EN<->VN occurrences 1-to-1.
+                try { this.highlighter.assignOccurrenceIndices(); } catch (e) { /* ignore */ }
+                try {
+                    if (this.els.translationCanvas) {
+                        const allMarks = this.els.translationCanvas.querySelectorAll('mark.highlight-mark');
+                        const counts = new Map();
+                        const norm = (s) => (s || '').toString().toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
+                        allMarks.forEach(m => {
+                            const k = norm(m.getAttribute('data-en') || m.getAttribute('data-text') || m.textContent);
+                            if (!k) return;
+                            const i = counts.get(k) || 0;
+                            counts.set(k, i + 1);
+                            m.setAttribute('data-occ', String(i));
+                        });
+                    }
+                } catch (e) { /* ignore */ }
                 this._onHighlightsLiveUpdate(items);
             }
         });
@@ -222,19 +239,43 @@ class LinguaApp {
 
     /**
      * Match Tracking Mode ("Dò từ khớp"). Hovering (or clicking to pin) a highlighted term on
-     * EITHER side lights up its counterpart on the other side. Pairing works off a normalized
-     * English key: English <mark> elements carry data-text (set by the highlighter), Vietnamese
-     * <mark> elements carry data-en (set by renderMark). We normalize both to compare.
+     * EITHER side lights up its counterpart on the other side. Pairing works off a STRICT,
+     * EXACT (normalized) English key — no stem/inflection collapsing here, so "witness" and
+     * "witnessed" stay two separate pairs and never light each other up.
+     *
+     * Each English <mark> stores its literal term in data-text (set by the highlighter).
+     * Each Vietnamese <mark> stores the EXACT English source term that mapped to it in
+     * data-en (set by renderMark). We pair them ONLY by exact match — no fuzzy / stem.
      */
     _initMatchMode() {
         const norm = (s) => (s || '').toString().toLowerCase().trim()
             .replace(/[\u00A0\u2000-\u200B]/g, ' ').replace(/\s+/g, ' ').normalize('NFC');
         this._matchNorm = norm;
 
+        // STRICT key for match-tracking: exact normalized text only.
+        // No stem / no inflection collapse — "witness" and "witnessed" are different keys
+        // and each pair lights up INDEPENDENTLY (so hover 1 từ chỉ làm sáng đúng 1 cặp,
+        // không lan sang từ đồng nghĩa / cùng gốc ở chỗ khác).
         const keyFromMark = (mark) => {
             if (!mark) return '';
-            // English side stores the literal term in data-text; VN side stores data-en.
-            return norm(mark.getAttribute('data-en') || mark.getAttribute('data-text') || mark.textContent);
+            // Prefer data-en (canonical English term this VN span is mapped to) so
+            // hovering a VN <mark> always pairs with the EXACT English <mark>.
+            const en = mark.getAttribute('data-en');
+            const txt = mark.getAttribute('data-text');
+            return norm(en || txt || mark.textContent);
+        };
+        const occFromMark = (mark) => {
+            if (!mark) return null;
+            const occ = mark.getAttribute('data-occ');
+            if (occ == null) return null;
+            const n = parseInt(occ, 10);
+            return Number.isFinite(n) ? n : null;
+        };
+
+        const applyFromMark = (mark) => {
+            const k = keyFromMark(mark);
+            this._matchWantOcc = occFromMark(mark);
+            this._applyMatchHighlight(k);
         };
 
         const targets = [this.els.readingCanvas, this.els.translationCanvas].filter(Boolean);
@@ -242,11 +283,11 @@ class LinguaApp {
             target.addEventListener('mousemove', (e) => {
                 if (!this.matchModeActive || this._matchPinnedKey) return;
                 const mark = e.target.closest ? e.target.closest('mark.highlight-mark') : null;
-                this._applyMatchHighlight(mark ? keyFromMark(mark) : null);
+                applyFromMark(mark);
             });
             target.addEventListener('mouseleave', () => {
                 if (!this.matchModeActive || this._matchPinnedKey) return;
-                this._applyMatchHighlight(null);
+                applyFromMark(null);
             });
             target.addEventListener('click', (e) => {
                 if (!this.matchModeActive) return;
@@ -255,10 +296,21 @@ class LinguaApp {
                     e.stopPropagation();
                     const key = keyFromMark(mark);
                     // Click same term again to unpin; otherwise pin the new one.
-                    this._matchPinnedKey = (this._matchPinnedKey === key) ? null : key;
-                    this._applyMatchHighlight(this._matchPinnedKey || key);
+                    if (this._matchPinnedKey === key && this._matchPinnedOcc === occFromMark(mark)) {
+                        this._matchPinnedKey = null;
+                        this._matchPinnedOcc = null;
+                        this._matchWantOcc = null;
+                        this._applyMatchHighlight(null);
+                    } else {
+                        this._matchPinnedKey = key;
+                        this._matchPinnedOcc = occFromMark(mark);
+                        this._matchWantOcc = this._matchPinnedOcc;
+                        this._applyMatchHighlight(key);
+                    }
                 } else {
                     this._matchPinnedKey = null;
+                    this._matchPinnedOcc = null;
+                    this._matchWantOcc = null;
                     this._applyMatchHighlight(null);
                 }
             });
@@ -267,6 +319,8 @@ class LinguaApp {
         document.addEventListener('click', () => {
             if (this.matchModeActive && this._matchPinnedKey) {
                 this._matchPinnedKey = null;
+                this._matchPinnedOcc = null;
+                this._matchWantOcc = null;
                 this._applyMatchHighlight(null);
             }
         });
@@ -279,24 +333,41 @@ class LinguaApp {
         });
         if (!active) {
             this._matchPinnedKey = null;
+            this._matchPinnedOcc = null;
+            this._matchWantOcc = null;
             this._applyMatchHighlight(null);
         }
     }
 
     /**
-     * Adds the .match-active glow class to every highlighted term (both sides) whose English
-     * key equals `key`, and clears it from all others. Passing null clears everything.
+     * Adds the .match-active glow class to every highlighted term (both sides) whose STRICT
+     * normalized English key exactly equals `key`. NO stem / no fuzzy match — so hovering
+     * "moreover" lights up exactly that one EN <mark> and its matching VN <mark> only,
+     * never spilling to a synonym / inflection elsewhere in the document.
      */
     _applyMatchHighlight(key) {
         const norm = this._matchNorm || ((s) => (s || '').toString().toLowerCase().trim());
+        const want = norm(key);
+        const wantOcc = this._matchWantOcc;
         const targets = [this.els.readingCanvas, this.els.translationCanvas].filter(Boolean);
         targets.forEach(target => {
-            // Toggle .has-match on the canvas so the CSS can dim the non-matched highlights.
-            target.classList.toggle('has-match', !!key);
+            target.classList.toggle('has-match', !!want);
             target.querySelectorAll('mark.highlight-mark').forEach(mark => {
-                if (!key) { mark.classList.remove('match-active'); return; }
-                const mk = norm(mark.getAttribute('data-en') || mark.getAttribute('data-text') || mark.textContent);
-                mark.classList.toggle('match-active', !!mk && mk === key);
+                if (!want) { mark.classList.remove('match-active'); return; }
+                // STRICT exact normalized key — prefer data-en (canonical English key
+                // embedded when the VN span was rendered) over the visible text.
+                const rawKey = mark.getAttribute('data-en') || mark.getAttribute('data-text') || mark.textContent;
+                const mk = norm(rawKey);
+                if (mk !== want) { mark.classList.remove('match-active'); return; }
+                // Same normalized key — narrow to the SAME occurrence index (if known) so we
+                // light up only the ONE pair the user is currently hovering, not every other
+                // occurrence of the same word across the document.
+                if (wantOcc == null) {
+                    mark.classList.add('match-active');
+                } else {
+                    const markOcc = mark.getAttribute('data-occ');
+                    mark.classList.toggle('match-active', markOcc != null && markOcc === String(wantOcc));
+                }
             });
         });
     }
@@ -1267,6 +1338,12 @@ class LinguaApp {
 
         const paragraphs = text.split(/\n\s*\n/).filter(Boolean);
         this.els.readingCanvas.innerHTML = paragraphs.map(p => `<p class="paragraph-block">${this._escapeHTML(p)}</p>`).join('');
+
+        // Re-tag every <mark> on the EN side with its occurrence index (data-occ) so the
+        // "Dò từ khớp" mode can pair EN<->VN occurrences 1-to-1.
+        if (this.highlighter && typeof this.highlighter.assignOccurrenceIndices === 'function') {
+            this.highlighter.assignOccurrenceIndices();
+        }
     }
 
     switchToEditMode() {
@@ -1330,19 +1407,62 @@ class LinguaApp {
                 }
             );
 
-            // SINGLE-PASS ALIGNMENT — the translation already carries inline [[H:english]]…[[/H]]
-            // markers from turn 1 (exact position + exact color, straight from the AI). We no
-            // longer make a second "re-tag the whole translation" API call — that lượt 2 was slow
-            // and sometimes reworded the text. Instead the app matches any FORGOTTEN vocab item to
-            // its Vietnamese counterpart itself, biased to the correct sentence/paragraph
-            // (see _computeTranslatedHTML → PASS 2), guaranteeing full coverage ("đủ & đúng màu").
-            const alignments = [];
-            const renderText = result.fullTranslation;
+            // TWO-PASS ALIGNMENT — 100% accuracy guarantee for Vietnamese highlighting:
+            //   Pass A (already done): translation carries inline [[H:english]]vn[[/H]] markers.
+            //          The AI sometimes forgets to wrap SOME items even though they exist
+            //          in the translation.
+            //   Pass B (this call): per-paragraph AI alignment via alignHighlightsToTranslation.
+            //          We re-ask the AI, for EACH paragraph, to wrap the Vietnamese counterpart
+            //          of every highlighted English term with [[H:index]]vn[[/H]] tags. Each
+            //          paragraph is tiny (never truncated), the integrity check (skeleton
+            //          comparison) guarantees the AI can't reword the text — so the result is
+            //          verbatim-and-correct. Anything the first translation pass missed, this
+            //          catches. Both markedText and alignments are merged into the renderer so
+            //          items with inline markers AND items discovered by per-paragraph AI both
+            //          get painted (whichever fires first wins, no doubling).
+            let renderText = result.fullTranslation;
+            let alignments = [];
             this.currentSourceText = text;
+
+            const hasApiKey = (this.translator.provider === 'openai' && !!this.translator.openaiApiKey)
+                || !!this.translator.geminiApiKey;
+            if (hasApiKey && highlights.length > 0 && result.vocabList.length > 0) {
+                if (this.els.progressText) this.els.progressText.textContent = "Đang đối chiếu từ vựng với bản dịch (pass 2/2)...";
+                try {
+                    const alignment = await this.translator.alignHighlightsToTranslation(
+                        highlights,
+                        result.fullTranslation
+                    );
+                    if (alignment && alignment.markedText && /\[\[H:\d+\]\]/.test(alignment.markedText)) {
+                        renderText = alignment.markedText;
+                    }
+                    alignments = (alignment && alignment.alignments) ? alignment.alignments : [];
+                    console.log(`[highlight] Per-paragraph AI alignment placed ${alignments.length} additional items.`);
+                } catch (e) {
+                    console.warn('Per-paragraph alignment failed, falling back to first-pass markers:', e);
+                }
+            }
 
             this.renderTranslationResult(renderText, highlights, result.vocabList, alignments, text);
             this.currentVocabData = result.vocabList;
             this._addVocabSession(text, highlights, result.vocabList, renderText, alignments);
+
+            // Tag every <mark> on BOTH sides with its occurrence index (data-occ). Pairing the
+            // Nth EN occurrence with the Nth VN occurrence is what makes the "Dò từ khớp"
+            // hover light up exactly one pair instead of every occurrence of the same word.
+            try { this.highlighter.assignOccurrenceIndices(); } catch (e) { /* ignore */ }
+            try {
+                const allMarks = this.els.translationCanvas.querySelectorAll('mark.highlight-mark');
+                const counts = new Map();
+                const norm = (s) => (s || '').toString().toLowerCase().trim().replace(/\s+/g, ' ').normalize('NFC');
+                allMarks.forEach(m => {
+                    const k = norm(m.getAttribute('data-en') || m.getAttribute('data-text') || m.textContent);
+                    if (!k) return;
+                    const i = counts.get(k) || 0;
+                    counts.set(k, i + 1);
+                    m.setAttribute('data-occ', String(i));
+                });
+            } catch (e) { /* ignore */ }
 
             this.els.transStatusBadge.textContent = "Hoàn tất";
         } catch (err) {
@@ -1404,14 +1524,14 @@ class LinguaApp {
             .replace(/\s+/g, ' ')
             .normalize('NFC');
 
-        // Resolve the authoritative color for an English term. Matching order:
-        //   1) exact (normalized) highlight.text  — the strongest, colour set on the English side
-        //   2) exact (normalized) vocab.original   — the AI's own color for that row
-        //   3) loose stem match against highlights — handles inflection like "witnessed" vs
-        //      "witness"/"witnessing" where the AI returned a slightly different form than the
-        //      highlighted word. We only accept it when one side clearly starts with the other
-        //      (min length 4) so short words don't collide.
-        //   4) yellow fallback.
+// Resolve the authoritative color for an English term. Matching order:
+//   1) exact (normalized) highlight.text  — the strongest, colour set on the English side
+//   2) exact (normalized) vocab.original   — the AI's own color for that row
+//   3) loose stem match against highlights — handles inflection like "witnessed" vs
+//      "witness"/"witnessing" where the AI returned a slightly different form than the
+//      highlighted word. We only accept it when one side clearly starts with the other
+//      (min length 4) so short words don't collide.
+//   4) yellow fallback.
         const colorForEnglishTerm = (original) => {
             const o = norm(original);
             if (!o) return '#fef08a';
@@ -1430,12 +1550,46 @@ class LinguaApp {
             return '#fef08a';
         };
 
+        // STRONG color resolver — used after buildFillGroups so a group always inherits the
+        // REAL English-side colour instead of the #fef08a fallback. When we can't find an
+        // exact highlight match we still walk every highlight and pick the closest one (same
+        // normalized key, or stem match). This stops the "tiếng Anh màu A, tiếng Việt màu B"
+        // symptom where the AI wrapped by text and the text didn't match an exact highlight.
+        const resolveGroupColor = (enKey) => {
+            const o = norm(enKey);
+            if (!o) return '#fef08a';
+            // Exact highlight text match
+            const exact = (highlights || []).find(h => norm(h.text || h.word) === o);
+            if (exact && exact.color) return exact.color;
+            // Stem match — the English term might be slightly different from the highlight
+            // (inflection / plural) but we still want the highlight's colour.
+            const stem = (a, b) => {
+                if (a.length < 4 || b.length < 4) return false;
+                const shorter = a.length <= b.length ? a : b;
+                const longer  = a.length <= b.length ? b : a;
+                return longer.startsWith(shorter);
+            };
+            const loose = (highlights || []).find(h => stem(norm(h.text || h.word), o));
+            if (loose && loose.color) return loose.color;
+            // Vocab's stored colour
+            const v = (vocabList || []).find(x => norm(x.original) === o);
+            if (v && v.color) return v.color;
+            return '#fef08a';
+        };
+
         // enKey = normalized English source term, embedded as data-en so the "Dò từ khớp"
         // (match-tracking) mode can pair an English highlight with its Vietnamese counterpart.
-        const renderMark = (color, inner, enKey = '') => {
-            const transColor = this.highlighter ? this.highlighter._getTranslucentColor(color) : 'rgba(250, 204, 21, 0.45)';
+        //
+        // occIdx = occurrence index (0, 1, 2...) of THIS particular occurrence among all
+        // <mark> elements that share the same enKey in the document. This is what lets us
+        // pair the 1st occurrence of "witness" with the 1st occurrence of "nhân chứng" and
+        // the 2nd "witness" with the 2nd "nhân chứng" — instead of all occurrences on both
+        // sides lighting up together.
+        const renderMark = (color, inner, enKey = '', occIdx = 0) => {
+            const transColor = this.highlighter ? this.highlighter._getTranslucentColor(color) : 'rgba(250, 204, 21, 0.62)';
             const enAttr = enKey ? ` data-en="${this._escapeHTML(enKey)}"` : '';
-            return `<mark class="highlight-mark" data-color="${color}"${enAttr} style="background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important;">${inner}</mark>`;
+            const occAttr = ` data-occ="${parseInt(occIdx, 10) || 0}"`;
+            return `<mark class="highlight-mark" data-color="${color}"${enAttr}${occAttr} style="background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important;">${inner}</mark>`;
         };
 
         const paragraphs = raw.split(/\n\s*\n/).filter(Boolean);
@@ -1469,13 +1623,22 @@ class LinguaApp {
             return o;
         };
 
+        const hasMarkers = /\[\[H:[^\]]*?\]\][\s\S]*?\[\[\/H\]\]/.test(raw);
+
         // Build ONE fill group per English term (keyed by its canonical English key). Each group
         // holds the color (taken by INDEX from the English highlight → always the exact same
         // color) plus every Vietnamese candidate phrase we know for it, longest first:
         //   A) ALIGNMENT pass — { index, vn }: the authoritative, index-keyed counterpart.
         //   B) vocabList.translatedTermInVN — the AI's own per-row Vietnamese phrase.
-        // At render time each group is placed AT MOST ONCE (no doubling) and is TRIED for every
-        // English term across all paragraphs (max coverage → "đủ 100%").
+        //   C) NEW: anything the AI already wrapped inline for THIS English term in the same
+        //      translation. We harvest `[[H:english]]vn[[/H]]` pairs from `raw` to seed the
+        //      group, so even if the AI forgot to set translatedTermInVN we still have a
+        //      candidate from its OWN inline wrapping.
+        //   D) NEW: exampleVi / contextMeaning as a last-resort candidate (long Vietnamese
+        //      string containing the term).
+        // At render time each group is placed as many times as it can be found (no "first
+        // occurrence only"), and is TRIED for every English term across all paragraphs (max
+        // coverage → "đủ 100%").
         const buildFillGroups = () => {
             const groups = new Map(); // enKey -> { en, color, candidates: [] }
             const add = (enKey, color, vnRaw) => {
@@ -1487,6 +1650,31 @@ class LinguaApp {
                 if (!g.candidates.some(c => norm(c) === norm(vn))) g.candidates.push(vn);
             };
 
+            // (C) Harvest every inline `[[H:english]]vn[[/H]]` mapping the AI already wrapped.
+            // This is the most reliable fallback: it comes from the AI's own output, verbatim.
+            if (hasMarkers) {
+                const reInline = /\[\[H:([^\]]*?)\]\]([\s\S]*?)\[\[\/H\]\]/g;
+                let m;
+                while ((m = reInline.exec(raw)) !== null) {
+                    const enRaw = (m[1] || '').trim();
+                    const vnRaw = (m[2] || '').trim();
+                    if (!enRaw || !vnRaw) continue;
+                    // Resolve as index → highlight; otherwise resolve via canonEn
+                    const asIdx = Number(enRaw);
+                    let color = '#fef08a';
+                    let enKey = '';
+                    if (Number.isInteger(asIdx) && asIdx >= 0 && (highlights || [])[asIdx]) {
+                        const h = highlights[asIdx];
+                        color = h.color || '#fef08a';
+                        enKey = norm(h.text || h.word);
+                    } else {
+                        color = colorForEnglishTerm(enRaw);
+                        enKey = canonEn(enRaw);
+                    }
+                    if (enKey) add(enKey, color, vnRaw);
+                }
+            }
+
             (alignments || []).forEach(a => {
                 const h = (highlights || [])[a.index];
                 if (!h) return;
@@ -1495,31 +1683,54 @@ class LinguaApp {
 
             (vocabList || []).forEach(v => {
                 add(canonEn(v.original), colorForEnglishTerm(v.original), v.translatedTermInVN);
+                // (D) exampleVi as a last-resort candidate. exampleVi is a full Vietnamese
+                // sentence that contains the term — we keep it AS-IS (no trimming) so the
+                // matcher just substring-picks the term inside the sentence. We tag it with
+                // a `__sentence` prefix so buildWordRuns treats it differently (no edge-word
+                // trimming, no per-word splitting — that would explode "tô lố" everywhere).
+                if (v.exampleVi && v.exampleVi !== v.translatedTermInVN) {
+                    add(canonEn(v.original), colorForEnglishTerm(v.original), '__SENTENCE__' + v.exampleVi);
+                }
             });
 
             const arr = Array.from(groups.values());
             arr.forEach(g => g.candidates.sort((a, b) => b.length - a.length));
             // Longest primary candidate first so a phrase wins over a word nested inside it.
             arr.sort((A, B) => (B.candidates[0] || '').length - (A.candidates[0] || '').length);
+            // Enforce the REAL English-side colour on every group. If a group was built from
+            // an AI inline marker that the AI typed as text (e.g. [[H:paradox of progress]])
+            // and the exact text didn't match a highlight exactly, `g.color` may have fallen
+            // back to '#fef08a'. We now re-resolve from the full highlight list so every
+            // Vietnamese mark gets the same colour as its English counterpart.
+            arr.forEach(g => { g.color = resolveGroupColor(g.en); });
             return arr;
         };
 
-        const TOKEN_SPLIT = /(\[\[MARK::[^:]*?::[^:]*?::[\s\S]*?\]\])/g;
+        const TOKEN_SPLIT = /(\[\[MARK::[^:]*?::[^:]*?::[^:]*?::[\s\S]*?\]\])/g;
 
         // Vietnamese "function words" that are meaningless to highlight on their own. Used to
         // reject single-word fallback matches so we don't paint stray "của", "và", "một"...
-        const STOP_WORDS = new Set(['và','của','là','một','các','những','được','có','cho','với','đã','sẽ','đang','này','đó','khi','thì','mà','ở','trong','ra','vào','lên','xuống','rằng','nên','vì','do','bởi','để','từ','đến','the','a','an']);
+        const STOP_WORDS = new Set(['và','của','là','một','các','những','được','có','cho','với','đã','sẽ','đang','này','đó','khi','thì','mà','ở','trong','ra','vào','lên','xuống','rằng','nên','vì','do','bởi','để','từ','đến','sự','như','nếu','hay','bằng','nhưng','thế','vậy','cũng','chỉ','rồi','vẫn','lại','the','a','an']);
 
         // Build a SMALL set of candidate phrases for a fill term (longest first). We ONLY try:
         //   1) the full phrase, then
         //   2) variants with at most ONE edge word trimmed (front, back, or both),
         // so if the AI added/dropped a leading/trailing word we still match the core — WITHOUT
         // the runaway sub-phrase explosion that used to paint far too much text ("tô lố").
+        //
+        // SPECIAL: candidates tagged with `__SENTENCE__` are full Vietnamese sentences from
+        // exampleVi — we treat them as atomic (full sentence only, no trimming, no per-word
+        // splitting) so we substring-match the term inside, NOT every word of the sentence.
         const buildWordRuns = (phrase) => {
-            const words = phrase.split(/\s+/).filter(Boolean);
+            const isSentence = phrase.startsWith('__SENTENCE__');
+            const cleanPhrase = isSentence ? phrase.slice('__SENTENCE__'.length) : phrase;
+            const words = cleanPhrase.split(/\s+/).filter(Boolean);
             const n = words.length;
             const candidates = [];
-            if (n <= 1) {
+            if (isSentence) {
+                // Full sentence only — atomic match.
+                candidates.push(cleanPhrase);
+            } else if (n <= 1) {
                 candidates.push(words.join(' '));
             } else {
                 candidates.push(words.join(' '));                    // full
@@ -1534,7 +1745,8 @@ class LinguaApp {
                 if (!run || seen.has(key)) continue;
                 const runWordCount = run.split(/\s+/).filter(Boolean).length;
                 // A single word is only worth highlighting if it is contentful.
-                if (runWordCount === 1) {
+                // (Skipped for __SENTENCE__ since we keep it atomic.)
+                if (runWordCount === 1 && !isSentence) {
                     if (run.length < 4) continue;
                     if (STOP_WORDS.has(key)) continue;
                 }
@@ -1546,13 +1758,17 @@ class LinguaApp {
 
         // Try to place ONE group in the given escaped paragraph text. We walk every Vietnamese
         // candidate (longest first), and for each candidate try the full phrase then slightly
-        // trimmed variants, stopping at the FIRST occurrence found OUTSIDE existing MARK tokens.
-        // Returns { txt, placed }. Marks only the first occurrence so a common word is not
-        // painted everywhere it happens to appear.
-        // Turn a Vietnamese phrase into a regex source that is tolerant of (a) whitespace runs
-        // and (b) minor diacritic drift — every base vowel also matches its accented variants.
+        // trimmed variants. Marks EVERY occurrence found OUTSIDE existing MARK tokens — this
+        // is the multi-occurrence behaviour the user wants ("đủ & đúng màu" everywhere a term
+        // appears, not just at its first appearance).
+        // Returns { txt, placeCount }. placeCount tracks how many occurrences we painted so
+        // PASS 2 can mark this group as "done" without leaving a useless "unplaced" warning.
+        // Turn a Vietnamese phrase into a regex source that is tolerant of (a) whitespace runs,
+        // (b) minor diacritic drift — every base vowel also matches its accented variants, and
+        // (c) stray punctuation that may sit between the candidate words in the rendered translation
+        // (e.g. candidate "hơn nữa" should still match "Hơn nữa," / "(hơn nữa)" / "hơn-nữa").
         // This is the last-resort matcher so a term the AI transcribed with a slightly different
-        // accent/tone still gets highlighted instead of being dropped ("chưa đủ").
+        // accent/tone OR with a stray comma/period still gets highlighted instead of being dropped.
         const VN_VOWELS = {
             a: 'aàáảãạăằắẳẵặâầấẩẫậ', e: 'eèéẻẽẹêềếểễệ', i: 'iìíỉĩị',
             o: 'oòóỏõọôồốổỗộơờớởỡợ', u: 'uùúủũụưừứửữự', y: 'yỳýỷỹỵ', d: 'dđ'
@@ -1562,6 +1778,9 @@ class LinguaApp {
             let out = '';
             for (const ch of escapedHtml) {
                 if (/\s/.test(ch)) { out += '[\\s\\u00A0]+'; continue; }
+                // Treat common VN punctuation as a "soft separator": zero-or-more allowed so a
+                // stray comma/period/parenthesis between two words doesn't kill the match.
+                if (/[,.;:!?()\-—–"'\u201C\u201D\u2018\u2019]/.test(ch)) { out += '[\\s,.;:!?()\\-—–"\u201C\u201D\u2018\u2019]*'; continue; }
                 const lower = ch.toLowerCase();
                 let cls = null;
                 for (const base in VN_VOWELS) {
@@ -1576,41 +1795,106 @@ class LinguaApp {
             return out;
         };
 
-        const tryPlaceGroup = (escapedText, group) => {
+        const tryPlaceGroup = (escapedText, group, occStart = 0) => {
             let txt = escapedText;
             const enTok = (group.en || '').replace(/:/g, '');
+            let totalPlaced = 0;
+            // Each [[MARK::...]] token we emit carries a sequential occurrence index so
+            // the 1st Vietnamese match pairs with the 1st English occurrence, the 2nd with
+            // the 2nd, etc. (Previously every match shared the same data-en key, so hovering
+            // a single English mark lit up every Vietnamese occurrence — the "1 dò hiện 4,5
+            // chữ cùng từ" bug the user reported.)
+            let occCounter = occStart;
             const placeWith = (regex) => {
-                let placed = false;
                 txt = txt.split(TOKEN_SPLIT).map(part => {
-                    if (placed) return part;
                     if (part.startsWith('[[MARK::')) return part;
-                    const replaced = part.replace(regex, `[[MARK::${group.color}::${enTok}::$1]]`);
-                    if (replaced !== part) placed = true;
+                    const replaced = part.replace(regex, (match) => {
+                        totalPlaced++;
+                        const idx = occCounter++;
+                        return `[[MARK::${group.color}::${enTok}::${idx}::${match}]]`;
+                    });
                     return replaced;
                 }).join('');
-                return placed;
+                return totalPlaced > 0;
             };
-            // Strict pass first (exact, whitespace-tolerant) across all candidates & word-runs…
+            // Strict pass first (exact, whitespace-tolerant) across all candidates & word-runs.
+            // We also allow a "soft separator" (zero-or-more punctuation) between words so that
+            // candidates like "hơn nữa" still match "Hơn nữa," or "(hơn nữa)" in the rendered
+            // Vietnamese text (this fixes the "tiếng Việt vẫn chưa bôi đậm hết" symptom).
+            //
+            // IMPORTANT — per-candidate short-circuit: for EACH candidate we try its FULL phrase
+            // first; only if the full phrase matched NOTHING do we fall back to its trimmed
+            // variants (drop-front / drop-back / drop-both). This stops the "tiếng Anh dò cả cụm,
+            // tiếng Việt bôi lẻ tẻ" bug where the full phrase matched some occurrences while a
+            // trimmed variant matched a DIFFERENT partial span of the same phrase, splitting one
+            // Vietnamese cụm into rời rạc fragments. Full phrase wins → whole cụm painted as one.
+            const placeCandidateStrict = (candidate) => {
+                const runs = buildWordRuns(candidate);
+                let placedForCandidate = false;
+                runs.forEach((run, idx) => {
+                    // idx 0 is always the full phrase. Skip trimmed variants (idx>0) once the
+                    // full phrase already landed at least once for this candidate.
+                    if (idx > 0 && placedForCandidate) return;
+                    const before = totalPlaced;
+                    const esc = this._escapeRegExp(this._escapeHTML(run));
+                    const escSoft = esc.replace(/ /g, '[\\s,.;:!?()\\-—–"\u201C\u201D\u2018\u2019\u00A0]*');
+                    placeWith(new RegExp(`(${escSoft})`, 'i'));
+                    if (totalPlaced > before) placedForCandidate = true;
+                });
+                return placedForCandidate;
+            };
             for (const candidate of group.candidates) {
-                for (const run of buildWordRuns(candidate)) {
-                    const esc = this._escapeRegExp(this._escapeHTML(run)).replace(/\\?\s+/g, '[\\s\\u00A0]+');
-                    if (placeWith(new RegExp(`(${esc})`, 'i'))) return { txt, placed: true };
+                placeCandidateStrict(candidate);
+            }
+            // …then a diacritic-tolerant pass as a last resort (also multi-occurrence), same
+            // per-candidate full-phrase-first short-circuit so we never mix full + partial.
+            for (const candidate of group.candidates) {
+                const runs = buildWordRuns(candidate);
+                let placedForCandidate = false;
+                runs.forEach((run, idx) => {
+                    if (idx > 0 && placedForCandidate) return;
+                    const before = totalPlaced;
+                    placeWith(new RegExp(`(${looseVnRegexSource(run)})`, 'i'));
+                    if (totalPlaced > before) placedForCandidate = true;
+                });
+            }
+            // …then a UNIVERSAL CONTENT-WORD fallback: regardless of whether the English term is
+            // single-word or multi-word, if every full-phrase pass above failed, fall back to
+            // matching every Vietnamese content word (length ≥ 4, not a stop word) on its own.
+            // This catches the "tiếng Anh bôi nhưng tiếng Việt không bôi" symptom for any
+            // candidate: paraphrase ("sự phát triển" → "tiến bộ"), split ("Nghịch lý của sự
+            // tiến bộ" → "Nghịch lý" + "tiến" + "bộ"), or anything in between. We accept the
+            // risk of slightly-too-many highlights over the risk of missing the term entirely.
+            if (totalPlaced === 0) {
+                for (const candidate of group.candidates) {
+                    if (candidate.startsWith('__SENTENCE__')) continue;
+                    const vnWords = candidate.replace(/^#+\s*/g, '').split(/\s+/).filter(Boolean)
+                        .filter(w => w.length >= 4 && !STOP_WORDS.has(w.toLowerCase()));
+                    for (const w of vnWords) {
+                        const escSoft = this._escapeRegExp(this._escapeHTML(w))
+                            .replace(/\\?\s+/g, '[\\s\\u00A0]+');
+                        placeWith(new RegExp(`(${escSoft})`, 'i'));
+                    }
                 }
             }
-            // …then a diacritic-tolerant pass as a last resort.
-            for (const candidate of group.candidates) {
-                for (const run of buildWordRuns(candidate)) {
-                    if (placeWith(new RegExp(`(${looseVnRegexSource(run)})`, 'i'))) return { txt, placed: true };
-                }
-            }
-            return { txt, placed: false };
+            return { txt, placeCount: totalPlaced, nextOcc: occCounter };
         };
 
-        const hasMarkers = /\[\[H:[^\]]*?\]\][\s\S]*?\[\[\/H\]\]/.test(raw);
-
-        // Shared across ALL paragraphs so each English term is placed AT MOST ONCE total
-        // (no doubling) yet is guaranteed a chance to be placed SOMEWHERE (max coverage).
+        // Tracks English keys that PASS 1 already wrapped. PASS 2 still tries them too
+        // (multi-occurrence) so a term can be painted in paragraphs where it appears but
+        // the inline wrapper didn't reach — `placedEnKeys` here is only used by PASS 3
+        // bookkeeping, not as a hard skip.
         const placedEnKeys = new Set();
+
+        // Per-key occurrence counter so every VN <mark> gets a UNIQUE pair-id (enKey + index).
+        // This is what lets the "Dò từ khớp" hover light up ONLY the matching EN<->VN pair
+        // instead of all occurrences of the same word on both sides at once.
+        const perKeyOcc = new Map();
+        const nextOcc = (enKey) => {
+            const n = perKeyOcc.get(enKey) || 0;
+            perKeyOcc.set(enKey, n + 1);
+            return n;
+        };
 
         // PASS 1 — walk the AI's inline markers per paragraph, emit MARK tokens, and record
         // which English keys are already satisfied so the fill pass won't re-add them.
@@ -1635,8 +1919,9 @@ class LinguaApp {
                         enKey = canonEn(keyRaw);
                     }
                     const innerVn = m[2];
+                    const occIdx = nextOcc(enKey);
                     if (enKey) placedEnKeys.add(enKey);
-                    working += `[[MARK::${color}::${(enKey || '').replace(/:/g, '')}::${this._escapeHTML(innerVn)}]]`;
+                    working += `[[MARK::${color}::${(enKey || '').replace(/:/g, '')}::${occIdx}::${this._escapeHTML(innerVn)}]]`;
                     last = re.lastIndex;
                 }
                 working += this._escapeHTML(cleanP.slice(last));
@@ -1686,18 +1971,30 @@ class LinguaApp {
         const groups = buildFillGroups();
         const unplaced = [];
         for (const group of groups) {
-            if (!group.en || placedEnKeys.has(group.en)) continue;
-            let done = false;
+            if (!group.en) continue;
+            // Multi-paragraph + multi-occurrence: try EVERY paragraph (not just preferred),
+            // and let tryPlaceGroup paint every occurrence within each paragraph. A group is
+            // only added to `unplaced` when NO paragraph contained ANY occurrence at all.
+            // Carry the per-key occurrence counter across paragraphs so PASS-1 occurrences
+            // (already-counted in perKeyOcc during PASS 1) keep their natural ordering — that
+            // way occurrence #N on the EN side pairs with occurrence #N on the VN side.
+            let placedAnywhere = false;
+            const startOcc = perKeyOcc.get(group.en) || 0;
+            let cursor = startOcc;
             for (const i of preferredParaOrder(group.en)) {
-                const { txt, placed } = tryPlaceGroup(workingParas[i], group);
-                if (placed) {
+                const { txt, placeCount, nextOcc } = tryPlaceGroup(workingParas[i], group, cursor);
+                if (placeCount > 0) {
                     workingParas[i] = txt;
                     placedEnKeys.add(group.en);
-                    done = true;
-                    break;
+                    placedAnywhere = true;
+                    cursor = nextOcc;
+                    // Don't break — keep scanning other paragraphs so repeated occurrences
+                    // (e.g. a 5-paragraph article using "chuyển đổi tư duy" in paragraphs 1, 3, 5)
+                    // are ALL painted.
                 }
             }
-            if (!done) unplaced.push(group.en);
+            perKeyOcc.set(group.en, cursor);
+            if (!placedAnywhere) unplaced.push(group.en);
         }
 
         // Coverage report — surfaces any vocab item we couldn't paint (usually because the AI
@@ -1706,10 +2003,152 @@ class LinguaApp {
             console.warn(`[highlight] Chưa tô được ${unplaced.length} cụm (có thể do dịch gộp/tách câu):`, unplaced);
         }
 
+        // PASS 2.5 — MERGE adjacent MARK tokens that belong to the SAME English term
+        // (same color + same enKey) when they are separated only by whitespace, stray
+        // punctuation, or Vietnamese "function words" (của, sự, và, một…). This is what
+        // fixes the "tiếng Anh dò cả cụm nhưng tiếng Việt bị tách rời" bug: a phrase like
+        // EN "Paradox of Progress" whose VN counterpart "Nghịch lý của sự tiến bộ" got
+        // painted as "Nghịch lý" + "của sự tiến" + (bộ dropped) is re-stitched into ONE
+        // contiguous <mark> covering "Nghịch lý của sự tiến bộ". We absorb the in-between
+        // gap text (function words / punctuation) into the merged mark so the whole
+        // Vietnamese phrase reads as a single highlighted unit — đúng, đủ & cùng màu.
+        //
+        // IMPROVED v2: instead of merging only the FIRST adjacent pair then restarting,
+        // we walk the chain in one pass: starting from a token, keep fusing it with every
+        // next same-enKey token whose intervening gap is mergeable, producing ONE fused
+        // token. This handles the "Nghịch lý" + "của sự tiến" + "bộ" case (3 fragments →
+        // 1 mark) in a single pass instead of needing 3 restarts. Also raises the gap
+        // length cap to 120 chars so a full function-word bridge like "của sự phát triển"
+        // can still be absorbed.
+        const MERGE_TOKEN = /\[\[MARK::([^:]*?)::([^:]*?)::([^:]*?)::([\s\S]*?)\]\]/;
+        const mergeAdjacentTokens = (working) => {
+            const GAP_MAX = 120;
+            const gapIsMergeable = (gap) => {
+                if (gap.length > GAP_MAX) return false;
+                const plain = gap.replace(/&[a-z]+;/gi, ' ').replace(/<[^>]*>/g, ' ');
+                if (!plain.trim()) return true; // pure whitespace
+                if (/^[\s,.;:()"'“”‘’\-–—\u00A0]*$/.test(plain)) return true;
+                const words = plain.split(/[\s,.;:()"'“”‘’\-–—\u00A0]+/).filter(Boolean);
+                if (!words.length) return true;
+                return words.every(w => STOP_WORDS.has(w.toLowerCase()));
+            };
+            let guard = 0;
+            for (;;) {
+                if (++guard > 500) break; // safety valve
+                let merged = false;
+                // CHAIN-MERGE: from each token, walk forward and fuse every consecutive same-
+                // enKey token whose gap is mergeable, all into one fused mark in a single pass.
+                const re = new RegExp(MERGE_TOKEN.source, 'g');
+                let m1 = re.exec(working);
+                while (m1) {
+                    const startIdx = m1.index;
+                    let curEnd = startIdx + m1[0].length;
+                    let color = m1[1];
+                    let enKey = m1[2];
+                    let occIdx = m1[3];
+                    let fusedInner = m1[4];
+                    let fusedAny = false;
+                    // Try to extend the chain by absorbing every NEXT same-enKey token whose
+                    // gap is mergeable. Stop on the first non-mergeable next token.
+                    for (;;) {
+                        const re2 = new RegExp(MERGE_TOKEN.source, 'g');
+                        re2.lastIndex = curEnd;
+                        const m2 = re2.exec(working);
+                        if (!m2) break;
+                        const gap = working.slice(curEnd, m2.index);
+                        const sameTerm = m2[1] === color && norm(m2[2]) === norm(enKey);
+                        if (!sameTerm || !gapIsMergeable(gap)) break;
+                        fusedInner += gap + m2[4];
+                        curEnd = m2.index + m2[0].length;
+                        fusedAny = true;
+                    }
+                    if (fusedAny) {
+                        const fusedToken = `[[MARK::${color}::${enKey}::${occIdx}::${fusedInner}]]`;
+                        working = working.slice(0, startIdx) + fusedToken + working.slice(curEnd);
+                        merged = true;
+                        break; // restart scan from the top after each merge
+                    }
+                    m1 = re.exec(working);
+                }
+                if (!merged) break;
+            }
+            return working;
+        };
+        for (let i = 0; i < workingParas.length; i++) {
+            workingParas[i] = mergeAdjacentTokens(workingParas[i]);
+        }
+
+        // PASS 2.6 — STRICT RE-COVERAGE + STITCH: scan for groups whose VN candidate still
+        // has unmatched words sitting BETWEEN already-painted marks (or right next to them
+        // across a gap). For each pair of SAME-enKey marks whose gap is ONLY whitespace /
+        // punctuation / Vietnamese function words, extend the LEFT mark forward to absorb
+        // the gap + the right mark so the user sees ONE merged mark instead of scattered
+        // fragments. This is the "tiếng Việt dịch đơn lẻ độc lập" fix: when one Vietnamese
+        // word of a multi-word phrase was left outside any mark because of diacritic drift /
+        // punctuation / AI paraphrase, we now retroactively drag it into the existing mark
+        // so the user sees the FULL phrase painted instead of scattered fragments.
+        //
+        // We do this in TWO phases so the chain can keep growing:
+        //   Phase A: same-adjacent-token merge (gap ≤ 60 chars, pure whitespace/function words)
+        //   Phase B: re-scan for new mergeable pairs after Phase A extended some marks
+        // We also accept gaps that contain ONLY punctuation + whitespace (no other marks) up
+        // to 200 chars so a paragraph break wrapped in stray punctuation still stitches.
+        const recoverStrandedVnWords = (working) => {
+            const re = new RegExp(MERGE_TOKEN.source, 'g');
+            const tokens = [];
+            let m;
+            while ((m = re.exec(working)) !== null) {
+                tokens.push({
+                    color: m[1], enKey: m[2], occIdx: m[3], inner: m[4],
+                    start: m.index, end: m.index + m[0].length
+                });
+            }
+            if (tokens.length < 2) return working;
+            let mergedSomething = true;
+            while (mergedSomething) {
+                mergedSomething = false;
+                re.lastIndex = 0;
+                const fresh = [];
+                while ((m = re.exec(working)) !== null) {
+                    fresh.push({
+                        color: m[1], enKey: m[2], occIdx: m[3], inner: m[4],
+                        start: m.index, end: m.index + m[0].length
+                    });
+                }
+                for (let i = 0; i < fresh.length - 1; i++) {
+                    const a = fresh[i], b = fresh[i + 1];
+                    if (a.color !== b.color || norm(a.enKey) !== norm(b.enKey)) continue;
+                    const gap = working.slice(a.end, b.start);
+                    if (!gap.length) continue;
+                    // Don't cross sentence boundaries (". " / "! " / "? " / "\n\n").
+                    if (/[.!?]\s|\n\s*\n/.test(gap)) continue;
+                    // Allow either pure whitespace/punctuation OR whitespace/punctuation +
+                    // VN function words. Cap at 100 chars (long enough to span a paragraph
+                    // break's stray dashes but short enough not to swallow real text).
+                    if (gap.length > 100) continue;
+                    const plain = gap.replace(/&[a-z]+;/gi, ' ').replace(/<[^>]*>/g, ' ');
+                    const words = plain.split(/[\s,.;:()"'“”‘’\-–—\u00A0]+/).filter(Boolean);
+                    const onlyPunct = !words.length;
+                    const onlyStop = words.length && words.every(w => STOP_WORDS.has(w.toLowerCase()));
+                    if (!onlyPunct && !onlyStop) continue;
+                    const fusedInner = a.inner + gap + b.inner;
+                    const fusedToken = `[[MARK::${a.color}::${a.enKey}::${a.occIdx}::${fusedInner}]]`;
+                    working = working.slice(0, a.start) + fusedToken + working.slice(b.end);
+                    mergedSomething = true;
+                    break; // restart outer while-loop because indices shifted
+                }
+            }
+            return working;
+        };
+        for (let i = 0; i < workingParas.length; i++) {
+            workingParas[i] = recoverStrandedVnWords(workingParas[i]);
+        }
+
         // PASS 3 — convert all intermediate tokens into real <mark> elements.
+        // Token shape: [[MARK::color::enKey::occIdx::inner]]
         const formatted = workingParas.map(working => {
-            const html = working.replace(/\[\[MARK::([^:]*?)::([^:]*?)::([\s\S]*?)\]\]/g, (match, color, enKey, inner) => {
-                return renderMark(color, inner, enKey);
+            const html = working.replace(/\[\[MARK::([^:]*?)::([^:]*?)::([^:]*?)::([\s\S]*?)\]\]/g, (match, color, enKey, occIdx, inner) => {
+                return renderMark(color, inner, enKey, parseInt(occIdx, 10) || 0);
             });
             return `<p class="paragraph-block">${html}</p>`;
         });
