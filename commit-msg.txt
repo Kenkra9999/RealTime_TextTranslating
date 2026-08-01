@@ -1,36 +1,47 @@
-style: VN-side highlights removed — only English side keeps colored marks (per user request)
+refactor: remove "Dò khớp" mode + deeper AI vocabulary scan + phrase-aware lookup
 
-The user asked for the Vietnamese translation panel to show ONLY the translated text —
-no highlights, no colored marks, no `<mark>` elements. Only the English side retains
-its highlighting (handled by `TextHighlighter`, fully editable: 2nd click removes,
-color picker changes hue). The VN side is now plain paragraphs of the AI-translated
-text, NFC-normalized + HTML-escaped, wrapped in `<p class="paragraph-block">`.
+Three changes per user request (Aug 1 2026):
 
-Changes:
-- js/app.js `_computeTranslatedHTML`: replaces the entire PASS 1/2/3 marking pipeline
-  output with a clean plain-text render. Still splits paragraphs the same way and
-  preserves HTML escaping (so a `<script>` or `&` in the AI's translated text doesn't
-  break the page). Internal stats (coverage, parsed markers, debug log) still compute
-  on the markedText input — only the rendered DOM is now plain text.
-- test/highlight.test.js: refactored to test API primitives directly (`_parseAIMarkers`,
-  `_stitchMissingPatches`, `_validateAndRepairMarkers`) plus 2 new fixtures verifying
-  the VN renderer output is plain text (zero `<mark>`, paragraph tags present, HTML
-  escaping works).
-- test/fixtures/highlight-cases.json: replaced the 14 mark-count-based fixtures with
-  11 primitive-API fixtures — same regression coverage (parser handles multi-word
-  phrases / diacritic drift / parens / word-order swap / function-word bridge; stitcher
-  doesn't double-wrap; validate reports the right missing keys), but tested via the
-  parser's return value instead of the renderer's DOM output.
-- test/real-text-coverage-5.js: report now describes the EN-only highlight UX and
-  reports `% vocab items AI wrapped inline` from the parser instead of from the
-  renderer histogram. The LỚP 2 "user-confirms-VN-marks" flow no longer applies (no
-  VN marks exist).
+1. "Dò khớp" mode removed.
+   - index.html: removed the "🎯 Dò khớp" button.
+   - js/app.js: removed all match-mode state, hover/click handlers, button binding,
+     and the `_applyMatchHighlight` DOM logic. `_initMatchMode`, `_setMatchModeActive`,
+     `_applyMatchHighlight` are now no-ops so existing call sites don't throw.
+   - The user can still hover/click ANY word in reading canvas — the dictionary lookup
+     popup will appear (when in "Tra từ" mode).
 
-All 11 highlight.test.js cases pass.
+2. AI vocabulary scan — much deeper, more collocations/phrasal/idioms/vocab.
+   - js/translator.js `_scanTextChunkWithAI`: prompt expanded from 6 categories to
+     9 categories, explicitly covering collocation_adj_noun, collocation_verb_noun,
+     collocation_noun_noun, collocation_adv_adj, collocation_adv_verb, phrasal_verb,
+     idiom, grammar, vocabulary. Min/max term counts raised: short chunks now require
+     at LEAST 25 items (was 10), medium chunks 50+, capped by natural content.
+   - Result: highlightable terms on any English text are now comprehensive — collocations
+     (Adj+N, V+N, N+N, Adv+Adj, Adv+V), phrasal verbs, idioms, grammar structures,
+     and standout single-word academic vocabulary.
 
-UX changes visible to the user:
-- Right pane "Bản dịch tiếng Việt": clean translated paragraphs, NO highlight.
-- Left pane "Văn bản gốc tiếng Anh": keeps all colored highlights (TextHighlighter,
-  click-to-remove, color-picker).
-- All other features (translation, dictionary lookup, AI scan, PDF export, vocab
-  table) unchanged.
+3. Dictionary lookup — phrase-aware, no source sentence, natural example.
+   - js/app.js `_getWordAtPoint`: when the hovered word sits INSIDE a contiguous
+     highlighted <mark>, the lookup target becomes the WHOLE mark (data-text or its
+     visible text), NOT just the single word. E.g. hover "fundamentally" inside the
+     highlighted "fundamentally altered" → look up "fundamentally altered". Hover
+     "altered" inside the same mark → still "fundamentally altered". Hover an
+     UNHIGHLIGHTED word → just that word. This is the user's specific request:
+     "dịch cả cụm được tô liền nhau, không dịch cả câu".
+   - js/translator.js `lookupWord`: cache key is now `v4|<word>` only (no sentence
+     context). Bump invalidates old v3 entries.
+   - js/translator.js `_lookupWithAI`: prompt no longer sends CONTEXT. Meaning now
+     comes from the most common dictionary sense (Oxford/Cambridge style). Example
+     is required to be a NATURAL English sentence containing the word/phrase (like
+     something from a real dictionary or published writing) — NOT "Example with X"
+     and NOT made-up on the fly. Structures remain as 2-3 collocations/idioms each
+     with their own natural example.
+
+Tests: 11/11 highlight.test.js cases still pass.
+
+UX changes:
+- "🎯 Dò khớp" button is gone. Only "Bút tô" + "Tra từ" mode buttons remain.
+- "Tra từ" mode: hover/click a single word → look up that word. Hover/click a word
+  inside a highlighted phrase → look up the WHOLE phrase (data-text).
+- "AI Scan" now produces 2-3x more highlightable terms per chunk, covering collocations,
+  phrasal verbs, idioms, and standout single-word academic vocabulary.

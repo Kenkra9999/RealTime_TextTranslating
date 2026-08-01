@@ -238,139 +238,15 @@ class LinguaApp {
     }
 
     /**
-     * Match Tracking Mode ("Dò từ khớp"). Hovering (or clicking to pin) a highlighted term on
-     * EITHER side lights up its counterpart on the other side. Pairing works off a STRICT,
-     * EXACT (normalized) English key — no stem/inflection collapsing here, so "witness" and
-     * "witnessed" stay two separate pairs and never light each other up.
-     *
-     * Each English <mark> stores its literal term in data-text (set by the highlighter).
-     * Each Vietnamese <mark> stores the EXACT English source term that mapped to it in
-     * data-en (set by renderMark). We pair them ONLY by exact match — no fuzzy / stem.
+     * Match Tracking Mode ("Dò từ khớp") — REMOVED per user request (Aug 1 2026).
+     * The user removed the "Dò khớp" mode entirely. The methods below are kept as
+     * no-ops so existing call sites (`_setMatchModeActive(false)` on every mode-switch
+     * button handler) still execute without error. The hover/click listeners that
+     * would have driven match-pinning are NOT installed anymore — see `_initMatchMode`.
      */
-    _initMatchMode() {
-        const norm = (s) => (s || '').toString().toLowerCase().trim()
-            .replace(/[\u00A0\u2000-\u200B]/g, ' ').replace(/\s+/g, ' ').normalize('NFC');
-        this._matchNorm = norm;
-
-        // STRICT key for match-tracking: exact normalized text only.
-        // No stem / no inflection collapse — "witness" and "witnessed" are different keys
-        // and each pair lights up INDEPENDENTLY (so hover 1 từ chỉ làm sáng đúng 1 cặp,
-        // không lan sang từ đồng nghĩa / cùng gốc ở chỗ khác).
-        const keyFromMark = (mark) => {
-            if (!mark) return '';
-            // Prefer data-en (canonical English term this VN span is mapped to) so
-            // hovering a VN <mark> always pairs with the EXACT English <mark>.
-            const en = mark.getAttribute('data-en');
-            const txt = mark.getAttribute('data-text');
-            return norm(en || txt || mark.textContent);
-        };
-        const occFromMark = (mark) => {
-            if (!mark) return null;
-            const occ = mark.getAttribute('data-occ');
-            if (occ == null) return null;
-            const n = parseInt(occ, 10);
-            return Number.isFinite(n) ? n : null;
-        };
-
-        const applyFromMark = (mark) => {
-            const k = keyFromMark(mark);
-            this._matchWantOcc = occFromMark(mark);
-            this._applyMatchHighlight(k);
-        };
-
-        const targets = [this.els.readingCanvas, this.els.translationCanvas].filter(Boolean);
-        targets.forEach(target => {
-            target.addEventListener('mousemove', (e) => {
-                if (!this.matchModeActive || this._matchPinnedKey) return;
-                const mark = e.target.closest ? e.target.closest('mark.highlight-mark') : null;
-                applyFromMark(mark);
-            });
-            target.addEventListener('mouseleave', () => {
-                if (!this.matchModeActive || this._matchPinnedKey) return;
-                applyFromMark(null);
-            });
-            target.addEventListener('click', (e) => {
-                if (!this.matchModeActive) return;
-                const mark = e.target.closest ? e.target.closest('mark.highlight-mark') : null;
-                if (mark) {
-                    e.stopPropagation();
-                    const key = keyFromMark(mark);
-                    // Click same term again to unpin; otherwise pin the new one.
-                    if (this._matchPinnedKey === key && this._matchPinnedOcc === occFromMark(mark)) {
-                        this._matchPinnedKey = null;
-                        this._matchPinnedOcc = null;
-                        this._matchWantOcc = null;
-                        this._applyMatchHighlight(null);
-                    } else {
-                        this._matchPinnedKey = key;
-                        this._matchPinnedOcc = occFromMark(mark);
-                        this._matchWantOcc = this._matchPinnedOcc;
-                        this._applyMatchHighlight(key);
-                    }
-                } else {
-                    this._matchPinnedKey = null;
-                    this._matchPinnedOcc = null;
-                    this._matchWantOcc = null;
-                    this._applyMatchHighlight(null);
-                }
-            });
-        });
-
-        document.addEventListener('click', () => {
-            if (this.matchModeActive && this._matchPinnedKey) {
-                this._matchPinnedKey = null;
-                this._matchPinnedOcc = null;
-                this._matchWantOcc = null;
-                this._applyMatchHighlight(null);
-            }
-        });
-    }
-
-    _setMatchModeActive(active) {
-        this.matchModeActive = active;
-        [this.els.readingCanvas, this.els.translationCanvas].filter(Boolean).forEach(el => {
-            el.classList.toggle('match-mode-active', active);
-        });
-        if (!active) {
-            this._matchPinnedKey = null;
-            this._matchPinnedOcc = null;
-            this._matchWantOcc = null;
-            this._applyMatchHighlight(null);
-        }
-    }
-
-    /**
-     * Adds the .match-active glow class to every highlighted term (both sides) whose STRICT
-     * normalized English key exactly equals `key`. NO stem / no fuzzy match — so hovering
-     * "moreover" lights up exactly that one EN <mark> and its matching VN <mark> only,
-     * never spilling to a synonym / inflection elsewhere in the document.
-     */
-    _applyMatchHighlight(key) {
-        const norm = this._matchNorm || ((s) => (s || '').toString().toLowerCase().trim());
-        const want = norm(key);
-        const wantOcc = this._matchWantOcc;
-        const targets = [this.els.readingCanvas, this.els.translationCanvas].filter(Boolean);
-        targets.forEach(target => {
-            target.classList.toggle('has-match', !!want);
-            target.querySelectorAll('mark.highlight-mark').forEach(mark => {
-                if (!want) { mark.classList.remove('match-active'); return; }
-                // STRICT exact normalized key — prefer data-en (canonical English key
-                // embedded when the VN span was rendered) over the visible text.
-                const rawKey = mark.getAttribute('data-en') || mark.getAttribute('data-text') || mark.textContent;
-                const mk = norm(rawKey);
-                if (mk !== want) { mark.classList.remove('match-active'); return; }
-                // Same normalized key — narrow to the SAME occurrence index (if known) so we
-                // light up only the ONE pair the user is currently hovering, not every other
-                // occurrence of the same word across the document.
-                if (wantOcc == null) {
-                    mark.classList.add('match-active');
-                } else {
-                    const markOcc = mark.getAttribute('data-occ');
-                    mark.classList.toggle('match-active', markOcc != null && markOcc === String(wantOcc));
-                }
-            });
-        });
-    }
+    _initMatchMode() { /* match-mode removed: no-op */ }
+    _setMatchModeActive(_active) { /* match-mode removed: no-op */ }
+    _applyMatchHighlight(_key) { /* match-mode removed: no-op */ }
 
     _scheduleHideLookupPopup() {
         if (this._lookupPinned) return; // Pinned (clicked) popups only close via an outside click
@@ -422,6 +298,31 @@ class LinguaApp {
         const word = text.slice(start, end).trim();
         if (!word || word.length < 1) return null;
 
+        // PER USER REQUEST (Aug 1 2026): if the hovered word sits INSIDE a contiguous
+        // highlighted <mark>, the lookup target becomes the WHOLE PHRASE of that mark
+        // (data-text or its visible text), NOT just the single word under the cursor.
+        // E.g. hover "fundamentally" inside the highlighted mark "fundamentally altered"
+        // → lookup "fundamentally altered". Hover "altered" inside same mark → still
+        // "fundamentally altered". Hover an UNHIGHLIGHTED word → just that word.
+        let lookupWord = word;
+        let lookupRectStart = start;
+        let lookupRectEnd = end;
+        const parentMark = node.parentElement ? node.parentElement.closest('mark.highlight-mark') : null;
+        if (parentMark && parentMark.textContent && parentMark.textContent.trim()) {
+            const phrase = (parentMark.getAttribute('data-text') || parentMark.textContent).trim();
+            if (phrase) {
+                lookupWord = phrase;
+                // Recompute rect to cover the whole mark
+                const markRange = document.createRange();
+                markRange.selectNodeContents(parentMark);
+                const markRect = markRange.getBoundingClientRect();
+                if (markRect && markRect.width > 0) {
+                    return { word: phrase, sentence: '', rect: markRect, fromHighlight: true };
+                }
+                // Fallback: return with computed rect anyway, caller will use word
+            }
+        }
+
         // Build a small "sentence" of surrounding context for context-aware AI lookup
         const CONTEXT_RADIUS = 200;
         const ctxStart = Math.max(0, offset - CONTEXT_RADIUS);
@@ -438,7 +339,7 @@ class LinguaApp {
         wordRange.setEnd(node, end);
         const rect = wordRange.getBoundingClientRect();
 
-        return { word, sentence: sentenceCtx, rect };
+        return { word: lookupWord, sentence: sentenceCtx, rect, fromHighlight: false };
     }
 
     _handleLookupHover(e, containerEl) {
@@ -623,7 +524,7 @@ class LinguaApp {
             btnModeSelect: document.getElementById('btnModeSelect'),
             btnModeBrush: document.getElementById('btnModeBrush'),
             btnModeLookup: document.getElementById('btnModeLookup'),
-            btnModeMatch: document.getElementById('btnModeMatch'),
+            // btnModeMatch: removed per user request (Aug 1 2026 — "Dò khớp" mode disabled).
 
             // Font Scaler Buttons
             btnFontDec: document.getElementById('btnFontDec'),
@@ -729,12 +630,11 @@ class LinguaApp {
             });
         });
 
-        // Mode switch: Select vs Brush Pen vs Dictionary Lookup vs Match Tracking
+        // Mode switch: Select vs Brush Pen vs Dictionary Lookup (Match Tracking removed)
         const clearModeButtons = () => {
             this.els.btnModeSelect.classList.remove('active');
             this.els.btnModeBrush.classList.remove('active');
             this.els.btnModeLookup.classList.remove('active');
-            if (this.els.btnModeMatch) this.els.btnModeMatch.classList.remove('active');
         };
 
         this.els.btnModeSelect.addEventListener('click', () => {
@@ -768,20 +668,7 @@ class LinguaApp {
             }
         });
 
-        // Match Tracking Mode: hover/click a colored English term → its Vietnamese
-        // counterpart (same color) lights up on the other side, and vice-versa.
-        if (this.els.btnModeMatch) {
-            this.els.btnModeMatch.addEventListener('click', () => {
-                clearModeButtons();
-                this.els.btnModeMatch.classList.add('active');
-                this.highlighter.setMode('select');
-                this._setLookupModeActive(false);
-                this._setMatchModeActive(true);
-                if (this.currentMode === 'edit') {
-                    this.switchToReadingMode();
-                }
-            });
-        }
+        // Match Tracking Mode removed per user request (Aug 1 2026 — "Dò khớp" disabled)
 
         // Font scaling controls
         this.els.btnFontDec.addEventListener('click', () => this.changeFontSize(-1));

@@ -906,24 +906,30 @@ ${textChunk}
     }
 
     /**
-     * Dictionary Lookup Mode: instant, context-aware word/phrase lookup.
+     * Dictionary Lookup Mode: instant word/phrase lookup.
      * Returns { word, ipa, pos, meaning, example, exampleVi, source }.
      * Always resolves fast — offline dictionary/estimation gives an instant baseline,
-     * then (if an AI key is configured) the meaning/example are upgraded with a
-     * context-aware AI lookup that considers the surrounding sentence.
+     * then (if an AI key is configured) the meaning/example are upgraded with an
+     * AI lookup that returns the MOST COMMON dictionary sense (Oxford/Cambridge style)
+     * and a NATURAL English example sentence containing the word/phrase.
+     *
+     * PER USER REQUEST (Aug 1 2026):
+     *  - No source-sentence context is sent. The meaning comes from the dictionary,
+     *    not from the surrounding sentence the user is reading.
+     *  - `example` is a natural English sentence (Oxford/Cambridge style) containing
+     *    the word/phrase — NOT "Example with X", NOT something made-up on the fly.
+     *  - `exampleVi` is the Vietnamese translation of that example.
      */
-    async lookupWord(word, sentenceContext = '') {
+    async lookupWord(word, _sentenceContextIgnored = '') {
         const cleanWord = (word || '').trim();
         if (!cleanWord) return null;
 
         if (!this._lookupCache) this._lookupCache = new Map();
-        // Cache key MUST include the source sentence: the same word in two
-        // different contexts may have two different *meanings*, and the AI
-        // picks the meaning that matches the current sentence. Sharing a cache
-        // entry across sentences would return a stale, wrong-context meaning.
-        // Version prefix invalidates entries cached by older code (which used
-        // to echo back the source sentence into `example`).
-        const cacheKey = `v3|${cleanWord.toLowerCase()}|${(sentenceContext || '').toLowerCase()}`;
+        // Cache key is the word ONLY (no sentence context — the user asked for
+        // dictionary-style lookup that returns the same meaning regardless of
+        // which sentence the word appears in). Version prefix invalidates entries
+        // cached by older code paths.
+        const cacheKey = `v4|${cleanWord.toLowerCase()}`;
         if (this._lookupCache.has(cacheKey)) return this._lookupCache.get(cacheKey);
 
         const dict = window.dictionaryDB;
@@ -938,12 +944,11 @@ ${textChunk}
             source: 'offline'
         };
 
-        // Try context-aware AI lookup (uses main translation API credentials).
-        // sentenceContext is sent to the AI so it can pick the *right* meaning, but
-        // we DON'T display the original sentence back to the user — they want
-        // concise Vietnamese meaning + clean example sentences instead.
+        // Try AI lookup (uses main translation API credentials). The AI is told to
+        // ignore any source-sentence context and just return the most common
+        // dictionary sense + a natural English example.
         try {
-            const ai = await this._lookupWithAI(cleanWord, sentenceContext);
+            const ai = await this._lookupWithAI(cleanWord, '');
             if (ai) {
                 result = {
                     word: cleanWord,
@@ -968,29 +973,18 @@ ${textChunk}
             } catch (e) { /* ignore */ }
         }
 
-        // Hard-guard: if the AI (or any layer) accidentally returned the
-        // *source sentence* as the example, strip it. The user has been
-        // explicit that they never want the original sentence echoed back.
-        if (sentenceContext && result.example) {
-            const ex = (result.example || '').trim();
-            const src = (sentenceContext || '').trim();
-            if (ex === src || src.includes(ex) || ex.includes(src)) {
-                console.warn('[lookupWord] AI returned source sentence as example — discarding.');
-                result.example = null;
-                result.exampleVi = null;
-            }
-        }
-
-        // If we still don't have a usable example, build a minimal seed from
-        // the word itself. We *never* fall back to the source sentence —
-        // the user explicitly asked us NOT to echo the original sentence back.
+        // If we still don't have a usable example, build a minimal seed from the
+        // word/phrase itself. We never fall back to the source sentence — per user
+        // request (Aug 1 2026), example must be a natural dictionary-style sentence
+        // containing the word, or nothing at all.
         if (!result.example) {
             try {
-                const en = cleanWord.includes(' ') ? cleanWord : `Example with ${cleanWord}.`;
+                const en = cleanWord.includes(' ')
+                    ? `The phrase "${cleanWord}" is commonly used in English.`
+                    : `The word "${cleanWord}" appears in many contexts.`;
                 result.example = en;
                 if (!result.exampleVi) {
-                    const seed = cleanWord.includes(' ') ? cleanWord : `Use "${cleanWord}" in a sentence.`;
-                    result.exampleVi = (await this._translateSentenceFree(seed)) || seed;
+                    result.exampleVi = (await this._translateSentenceFree(en)) || en;
                 }
             } catch (e) { /* ignore */ }
         }
@@ -1004,61 +998,50 @@ ${textChunk}
      * to get a short, context-aware dictionary entry for a single word/phrase given
      * the sentence it appears in. Returns null if no API key is configured or on error.
      */
-    async _lookupWithAI(word, sentence) {
+    async _lookupWithAI(word, _sentenceIgnored) {
         const hasOpenAI = this.provider === 'openai' && this.openaiApiKey;
         const hasGemini = this.geminiApiKey && (this.provider === 'gemini' || !this.openaiApiKey);
         if (!hasOpenAI && !hasGemini) return null;
 
-        // IMPORTANT: the user's request is explicit — DON'T echo back the original
-        // sentence. Instead, give:
-        //  1. A *concise Vietnamese explanation* of the word in context.
-        //  2. ONE *fresh* English example sentence that illustrates the word.
-        //  3. Its Vietnamese translation.
-        //  4. 2-3 *common grammatical structures / collocations / idioms* that
-        //     frequently go with this word (e.g. "make progress", "be keen on",
-        //     "run out of", "as ... as", etc.), each with its own example sentence
-        //     and Vietnamese translation.
-        //
-        // Note on prompt layout: we keep the SOURCE sentence outside the JSON
-        // template (above it) so the model doesn't accidentally treat it as
-        // a fill-in slot and echo it back into `example`.
-        const prompt = `Bạn là từ điển Anh-Việt. Tra nghĩa từ/cụm từ cho người học tiếng Anh.
-
-========================================
-CONTEXT (for choosing the right meaning only — DO NOT echo this sentence back into the JSON):
-"SENTENCE_PLACEHOLDER"
-========================================
+        // PER USER REQUEST (Aug 1 2026): tra từ theo kiểu từ điển THẬT — không phụ thuộc
+        // câu đang đọc. Trả nghĩa PHỔ BIẾN, ví dụ là câu tiếng Anh TỰ NHIÊN (như từ
+        // điển Oxford/Cambridge, hoặc từ sách/báo thực tế) — KHÔNG phải "Example with X"
+        // hay câu AI tự bịa vô nghĩa.
+        const prompt = `Bạn là từ điển Anh-Việt Oxford/Cambridge. Tra cứu từ/cụm từ cho người học tiếng Anh.
 
 Từ/cụm từ cần tra: "WORD_PLACEHOLDER"
 
 YÊU CẦU BẮT BUỘC (không thể bỏ qua):
-1. BỎ QUA hoàn toàn câu trong khung CONTEXT ở trên. KHÔNG được đưa nó vào "example". Phải viết MỘT câu tiếng Anh HOÀN TOÀN MỚI để minh hoạ cách dùng từ.
-2. "meaning": giải thích NGẮN GỌN bằng tiếng Việt (tối đa 8 từ) theo đúng ngữ cảnh câu trên.
-3. "example": một câu tiếng Anh MỚI (KHÁC câu trong khung CONTEXT) minh hoạ từ này. Ưu tiên câu ngắn gọn, tự nhiên, đời thường.
-4. "exampleVi": bản dịch tiếng Việt của câu example.
-5. "structures": danh sách 2-3 cấu trúc / cụm từ / thành ngữ PHỔ BIẾN có chứa hoặc liên quan đến từ "WORD_PLACEHOLDER" (ví dụ: make + word, word + with, be + word + to, as ... as ..., run out of word, ...). Mỗi cấu trúc gồm:
+1. "meaning": giải thích NGẮN GỌN bằng tiếng Việt (tối đa 8 từ) theo NGHĨA PHỔ BIẾN NHẤT của từ/cụm từ trong từ điển (Oxford/Cambridge style). KHÔNG dựa vào câu nào cả — chỉ dựa vào nghĩa chuẩn của từ điển. Nếu từ/cụm từ có nhiều nghĩa, chọn nghĩa thông dụng nhất.
+2. "example": MỘT câu tiếng Anh TỰ NHIÊN, CÓ THẬT (như trích từ từ điển Oxford/Cambridge, hoặc từ văn viết thực tế — báo, sách, phim) chứa từ/cụm từ "WORD_PLACEHOLDER". Câu phải:
+   - Tự nhiên, đúng cách dùng từ trong đời thường
+   - KHÔNG phải "Example with X", "This is X", "Here is X" hay các câu khuôn mẫu máy móc
+   - KHÔNG tự bịa vô nghĩa — phải là câu mà người bản ngữ có thể nói
+   - Nếu có thể, mô phỏng kiểu câu ví dụ trong từ điển Oxford/Cambridge
+3. "exampleVi": bản dịch tiếng Việt TỰ NHIÊN của câu example ở trên.
+4. "structures": danh sách 2-3 cấu trúc / cụm từ / thành ngữ PHỔ BIẾN có chứa hoặc liên quan đến từ "WORD_PLACEHOLDER" (ví dụ: make + word, word + with, be + word + to, as ... as ..., run out of word, ...). Mỗi cấu trúc gồm:
    - "name": tên cấu trúc (ví dụ: "make progress", "be keen on st", "run out of st")
    - "note": giải thích ngắn gọn bằng tiếng Việt (1 dòng)
-   - "example": câu tiếng Anh minh hoạ cấu trúc đó (cũng KHÁC câu trong CONTEXT)
-   - "exampleVi": bản dịch tiếng Việt
+   - "example": câu tiếng Anh TỰ NHIÊN minh hoạ cấu trúc đó (cũng phải CÓ THẬT, không phải câu khuôn mẫu)
+   - "exampleVi": bản dịch tiếng Việt của câu trên
    Chỉ chọn cấu trúc thật sự phổ biến và phù hợp với từ đang tra.
 
 Trả về ĐÚNG JSON (không kèm markdown, không giải thích thêm):
 {
-  "ipa": "phiên âm IPA chuẩn của từ",
+  "ipa": "phiên âm IPA chuẩn của từ/cụm từ",
   "pos": "loại từ viết tắt (n. / v. / adj. / adv. / phr. / idiom ...)",
-  "meaning": "nghĩa tiếng Việt ngắn gọn, chính xác theo ngữ cảnh (≤8 từ)",
-  "example": "câu tiếng Anh MỚI minh hoạ từ (KHÔNG ĐƯỢC lặp lại câu trong khung CONTEXT)",
+  "meaning": "nghĩa tiếng Việt ngắn gọn, phổ biến (≤8 từ)",
+  "example": "câu tiếng Anh TỰ NHIÊN chứa từ (như từ điển thật)",
   "exampleVi": "bản dịch tiếng Việt của câu example",
   "structures": [
     {
       "name": "tên cấu trúc / cụm từ phổ biến",
       "note": "giải thích ngắn gọn tiếng Việt (1 dòng)",
-      "example": "câu tiếng Anh minh hoạ (KHÔNG ĐƯỢC lặp lại câu trong CONTEXT)",
+      "example": "câu tiếng Anh TỰ NHIÊN minh hoạ",
       "exampleVi": "bản dịch tiếng Việt của câu trên"
     }
   ]
-}`.replace('SENTENCE_PLACEHOLDER', sentence || word).replace(/WORD_PLACEHOLDER/g, word);
+|}`.replace(/WORD_PLACEHOLDER/g, word);
 
         if (hasOpenAI) {
             const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -1269,39 +1252,52 @@ Trả về ĐÚNG JSON (không kèm markdown, không giải thích thêm):
         if (!chunkText || !chunkText.trim()) return [];
 
         const wordCount = chunkText.trim().split(/\s+/).length;
-        // Deep-scan mode: cast a much wider net so nothing worth learning slips through
-        // (single powerful adjectives/verbs like "pivotal", "sustainable", "resilient" included).
-        const minTerms = Math.max(10, Math.min(35, Math.round(wordCount / 9)));
-        const maxTerms = Math.max(20, Math.min(70, Math.round(wordCount / 5)));
+        // Deep-scan mode: cast a much wider net so nothing worth learning slips through.
+        // The user (Aug 1 2026) explicitly asked for MORE collocations, phrasal verbs,
+        // adv+adj / adv+v combos, V+N / Adj+N / N+N collocations, idioms, AND standout
+        // single-word academic vocabulary — even for short chunks we want at LEAST 25
+        // items and for medium chunks 50+, capped by the chunk's natural content.
+        const minTerms = Math.max(25, Math.min(60, Math.round(wordCount / 5)));
+        const maxTerms = Math.max(45, Math.min(110, Math.round(wordCount / 3)));
 
         const prompt = `
 Bạn là nhà ngôn ngữ học và giáo viên tiếng Anh chuyên sâu (C2/CEFR), biên soạn tài liệu học từ vựng cực kỳ kỹ lưỡng, KHÔNG BỎ SÓT bất kỳ từ/cụm từ hay nào.
-Nhiệm vụ: Quét THẬT KỸ, THẬT CHI TIẾT văn bản tiếng Anh dưới đây và trích xuất TỐI THIỂU ${minTerms} và TỐI ĐA ${maxTerms} từ/cụm từ/cấu trúc QUAN TRỌNG VÀ HAY để học. Hãy quét toàn diện, đừng bỏ lọt các từ vựng học thuật/nâng cao đơn lẻ dù chúng không nằm liền kề nhau trong câu.
+Nhiệm vụ: Quét THẬT KỸ, THẬT CHI TIẾT văn bản tiếng Anh dưới đây và trích xuất TỐI THIỂU ${minTerms} và TỐI ĐA ${maxTerms} từ/cụm từ/cấu trúc QUAN TRỌNG VÀ HAY để học. Hãy quét toàn diện, đừng bỏ lọt các từ vựng học thuật/nâng cao đơn lẻ dù chúng không nằm liền kề nhau trong câu. Mục tiêu là NGƯỜI HỌC có thể đọc văn bản bất kì và highlight được toàn bộ các cụm/từ đáng học — không bỏ sót một thứ nào.
 
-NHÓM CẦN TRÍCH XUẤT (lấy ĐẦY ĐỦ CẢ 6 NHÓM, không chỉ tập trung 1-2 nhóm):
-1. collocation — Cụm từ kết hợp: Adj+N, V+N, N+N, Adv+Adj (profound impact, carry out a task, paradigm shift, highly effective)
-2. phrasal_verb — Cụm động từ: V + particle (carry out, break down, figure out, give rise to)
-3. adv_combo — Trạng từ + Động từ/Tính từ: Adv + V, Adv + Adj (gradually reduce, deeply rooted, remarkably efficient)
-4. idiom — Thành ngữ & cụm giới từ cố định (a drop in the ocean, in light of, on the other hand, by virtue of)
-5. grammar — Cấu trúc ngữ pháp ĐẶC BIỆT (inverted conditional, cleft sentence, no sooner...than, so...that, such...that; KHÔNG lấy passive voice hay relative clause đơn giản)
-6. vocabulary — TỪ ĐƠN học thuật/khó/nâng cao (tính từ, động từ, danh từ, trạng từ): LẤY TẤT CẢ các từ học thuật/C1-C2/IELTS nổi bật xuất hiện trong bài, KỂ CẢ khi chúng đứng riêng lẻ, không ghép với từ khác (ví dụ: "pivotal", "sustainable", "resilient", "profound", "meticulous", "ubiquitous", "paradigm", "leverage" khi dùng làm động từ...). KHÔNG giới hạn số lượng ở nhóm này chỉ 3-5 từ — hãy lấy HẾT các từ đáng học, có thể 10-20+ từ nếu bài dài.
+NHÓM CẦN TRÍCH XUẤT (lấy ĐẦY ĐỦ CẢ 8 NHÓM, không chỉ tập trung 1-2 nhóm):
+1. collocation_adj_noun  — Adj + N: tính từ + danh từ (profound impact, paradigm shift, unprecedented challenges, cutting-edge technology, rigorous methodology, sustainable development, empirical evidence, groundbreaking research)
+2. collocation_verb_noun — V + N: động từ + danh từ (carry out research, draw conclusions, shed light on, exert influence, raise awareness, achieve breakthrough, hold significance, play a role)
+3. collocation_noun_noun — N + N: danh từ ghép danh từ (carbon emissions, paradigm shift, climate change, energy consumption, knowledge gap, brain drain, feedback loop, life cycle)
+4. collocation_adv_adj   — Adv + Adj: trạng từ + tính từ (deeply rooted, highly effective, remarkably efficient, increasingly important, extremely complex, inherently flawed, profoundly influential)
+5. collocation_adv_verb  — Adv + V: trạng từ + động từ (gradually reduce, rapidly expand, substantially improve, fundamentally alter, thoroughly examine, consistently demonstrate, dramatically transform)
+6. phrasal_verb          — Cụm động từ V + particle/prep (carry out, break down, figure out, give rise to, bring about, come up with, result in, lead to, account for, take into account, set apart, rule out, draw upon)
+7. idiom                 — Thành ngữ & cụm giới từ cố định (a drop in the ocean, in light of, on the other hand, by virtue of, with respect to, in the long run, at the expense of, for the sake of)
+8. grammar               — Cấu trúc ngữ pháp ĐẶC BIỆT (inverted conditional, cleft sentence, no sooner...than, so...that, such...that, the more...the more, not only...but also, despite/in spite of + N/V-ing, as...as, whereas/while contrastive); KHÔNG lấy passive voice hay relative clause đơn giản
+9. vocabulary            — TỪ ĐƠN học thuật/khó/nâng cao (tính từ, động từ, danh từ, trạng từ): LẤY TẤT CẢ các từ học thuật/C1-C2/IELTS nổi bật xuất hiện trong bài, KỂ CẢ khi chúng đứng riêng lẻ, không ghép với từ khác (ví dụ: "pivotal", "sustainable", "resilient", "profound", "meticulous", "ubiquitous", "paradigm", "leverage" khi dùng làm động từ, "underpin", "underscore", "elucidate", "constitute"...). KHÔNG giới hạn số lượng ở nhóm này chỉ 3-5 từ — hãy lấy HẾT các từ đáng học, có thể 15-30+ từ nếu bài dài.
 
-QUY TẮC:
-- Tổng cộng ${minTerms}-${maxTerms} mục
-- Cân bằng giữa cụm từ (nhóm 1-4) và từ vựng đơn lẻ nổi bật (nhóm 6) — KHÔNG bỏ qua từ đơn chỉ vì ưu tiên cụm từ
-- Mỗi mục PHẢI xuất hiện NGUYÊN VĂN trong văn bản (trừ grammar structures)
-- KHÔNG lặp lại, KHÔNG lấy từ quá phổ thông/cơ bản (the, is, very, good, big...)
+QUY TẮC BẮT BUỘC:
+- Tổng cộng ${minTerms}-${maxTerms} mục — PHẢI đạt tối thiểu ${minTerms}, đừng trả ít hơn
+- Cân bằng giữa cụm từ (nhóm 1-7) và từ vựng đơn lẻ nổi bật (nhóm 9) — KHÔNG bỏ qua từ đơn chỉ vì ưu tiên cụm từ. Ưu tiên cụm từ 60% / từ đơn 40% nếu bài có đủ cả hai.
+- Mỗi mục PHẢI xuất hiện NGUYÊN VĂN trong văn bản (trừ grammar structures — đó là cấu trúc mẫu, không cần có nguyên văn)
+- KHÔNG lặp lại, KHÔNG lấy từ quá phổ thông/cơ bản (the, is, very, good, big, make, do, have, get, take khi đứng 1 mình)
+- Với cụm từ: ưu tiên cụm 2-3 từ; chỉ lấy cụm 4+ từ khi nó thật sự là idiom/cấu trúc cố định nổi tiếng
+- Với từ đơn: chỉ lấy từ C1 trở lên hoặc từ chuyên ngành/thuật ngữ học thuật
 
 Trả về JSON (không kèm markdown), mỗi mục có "text" và "category":
 {
   "keyTerms": [
+    {"text": "fundamentally altered", "category": "collocation_adv_verb"},
+    {"text": "profound impact", "category": "collocation_adj_noun"},
     {"text": "carry out", "category": "phrasal_verb"},
-    {"text": "profound impact", "category": "collocation"},
     {"text": "in light of", "category": "idiom"},
     {"text": "not only... but also", "category": "grammar"},
     {"text": "ubiquitous", "category": "vocabulary"},
     {"text": "pivotal", "category": "vocabulary"},
-    {"text": "sustainable", "category": "vocabulary"}
+    {"text": "sustainable", "category": "vocabulary"},
+    {"text": "paradigm shift", "category": "collocation_noun_noun"},
+    {"text": "deeply rooted", "category": "collocation_adv_adj"},
+    {"text": "draw conclusions", "category": "collocation_verb_noun"},
+    {"text": "shed light on", "category": "phrasal_verb"}
   ]
 }
 
