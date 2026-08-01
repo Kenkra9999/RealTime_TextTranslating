@@ -294,11 +294,10 @@
                         sàng</span>
                 </div>
                 <div class="pane-body" id="paneBodyRight">
-                    <!-- LỚP 2 — Verification banner. Counts ai-verified marks vs ones the user
-                         still needs to confirm (data-source = "ai-retried" / "fallback").
-                         When Y = 0 the banner promotes to "✅ Đã xác nhận 100%". -->
+                    <!-- LỚP 2 — Verification banner. Now hidden via CSS per user request.
+                         Element kept in DOM so `_updateVerificationBanner()` can still
+                         update counts internally; user-facing UI stays clean. -->
                     <div id="verificationBanner" class="verification-banner verification-banner--idle" style="display: none;" role="status" aria-live="polite">
-                        <span class="verification-banner__icon" aria-hidden="true">🤖</span>
                         <span class="verification-banner__text">
                             <strong id="verificationBannerLabel">Đã tô AI-verified: 0 từ</strong>
                             <span class="verification-banner__hint" id="verificationBannerHint">— cần bạn xác nhận 0 từ</span>

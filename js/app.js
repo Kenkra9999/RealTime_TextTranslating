@@ -1620,7 +1620,9 @@ class LinguaApp {
             banner.style.display = 'none';
             return { verified: 0, needsCheck: 0 };
         }
-        banner.style.display = 'flex';
+        // Banner is hidden via CSS (per user request). Internal counts still update so
+        // tests + programmatic callers can still read the state.
+        banner.style.display = 'none';
 
         if (needsCheck === 0) {
             banner.classList.remove('verification-banner--idle', 'verification-banner--partial');
@@ -1836,7 +1838,7 @@ class LinguaApp {
             mark.setAttribute('data-color', color);
             // Style matching other marks so the dashed-border upgrade is visually seamless.
             const transColor = this.highlighter ? this.highlighter._getTranslucentColor(color) : 'rgba(34, 197, 94, 0.62)';
-            mark.style.cssText = `background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important; border: 1.5px solid rgba(34, 197, 94, 0.85) !important;`;
+            mark.style.cssText = `background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important;`;
             try {
                 range.surroundContents(mark);
             } catch (err) {
@@ -2142,22 +2144,15 @@ class LinguaApp {
         // sides lighting up together.
         //
         // source = provenance tag ("ai-verified" / "ai-retried" / "fallback" / "user-verified").
-        // Surfaced as data-source on the <mark> so LỚP 2 can distinguish machine-certain marks
-        // from human-confirmed ones (and decorate the uncertain ones with a dashed border + ⚠️).
+        // Surfaced as data-source on the <mark> for internal use (banner counting, popup logic,
+        // test assertions) but has NO visual effect — the user wants VN-side highlights to look
+        // IDENTICAL to EN-side ones (just background color, no dashed border, no ⚠️ / ✓ badge).
         const renderMark = (color, inner, enKey = '', occIdx = 0, source = 'fallback') => {
             const transColor = this.highlighter ? this.highlighter._getTranslucentColor(color) : 'rgba(250, 204, 21, 0.62)';
             const enAttr = enKey ? ` data-en="${this._escapeHTML(enKey)}"` : '';
             const occAttr = ` data-occ="${parseInt(occIdx, 10) || 0}"`;
             const sourceAttr = ` data-source="${this._escapeHTML(source)}"`;
-            // Dashed border only for non-verified sources — visual cue for LỚP 2 so the user
-            // can SEE which marks need confirmation. User-verified marks get a solid green-ish
-            // border to celebrate the confirmed state.
-            const borderStyle = source === 'ai-verified'
-                ? 'border: 1px solid transparent !important;'
-                : (source === 'user-verified'
-                    ? 'border: 1.5px solid rgba(34, 197, 94, 0.85) !important;'
-                    : 'border: 1.5px dashed rgba(234, 88, 12, 0.75) !important;');
-            return `<mark class="highlight-mark" data-color="${color}"${enAttr}${occAttr}${sourceAttr} style="background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important; ${borderStyle}">${inner}</mark>`;
+            return `<mark class="highlight-mark" data-color="${color}"${enAttr}${occAttr}${sourceAttr} style="background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important;">${inner}</mark>`;
         };
 
         const paragraphs = raw.split(/\n\s*\n/).filter(Boolean);

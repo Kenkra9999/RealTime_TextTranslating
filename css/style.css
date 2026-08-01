@@ -735,40 +735,13 @@ body.vocab-resize-dragging { user-select: none; cursor: row-resize !important; }
 
 .pane-body.mode-brush-active { cursor: crosshair; }
 
-/* ========== LỚP 2 — VERIFICATION BANNER ========== */
-/* Small persistent status strip shown above the translation. Counts AI-verified marks vs
-   marks still requiring user confirmation (data-source = "ai-retried" / "fallback"). When Y
-   drops to 0 the banner promotes to a celebratory "100% confirmed" state. */
-.verification-banner {
-    margin: 0 0 12px 0;
-    padding: 8px 12px;
-    border-radius: 10px;
-    display: flex; align-items: center; gap: 8px;
-    font-size: 12.5px; line-height: 1.4;
-    border: 1px solid var(--border-color);
-    background: var(--bg-card);
-    color: var(--text-main);
-    transition: background-color .25s ease, border-color .25s ease, color .25s ease;
-}
-.verification-banner__icon { font-size: 16px; line-height: 1; }
-.verification-banner__text { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
-.verification-banner__hint { color: var(--text-muted); font-size: 12px; }
-.verification-banner--idle { border-color: var(--border-color); }
-.verification-banner--partial {
-    border-color: rgba(234, 88, 12, 0.55);
-    background: linear-gradient(180deg, rgba(254, 215, 170, 0.35), rgba(254, 215, 170, 0.12));
-}
-.verification-banner--partial .verification-banner__icon::before { content: "⚠️"; }
-.verification-banner--partial .verification-banner__icon { font-size: 0; }
-.verification-banner--complete {
-    border-color: rgba(34, 197, 94, 0.85);
-    background: linear-gradient(180deg, rgba(187, 247, 208, 0.55), rgba(187, 247, 208, 0.18));
-    color: #166534;
-}
-.verification-banner--complete .verification-banner__icon::before { content: "✅"; }
-.verification-banner--complete .verification-banner__icon { font-size: 0; }
-[data-theme="dark"] .verification-banner--partial { background: rgba(124, 45, 18, 0.30); }
-[data-theme="dark"] .verification-banner--complete { background: rgba(20, 83, 45, 0.30); color: #bbf7d0; }
+/* ========== LỚP 2 — VERIFICATION BANNER (DISABLED per user request) ========== */
+/* The user asked for the markers on the Vietnamese side to look IDENTICAL to the English
+   side — no banner, no ⚠️ icon, no ✅ icon. The banner element is kept in the DOM
+   (so `_updateVerificationBanner()` can still run without errors) but is hidden via CSS
+   with `display: none !important`. Internal counting still happens (used by tests), but
+   the user-facing UI is back to the original clean highlight look. */
+.verification-banner { display: none !important; }
 
 /* ========== LỚP 2 — VERIFICATION POPUP + RESELECT FLOW ========== */
 /* Popup that appears when user clicks a dashed-border / ⚠️ mark. Small floating card with
@@ -852,49 +825,15 @@ body.vocab-resize-dragging { user-select: none; cursor: row-resize !important; }
     50%      { outline-color: rgba(234, 88, 12, 1.0); }
 }
 
-/* ========== LỚP 2 — DASHED BORDER + ⚠️ INDICATOR FOR UNVERIFIED MARKS ==========
-   Applies to every <mark> the renderer tagged with data-source != "ai-verified". The dashed
-   border alone is subtle; the ⚠️ pseudo-element (positioned top-right corner) is the
-   unmistakable cue telling the user "machine was unsure here — please verify". Hover lifts
-   the badge slightly so users notice it. */
+/* ========== LỚP 2 — DISABLED MARK STYLES (per user request) ==========
+   The user asked for the Vietnamese-side markers to look IDENTICAL to the English-side
+   markers — no dashed border, no ⚠️ icon, no ✓ badge. Per-source visual treatment is
+   suppressed here; only the inline `background-color` (already set inline by renderMark)
+   remains. The data-source attribute is still present on the <mark> for internal use
+   (banner counting, popup logic, test assertions) but has no visual effect. */
 mark.highlight-mark[data-source="ai-retried"],
-mark.highlight-mark[data-source="fallback"] {
-    position: relative;
-    outline-offset: 1px;
-}
-mark.highlight-mark[data-source="ai-retried"]::after,
-mark.highlight-mark[data-source="fallback"]::after {
-    content: "⚠️";
-    position: absolute;
-    top: -10px; right: -10px;
-    font-size: 11px;
-    line-height: 1;
-    pointer-events: none;
-    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.18));
-    transform: translateZ(0);
-    transition: transform .15s ease;
-}
-mark.highlight-mark[data-source="ai-retried"]:hover::after,
-mark.highlight-mark[data-source="fallback"]:hover::after {
-    transform: translateZ(0) scale(1.18);
-}
-/* User-verified marks: solid green ring + small ✓ badge — celebrate confirmation. */
-mark.highlight-mark[data-source="user-verified"] {
-    position: relative;
-}
-mark.highlight-mark[data-source="user-verified"]::after {
-    content: "✓";
-    position: absolute;
-    top: -10px; right: -10px;
-    font-size: 10px;
-    line-height: 1;
-    color: #166534;
-    background: #bbf7d0;
-    border-radius: 50%;
-    width: 14px; height: 14px;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700;
-}
+mark.highlight-mark[data-source="fallback"],
+mark.highlight-mark[data-source="user-verified"] { /* no extra style — looks like EN side */ }
 
 /* ========== DICTIONARY LOOKUP MODE ========== */
 .lookup-mode-active { cursor: help; }
