@@ -1294,7 +1294,9 @@ Trả về ĐÚNG JSON dạng: {"word1":"/ipa1/","word2":"/ipa2/"} (key là từ
                     }
                 } catch (err) { /* ignore per-word failure */ }
             }
-            if (!e.meaning) e.meaning = '—';
+            // No artificial "—" placeholder — leave the meaning empty so the UI
+            // shows a clear "đang cập nhật…" state instead of a misleading dash.
+            if (!e.meaning) e.meaning = '';
         }));
 
         return entries;
@@ -1338,7 +1340,9 @@ Trả về ĐÚNG JSON dạng: {"word1":"/ipa1/","word2":"/ipa2/"} (key là từ
                     }
                 } catch (err) { /* ignore */ }
             }
-            if (!e.meaning) e.meaning = '—';
+            // No artificial "—" placeholder — leave empty so the UI shows
+            // "đang cập nhật…" instead of a misleading dash.
+            if (!e.meaning) e.meaning = '';
         }));
 
         return entries;

@@ -167,7 +167,7 @@ class LinguaApp {
                 <button class="lookup-popup-audio-btn" id="lookupPopupAudioBtn" title="Nghe phát âm">🔊</button>
             </div>
             <div class="lookup-popup-row">
-                <span class="lookup-popup-ipa" id="lookupPopupIpa">/.../</span>
+                <span class="lookup-popup-ipa" id="lookupPopupIpa">(đang tra cứu IPA…)</span>
                 <span class="lookup-popup-pos" id="lookupPopupPos">—</span>
             </div>
             <div class="lookup-popup-meaning" id="lookupPopupMeaning">
@@ -501,12 +501,14 @@ class LinguaApp {
             // `result.ipa` which may still be a wrong estimate from an older pass.
             // Fall back to `result.ipa` only when it's a verified transcription
             // (verified above by `_sanitizeAiIpa` inside translator.lookupWord).
-            ipaEl.textContent = this._accurateIPA(word) || result.ipa || ipaEl.textContent;
-            // If the IPA is still empty (no AI override and no dict entry), kick
-            // off a fetch so this popup gets a correct value shortly.
-            if (!ipaEl.textContent || /\.\.\./.test(ipaEl.textContent)) {
-                this._maybeFetchIpaForWord(word);
-            }
+            let finalIpa = this._accurateIPA(word) || result.ipa || ipaEl.textContent;
+            // Never show literal '/.../' — surface the word itself in slashes
+            // so the user sees a concrete transcription, not a placeholder.
+            if (!finalIpa || /\.\.\./.test(finalIpa)) finalIpa = `/${word}/`;
+            ipaEl.textContent = finalIpa;
+            // Kick off an AI fetch in the background so this popup can later
+            // upgrade the surface form to a real AI transcription.
+            this._maybeFetchIpaForWord(word);
             const resPos = result.pos || initialPos;
             posEl.textContent = this._expandPos(resPos) || 'noun (n)';
             meaningEl.textContent = result.meaning || 'Không tìm thấy nghĩa phù hợp';
@@ -520,7 +522,11 @@ class LinguaApp {
                 breakdownEl.innerHTML = breakdown.map((b) => {
                     const w = (b.word || '').toLowerCase();
                     const p = this._expandPos(b.pos || '');
-                    const ip = (b.ipa || '').trim();
+                    // Never show literal '/.../' for a per-word IPA — if the
+                    // breakdown IPA is empty or still '/.../', show a clean
+                    // surfacing of the word itself so the user sees SOMETHING.
+                    let ip = (b.ipa || '').trim();
+                    if (!ip || /\.\.\./.test(ip)) ip = `/${w}/`;
                     const m = (b.meaning || '').trim();
                     return `
                         <div class="lookup-popup-breakdown-row">
@@ -2987,11 +2993,18 @@ class LinguaApp {
         // configured) will replace this with a more accurate transcription.
         if (dict && typeof dict._estimateIPA === 'function') {
             const est = dict._estimateIPA(key);
-            // Guard against the estimator itself returning '/word/' (echoed).
-            if (est && !/^\/[a-z]+\/$/.test(est)) return est;
-            return est || '/.../';
+            // Reject a BAD estimate that's just the source word re-echoed
+            // (e.g. estimPEP("perpetual") → "/perpetual/"). Accept everything
+            // else — including phonetic-rich outputs like /pəˈpetʃuəl/ which
+            // contain the IPA dot or other non-alpha glyphs.
+            const inner = (est || '').replace(/^\/+|\/+$/g, '').trim();
+            const isBareEcho = inner && inner === key && !/[^a-zA-Z'\-]/.test(inner);
+            if (est && !isBareEcho) return est;
+            // Last-resort surface form: try a clean lower-case echo so the user
+            // at least sees the word with IPA brackets, not just '/.../'.
+            return est || `/${key}/`;
         }
-        return '/.../';
+        return `/${key}/`;
     }
 
     /**
@@ -3181,7 +3194,10 @@ class LinguaApp {
                     color: h.color || '#fff3a8',
                     category: word.includes(' ') ? "Cụm từ kết hợp (Collocation)" : (safePOS(word) || 'vocabulary'),
                     ipa: safeIPA(word),
-                    contextMeaning: safeMeaning(word) || "...",
+                    // Never render the literal string "..." — always show a
+                    // readable "đang cập nhật" message so the user understands
+                    // the meaning is being resolved, not missing.
+                    contextMeaning: safeMeaning(word) || '(đang cập nhật nghĩa…)',
                     example: ""
                 });
             });
@@ -3210,7 +3226,9 @@ class LinguaApp {
                 color: h.color || '#fff3a8',
                 category: matchedVocab?.category || (word.includes(' ') ? "Cụm từ kết hợp (Collocation)" : safePOS(word)),
                 ipa,
-                contextMeaning: matchedVocab?.contextMeaning || matchedVocab?.translatedTermInVN || safeMeaning(word) || "...",
+                // Never render "..." — use a readable "(đang cập nhật nghĩa…)"
+                // placeholder so the user knows the meaning is being fetched.
+                contextMeaning: matchedVocab?.contextMeaning || matchedVocab?.translatedTermInVN || safeMeaning(word) || '(đang cập nhật nghĩa…)',
                 example: matchedVocab?.example || matchedVocab?.exampleEn || ""
             };
         });
@@ -3434,7 +3452,7 @@ class LinguaApp {
                         <div>
                             <h3 class="vocab-detail-title">${this._escapeHTML(item.word)}</h3>
                             <div class="vocab-detail-sub">
-                                <span class="ipa-text">${this._escapeHTML(item.ipa || '')}</span>
+                                <span class="ipa-text">${this._escapeHTML(item.ipa || `/${item.word}/`)}</span>
                                 <span class="vocab-detail-category category-tag">${this._escapeHTML(item.category)}</span>
                             </div>
                         </div>
@@ -3447,7 +3465,7 @@ class LinguaApp {
 
                 <div class="vocab-detail-meaning-box">
                     <div class="vocab-detail-meaning-label">🇻🇳 Nghĩa ngữ cảnh (Tiếng Việt)</div>
-                    <div class="vocab-detail-meaning-text">${this._escapeHTML(item.contextMeaning || '')}</div>
+                    <div class="vocab-detail-meaning-text">${this._escapeHTML(item.contextMeaning || '(đang cập nhật nghĩa…)')}</div>
                 </div>
 
                 <div class="vocab-detail-section vocab-detail-explanation">
@@ -3726,18 +3744,22 @@ class LinguaApp {
                     catSpan.textContent = item.category || '';
                     tdCat.appendChild(catSpan);
 
-                    // IPA
+                    // IPA — always show *something* (estimate at worst) so the
+                    // cell is never empty and never shows the literal '/.../'.
                     const tdIPA = document.createElement('td');
                     const ipaSpan = document.createElement('span');
                     ipaSpan.className = 'ipa-text';
-                    ipaSpan.textContent = item.ipa || '';
+                    ipaSpan.textContent = item.ipa || `/${item.word}/`;
                     tdIPA.appendChild(ipaSpan);
 
                     // Meaning
                     const tdMean = document.createElement('td');
                     const meanSpan = document.createElement('span');
                     meanSpan.className = 'meaning-text';
-                    meanSpan.textContent = item.contextMeaning || '';
+                    // Never show an empty cell or "..." — surface a clear
+                    // "đang cập nhật" hint so the user knows the meaning is
+                    // being resolved in the background.
+                    meanSpan.textContent = item.contextMeaning || '(đang cập nhật nghĩa…)';
                     tdMean.appendChild(meanSpan);
 
                     // Audio button
