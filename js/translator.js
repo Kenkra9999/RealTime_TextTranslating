@@ -1,4 +1,4 @@
-/**
+﻿/**
  * LinguaContext Pro - Advanced AI Translation & Deep Structure Engine
  * Supports both OpenAI ChatGPT API (GPT-4o, GPT-4o-mini, GPT-4-turbo)
  * and Google Gemini API (Gemini 2.5 Flash, Gemini 2.0 Flash, Gemini 1.5 Flash).
@@ -925,47 +925,61 @@ ${textChunk}
         if (!cleanWord) return null;
 
         if (!this._lookupCache) this._lookupCache = new Map();
-        // Cache key is the word ONLY (no sentence context — the user asked for
-        // dictionary-style lookup that returns the same meaning regardless of
-        // which sentence the word appears in). Version prefix invalidates entries
-        // cached by older code paths.
-        const cacheKey = `v4|${cleanWord.toLowerCase()}`;
+        const cacheKey = `v6|${cleanWord.toLowerCase()}`;
         if (this._lookupCache.has(cacheKey)) return this._lookupCache.get(cacheKey);
 
         const dict = window.dictionaryDB;
+        const isPhrase = cleanWord.includes(' ');
+
         let result = {
             word: cleanWord,
+            isPhrase: isPhrase,
             ipa: dict ? dict.getIPA(cleanWord) : '/.../',
-            pos: dict ? dict.getPOS(cleanWord) : '',
+            pos: isPhrase ? 'phrase' : (dict ? dict.getPOS(cleanWord) : 'n.'),
             meaning: dict ? dict.getMeaning(cleanWord) : null,
+            breakdown: [],
             example: null,
             exampleVi: null,
             structures: [],
             source: 'offline'
         };
 
-        // Try AI lookup (uses main translation API credentials). The AI is told to
-        // ignore any source-sentence context and just return the most common
-        // dictionary sense + a natural English example.
         try {
             const ai = await this._lookupWithAI(cleanWord, '');
             if (ai) {
+                // Reject obviously bad AI IPA — sometimes the model just echoes the
+                // raw word/phrase instead of producing a real transcription
+                // (e.g. "perpetual interruption" → "/perpetual interruption/").
+                // We only accept IPA that contains phonetic symbols OR is shorter
+                // than the source word (typical for single-syllable IPA). If the
+                // AI's "IPA" is just the source word re-printed between slashes,
+                // we throw it away and let the dict + dedicated IPA fetch fix it.
+                const sanitizedIpa = this._sanitizeAiIpa(ai.ipa || '', cleanWord);
                 result = {
                     word: cleanWord,
-                    ipa: ai.ipa || result.ipa,
+                    isPhrase: isPhrase,
+                    ipa: sanitizedIpa || result.ipa,
                     pos: ai.pos || result.pos,
                     meaning: ai.meaning || result.meaning,
+                    breakdown: Array.isArray(ai.breakdown) ? ai.breakdown : [],
                     example: ai.example || null,
                     exampleVi: ai.exampleVi || null,
                     structures: Array.isArray(ai.structures) ? ai.structures : [],
                     source: 'ai'
                 };
+                if (!isPhrase && (result.breakdown.length === 0)) {
+                    result.breakdown = [{
+                        word: cleanWord,
+                        ipa: result.ipa,
+                        pos: result.pos,
+                        meaning: result.meaning
+                    }];
+                }
             }
         } catch (e) {
             console.warn('AI dictionary lookup failed, using offline fallback:', e);
         }
 
-        // If still missing a meaning/translation, use quick free-translate fallback
         if (!result.meaning) {
             try {
                 const t = await this._translateSentenceFree(cleanWord);
@@ -973,24 +987,351 @@ ${textChunk}
             } catch (e) { /* ignore */ }
         }
 
-        // If we still don't have a usable example, build a minimal seed from the
-        // word/phrase itself. We never fall back to the source sentence — per user
-        // request (Aug 1 2026), example must be a natural dictionary-style sentence
-        // containing the word, or nothing at all.
-        if (!result.example) {
+        // Build a per-word breakdown even when AI is unavailable or returned none.
+        // For a phrase, split into component words; for a single word, one entry.
+        if (!Array.isArray(result.breakdown) || result.breakdown.length === 0) {
+            result.breakdown = await this._buildOfflineBreakdown(cleanWord);
+        } else {
+            // AI gave a breakdown but some meanings/IPA may be missing — fill gaps offline.
+            result.breakdown = await this._fillBreakdownGaps(result.breakdown);
+        }
+
+// Correct the top-level (header) IPA so it is never a wrong estimate.
+// Single word: reuse the (now accurate) breakdown IPA, but only if it's a real
+// phonetic string — the breakdown may have been left as '/.../' if neither dict
+// nor AI knew it, and we want to keep that placeholder visible.
+// Phrase: if AI gave no phrase IPA and the dict has no real entry, ask AI.
+const dictHasPhrase = dict && dict.hasRealEntry(cleanWord);
+const aiGaveIpa = result.source === 'ai' && result.ipa && !/\.\.\./.test(result.ipa) && !!this._sanitizeAiIpa(result.ipa, cleanWord);
+if (!isPhrase && Array.isArray(result.breakdown) && result.breakdown[0] && result.breakdown[0].ipa && !/\.\.\./.test(result.breakdown[0].ipa)) {
+    result.ipa = result.breakdown[0].ipa;
+} else if (isPhrase && !aiGaveIpa && !dictHasPhrase) {
+    const map = await this._fetchIpaForWords([cleanWord]).catch(() => ({}));
+    const fetched = map[cleanWord.toLowerCase()];
+    if (fetched && this._sanitizeAiIpa(fetched, cleanWord)) result.ipa = fetched;
+    else if (!result.ipa || /\.\.\./.test(result.ipa)) result.ipa = '/.../';
+}
+
+        // Example sentence MUST be a natural, real English sentence containing the
+        // word/phrase (per user's required form: "I eat breakfast every morning.").
+        // If AI didn't supply one, ask AI again with a focused example-only prompt.
+        // Only fall back to a template sentence if AI is truly unavailable.
+        if (!result.example || !this._looksLikeNaturalExample(result.example, cleanWord)) {
+            const aiEx = await this._generateExampleWithAI(cleanWord).catch(() => null);
+            if (aiEx && aiEx.example) {
+                result.example = aiEx.example;
+                result.exampleVi = aiEx.exampleVi || result.exampleVi;
+            }
+        }
+
+        // Ensure the example has a Vietnamese translation.
+        if (result.example && !result.exampleVi) {
             try {
-                const en = cleanWord.includes(' ')
-                    ? `The phrase "${cleanWord}" is commonly used in English.`
-                    : `The word "${cleanWord}" appears in many contexts.`;
-                result.example = en;
-                if (!result.exampleVi) {
-                    result.exampleVi = (await this._translateSentenceFree(en)) || en;
-                }
+                result.exampleVi = (await this._translateSentenceFree(result.example)) || '';
             } catch (e) { /* ignore */ }
+        }
+
+        // Last-resort fallback ONLY when no AI is configured at all.
+        if (!result.example) {
+            const en = cleanWord.includes(' ')
+                ? `The ${cleanWord} was clearly visible in the report.`
+                : `She used the word "${cleanWord}" in her essay.`;
+            result.example = en;
+            if (!result.exampleVi) {
+                try { result.exampleVi = (await this._translateSentenceFree(en)) || en; }
+                catch (e) { result.exampleVi = en; }
+            }
         }
 
         this._lookupCache.set(cacheKey, result);
         return result;
+    }
+
+    /**
+     * Heuristic: a "natural" example must actually contain the looked-up
+     * word/phrase and must NOT be one of the placeholder templates the AI
+     * sometimes falls back to ("Example with X", "The word X ...", etc.).
+     */
+    _looksLikeNaturalExample(example, word) {
+        if (!example || !word) return false;
+        const ex = example.trim().toLowerCase();
+        const w = word.trim().toLowerCase();
+        if (ex.length < 8) return false;
+        // Reject known placeholder shapes.
+        const bad = [
+            `the word "${w}"`,
+            `the phrase "${w}"`,
+            `example with ${w}`,
+            `this is ${w}`,
+            `${w} is commonly used`,
+            `${w} appears in`
+        ];
+        if (bad.some(b => ex.includes(b))) return false;
+        // Must contain the word (or, for phrases, its first significant token).
+        const firstTok = w.split(/\s+/)[0];
+        return ex.includes(w) || ex.includes(firstTok);
+    }
+
+    /**
+     * Validates IPA returned by the dictionary AI. Sometimes the model just echoes
+     * the source word between slashes (e.g. "/perpetual interruption/") instead of
+     * producing real phonetic symbols, which we then store as truth and the user
+     * sees as a wrong transcription. We only accept IPA that:
+     *   - contains at least one phonetic symbol from the IPA alphabet, OR
+     *   - is shorter than the source word (typical for short single-syllable IPA),
+     *   - AND is not just the source word re-printed inside slashes.
+     * Otherwise we return '' so the caller falls back to the dictionary + dedicated
+     * IPA fetch rather than showing a fabricated transcription.
+     */
+    _sanitizeAiIpa(ipa, sourceWord) {
+        const out = (ipa || '').trim();
+        if (!out) return '';
+        const word = (sourceWord || '').trim().toLowerCase();
+        if (!word) return out;
+        // Strip slashes for comparison.
+        const inner = out.replace(/^\/+|\/+$/g, '').trim().toLowerCase();
+        // Hard reject: AI echoed the source word (or its first/last token) back.
+        if (inner === word) return '';
+        const firstTok = word.split(/\s+/)[0];
+        const lastTok = word.split(/\s+/).slice(-1)[0];
+        if (inner === firstTok || inner === lastTok) return '';
+        // Phrase echo: inner is the source phrase with spaces collapsed.
+        const collapsed = inner.replace(/\s+/g, ' ');
+        const wordCollapsed = word.replace(/\s+/g, ' ');
+        if (collapsed === wordCollapsed) return '';
+        // Accept when the inner contains any IPA-only symbol (anything outside
+        // basic ASCII letters). This catches ə, ʃ, æ, ð, θ, ŋ, ɪ, ʊ, ɛ, etc.
+        if (/[^a-z\s]/i.test(inner)) return out;
+        // Single-word edge case: short word whose IPA might still be ASCII letters
+        // (rare). Accept only when inner is meaningfully shorter than the word
+        // (signals the AI actually compressed it).
+        if (!word.includes(' ') && inner.length > 0 && inner.length < word.length) return out;
+        return '';
+    }
+
+    /**
+     * Focused AI call that returns ONLY a natural example sentence + its Vietnamese
+     * translation for a word/phrase. Used when the main lookup response lacked a
+     * usable example. Returns {example, exampleVi} or null when AI unavailable.
+     */
+    async _generateExampleWithAI(word) {
+        const hasOpenAI = this.provider === 'openai' && this.openaiApiKey;
+        const hasGemini = this.geminiApiKey && (this.provider === 'gemini' || !this.openaiApiKey);
+        if (!hasOpenAI && !hasGemini) return null;
+
+        const prompt = `Cho 1 câu tiếng Anh TỰ NHIÊN, NGẮN GỌN, DỄ HIỂU (như câu ví dụ trong từ điển Oxford/Cambridge) có chứa "${word}", kèm bản dịch tiếng Việt tự nhiên.
+VÍ DỤ MẪU đúng yêu cầu:
+- "eat" → {"example":"I eat breakfast every morning.","exampleVi":"Tôi ăn sáng mỗi buổi sáng."}
+- "profound transformation" → {"example":"Technology has brought about a profound transformation in modern society.","exampleVi":"Công nghệ đã mang lại một sự biến đổi sâu sắc trong xã hội hiện đại."}
+KHÔNG dùng câu mẫu kiểu "The word X...", "Example with X", "This is X".
+Trả về ĐÚNG JSON: {"example":"...","exampleVi":"..."}`;
+
+        try {
+            if (hasOpenAI) {
+                const res = await fetch("https://api.openai.com/v1/chat/completions", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.openaiApiKey}` },
+                    body: JSON.stringify({
+                        model: this.openaiModel,
+                        messages: [{ role: 'user', content: prompt }],
+                        response_format: { type: "json_object" },
+                        temperature: 0.3
+                    })
+                });
+                if (!res.ok) return null;
+                const data = await res.json();
+                return JSON.parse(data.choices?.[0]?.message?.content || '{}');
+            }
+            if (hasGemini) {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiApiKey}`;
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { temperature: 0.3, responseMimeType: "application/json" }
+                    })
+                });
+                if (!res.ok) return null;
+                const data = await res.json();
+                const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+                return JSON.parse(rawText.replace(/```json|```/g, '').trim());
+            }
+        } catch (e) {
+            return null;
+        }
+        return null;
+    }
+
+    /**
+     * Fetches ACCURATE IPA transcriptions from AI for a list of words. Used for
+     * words that aren't in the curated offline dictionary (whose IPA would
+     * otherwise be a rough estimate). Returns a map { word(lowercase): "/ipa/" }.
+     * Returns {} when AI is unavailable or on error.
+     */
+    async _fetchIpaForWords(words) {
+        const uniq = [...new Set((words || [])
+            .map(w => (w || '').trim().toLowerCase())
+            .filter(Boolean))];
+        if (uniq.length === 0) return {};
+
+        const hasOpenAI = this.provider === 'openai' && this.openaiApiKey;
+        const hasGemini = this.geminiApiKey && (this.provider === 'gemini' || !this.openaiApiKey);
+        if (!hasOpenAI && !hasGemini) return {};
+
+        if (!this._ipaCache) this._ipaCache = new Map();
+        const need = uniq.filter(w => !this._ipaCache.has(w));
+
+        if (need.length > 0) {
+            const prompt = `Cho IPA (phiên âm quốc tế) CHUẨN của các từ/cụm từ tiếng Anh sau (giọng Anh-Anh, kèm dấu nhấn ˈ và ˌ, bọc trong dấu /.../). KHÔNG tự bịa — dùng IPA chuẩn như từ điển Cambridge/Oxford.
+Danh sách: ${JSON.stringify(need)}
+Trả về ĐÚNG JSON dạng: {"word1":"/ipa1/","word2":"/ipa2/"} (key là từ chữ thường, đúng như trong danh sách).`;
+            try {
+                let obj = {};
+                if (hasOpenAI) {
+                    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.openaiApiKey}` },
+                        body: JSON.stringify({
+                            model: this.openaiModel,
+                            messages: [{ role: 'user', content: prompt }],
+                            response_format: { type: "json_object" },
+                            temperature: 0
+                        })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        obj = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+                    }
+                } else if (hasGemini) {
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiApiKey}`;
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            generationConfig: { temperature: 0, responseMimeType: "application/json" }
+                        })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+                        obj = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+                    }
+                }
+                Object.keys(obj || {}).forEach((k) => {
+                    const key = k.trim().toLowerCase();
+                    let val = String(obj[k] || '').trim();
+                    if (val && !val.startsWith('/')) val = `/${val}`;
+                    if (val && !val.endsWith('/')) val = `${val}/`;
+                    if (val && val.length > 2) this._ipaCache.set(key, val);
+                });
+            } catch (e) { /* ignore — leave uncached words out */ }
+        }
+
+        const out = {};
+        uniq.forEach((w) => { if (this._ipaCache.has(w)) out[w] = this._ipaCache.get(w); });
+        return out;
+    }
+
+    /**
+     * Splits a word/phrase into component words and builds a breakdown entry for
+     * each: {word, ipa, pos, meaning}. Uses the offline dictionary first, then the
+     * free translation API for any word whose Vietnamese meaning is missing. This
+     * makes the "phân tích từng từ" section work even with no AI key configured.
+     */
+    async _buildOfflineBreakdown(cleanWord) {
+        const dict = window.dictionaryDB;
+        // Tokenise on whitespace/hyphen, keep only real words, strip surrounding punctuation.
+        const rawTokens = cleanWord.split(/\s+/).filter(Boolean);
+        const tokens = rawTokens
+            .map(t => t.replace(/^[^A-Za-z'-]+|[^A-Za-z'-]+$/g, ''))
+            .filter(t => t.length > 0);
+
+        if (tokens.length === 0) return [];
+
+        const entries = tokens.map((tok) => {
+            const wordKey = tok.toLowerCase();
+            const hasReal = dict && dict.hasRealEntry && dict.hasRealEntry(tok);
+            // Use the curated IPA ONLY when the word is a real dictionary entry.
+            // Otherwise start from '/.../' so the UI never flashes a wrong estimate;
+            // the AI fetch below (or `_correctIpaForSession`) will fill it in shortly.
+            const initialIpa = hasReal
+                ? (dict.getIPA(tok) || '/.../')
+                : '/.../';
+            return {
+                word: wordKey,
+                ipa: initialIpa,
+                pos: dict ? dict.getPOS(tok) : 'n.',
+                meaning: dict ? dict.getMeaning(tok) : null,
+                _needIpa: !hasReal
+            };
+        });
+
+        // Get accurate IPA from AI for words not in the curated dictionary.
+        const wordsNeedingIpa = entries.filter(e => e._needIpa).map(e => e.word);
+        const ipaMap = await this._fetchIpaForWords(wordsNeedingIpa).catch(() => ({}));
+
+        // Fill missing per-word meanings via the free translation API (parallel).
+        await Promise.all(entries.map(async (e) => {
+            if (e._needIpa && ipaMap[e.word]) e.ipa = ipaMap[e.word];
+            delete e._needIpa;
+            if (!e.meaning) {
+                try {
+                    const t = await this._translateSentenceFree(e.word);
+                    if (t && t.trim().toLowerCase() !== e.word.toLowerCase()) {
+                        e.meaning = t.trim();
+                    }
+                } catch (err) { /* ignore per-word failure */ }
+            }
+            if (!e.meaning) e.meaning = '—';
+        }));
+
+        return entries;
+    }
+
+    /**
+     * Fills any missing ipa/pos/meaning in an AI-provided breakdown using the
+     * offline dictionary + free translation, so every row is complete.
+     */
+    async _fillBreakdownGaps(breakdown) {
+        const dict = window.dictionaryDB;
+        const entries = breakdown.map((b) => {
+            const w = (b.word || '').toLowerCase();
+            const aiIpa = (b.ipa && b.ipa.trim()) ? b.ipa.trim() : '';
+            const hasReal = dict && dict.hasRealEntry && dict.hasRealEntry(w);
+            // Use curated dict IPA ONLY when the word is a real dictionary entry.
+            // For unknown words start from '/.../' so we never persist a wrong
+            // estimate; the AI fetch below will fill it in shortly.
+            const ipa = aiIpa || (hasReal && dict.getIPA(w)) || '/.../';
+            return {
+                word: w,
+                ipa,
+                pos: (b.pos && b.pos.trim()) ? b.pos.trim() : (dict ? dict.getPOS(w) : 'n.'),
+                meaning: (b.meaning && b.meaning.trim()) ? b.meaning.trim() : (dict ? dict.getMeaning(w) : null),
+                // Need AI IPA only when AI gave none AND the dictionary has no real entry.
+                _needIpa: !aiIpa && !hasReal
+            };
+        });
+
+        const wordsNeedingIpa = entries.filter(e => e._needIpa).map(e => e.word);
+        const ipaMap = await this._fetchIpaForWords(wordsNeedingIpa).catch(() => ({}));
+
+        await Promise.all(entries.map(async (e) => {
+            if (e._needIpa && ipaMap[e.word]) e.ipa = ipaMap[e.word];
+            delete e._needIpa;
+            if (!e.meaning) {
+                try {
+                    const t = await this._translateSentenceFree(e.word);
+                    if (t && t.trim().toLowerCase() !== e.word.toLowerCase()) {
+                        e.meaning = t.trim();
+                    }
+                } catch (err) { /* ignore */ }
+            }
+            if (!e.meaning) e.meaning = '—';
+        }));
+
+        return entries;
     }
 
     /**
@@ -1011,37 +1352,38 @@ ${textChunk}
 
 Từ/cụm từ cần tra: "WORD_PLACEHOLDER"
 
-YÊU CẦU BẮT BUỘC (không thể bỏ qua):
-1. "meaning": giải thích NGẮN GỌN bằng tiếng Việt (tối đa 8 từ) theo NGHĨA PHỔ BIẾN NHẤT của từ/cụm từ trong từ điển (Oxford/Cambridge style). KHÔNG dựa vào câu nào cả — chỉ dựa vào nghĩa chuẩn của từ điển. Nếu từ/cụm từ có nhiều nghĩa, chọn nghĩa thông dụng nhất.
-2. "example": MỘT câu tiếng Anh TỰ NHIÊN, CÓ THẬT (như trích từ từ điển Oxford/Cambridge, hoặc từ văn viết thực tế — báo, sách, phim) chứa từ/cụm từ "WORD_PLACEHOLDER". Câu phải:
-   - Tự nhiên, đúng cách dùng từ trong đời thường
-   - KHÔNG phải "Example with X", "This is X", "Here is X" hay các câu khuôn mẫu máy móc
-   - KHÔNG tự bịa vô nghĩa — phải là câu mà người bản ngữ có thể nói
-   - Nếu có thể, mô phỏng kiểu câu ví dụ trong từ điển Oxford/Cambridge
-3. "exampleVi": bản dịch tiếng Việt TỰ NHIÊN của câu example ở trên.
-4. "structures": danh sách 2-3 cấu trúc / cụm từ / thành ngữ PHỔ BIẾN có chứa hoặc liên quan đến từ "WORD_PLACEHOLDER" (ví dụ: make + word, word + with, be + word + to, as ... as ..., run out of word, ...). Mỗi cấu trúc gồm:
-   - "name": tên cấu trúc (ví dụ: "make progress", "be keen on st", "run out of st")
-   - "note": giải thích ngắn gọn bằng tiếng Việt (1 dòng)
-   - "example": câu tiếng Anh TỰ NHIÊN minh hoạ cấu trúc đó (cũng phải CÓ THẬT, không phải câu khuôn mẫu)
-   - "exampleVi": bản dịch tiếng Việt của câu trên
-   Chỉ chọn cấu trúc thật sự phổ biến và phù hợp với từ đang tra.
+YÊU CẦU BẮT BUỘC:
+1. "ipa": IPA CHUẨN của từ (đơn) hoặc CỦA CẢ CỤM (cụm từ có ' /' giữa các từ, vd: /ˌtɛkˈnɒlədʒɪkəl ɪnəˈveɪʃən/). Cho cụm: trả IPA đầy đủ cả cụm (có 'ˌ' và 'ˈ' rõ ràng).
+2. "pos": TỪ ĐƠN: "n." / "v." / "adj." / "adv." / "prep." / "conj." / "pron." / "interj." / "det." / "aux." CỤM TỪ (2+ từ): "phr." hoặc cụ thể ("n. phr." / "v. phr." / "adj. phr." / "idiom").
+3. "meaning": TỪ ĐƠN: NGẮN GỌN tiếng Việt (≤8 từ) theo NGHĨA PHỔ BIẾN NHẤT. CỤM TỪ (2+ từ): dịch NGHĨA CẢ CỤM (full phrase), dạng "sự/việc/... + ..." (≤12 từ). KHÔNG dựa vào câu nào — chỉ nghĩa chuẩn từ điển.
+4. "breakdown": MẢNG phân tích từng từ (BẮT BUỘC đầy đủ với cụm 2+ từ; từ đơn vẫn trả 1 phần tử). Mỗi phần tử:
+   - "word": từ tiếng Anh (chữ thường, đúng dạng gốc)
+   - "ipa": IPA chính xác RIÊNG từ đó (vd "profound" → "/prəˈfaʊnd/")
+   - "pos": loại từ viết tắt (n. / v. / adj. / adv. / ...), LUÔN có dấu chấm
+   - "meaning": nghĩa tiếng Việt RIÊNG từ đó (1-4 từ, dạng từ điển)
+   Ví dụ "profound transformation":
+   "breakdown": [
+     {"word":"profound","ipa":"/prəˈfaʊnd/","pos":"adj.","meaning":"sâu sắc, sâu xa"},
+     {"word":"transformation","ipa":"/ˌtrænsfəˈmeɪʃən/","pos":"n.","meaning":"sự biến đổi, sự chuyển đổi"}
+   ]
+5. "example": BẮT BUỘC — MỘT câu tiếng Anh TỰ NHIÊN, NGẮN GỌN, DỄ HIỂU (kiểu câu ví dụ Oxford/Cambridge) CÓ CHỨA đúng từ/cụm từ. TUYỆT ĐỐI KHÔNG dùng "The word X...", "The phrase X...", "Example with X", "This is X", "X is commonly used". Phải là câu đời thực có nghĩa.
+   MẪU ĐÚNG:
+   - "eat" → "I eat breakfast every morning."
+   - "profound transformation" → "Technology has brought about a profound transformation in modern society."
+6. "exampleVi": bản dịch tiếng Việt TỰ NHIÊN của đúng câu example ở trên.
+   MẪU: "I eat breakfast every morning." → "Tôi ăn sáng mỗi buổi sáng."
+7. "structures": 2-3 cấu trúc / cụm từ / thành ngữ PHỔ BIẾN có chứa hoặc liên quan đến từ. Mỗi cấu trúc: "name", "note" (1 dòng), "example" (câu TỰ NHIÊN), "exampleVi".
 
-Trả về ĐÚNG JSON (không kèm markdown, không giải thích thêm):
+Trả về ĐÚNG JSON (không kèm markdown):
 {
   "ipa": "phiên âm IPA chuẩn của từ/cụm từ",
-  "pos": "loại từ viết tắt (n. / v. / adj. / adv. / phr. / idiom ...)",
-  "meaning": "nghĩa tiếng Việt ngắn gọn, phổ biến (≤8 từ)",
-  "example": "câu tiếng Anh TỰ NHIÊN chứa từ (như từ điển thật)",
+  "pos": "loại từ viết tắt",
+  "meaning": "nghĩa tiếng Việt ngắn gọn (≤8 từ cho đơn, ≤12 từ cho cụm)",
+  "breakdown": [{"word": "từ 1", "ipa": "...", "pos": "...", "meaning": "..."}],
+  "example": "câu tiếng Anh TỰ NHIÊN chứa từ",
   "exampleVi": "bản dịch tiếng Việt của câu example",
-  "structures": [
-    {
-      "name": "tên cấu trúc / cụm từ phổ biến",
-      "note": "giải thích ngắn gọn tiếng Việt (1 dòng)",
-      "example": "câu tiếng Anh TỰ NHIÊN minh hoạ",
-      "exampleVi": "bản dịch tiếng Việt của câu trên"
-    }
-  ]
-|}`.replace(/WORD_PLACEHOLDER/g, word);
+  "structures": [{"name": "tên cấu trúc", "note": "giải thích 1 dòng", "example": "câu tiếng Anh TỰ NHIÊN", "exampleVi": "bản dịch tiếng Việt"}]
+}` .replace(/WORD_PLACEHOLDER/g, word);
 
         if (hasOpenAI) {
             const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -1117,8 +1459,15 @@ Trả về ĐÚNG JSON (không kèm markdown, không giải thích thêm):
 
         for (const item of itemsToProcess) {
             const word = item.text || item;
-            const ipa = window.dictionaryDB ? window.dictionaryDB.getIPA(word) : "/.../";
-            let localMeaning = window.dictionaryDB ? window.dictionaryDB.getMeaning(word) : null;
+            const dict = window.dictionaryDB;
+            // Use curated IPA ONLY for words actually in the dictionary; otherwise
+            // start from '/.../' so we never persist a wrong estimate on the vocab
+            // row. `_correctIpaForSession` will fill missing IPAs from AI shortly.
+            let ipa = '/.../';
+            if (dict && dict.hasRealEntry && dict.hasRealEntry(word)) {
+                ipa = dict.getIPA(word) || '/.../';
+            }
+            let localMeaning = dict ? dict.getMeaning(word) : null;
             const catInfo = item.category || null;
 
             processedItems.push({ word, ipa, localMeaning, color: item.color || '#fef08a', category: catInfo });

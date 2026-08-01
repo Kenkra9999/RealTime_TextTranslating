@@ -234,11 +234,13 @@ class TextHighlighter {
         if (!text) return;
 
         const markId = `hl-${Date.now()}-${this.nextId++}`;
+        const addedAt = Date.now();
         const mark = document.createElement('mark');
         mark.className = 'highlight-mark';
         mark.dataset.highlightId = markId;
         mark.dataset.color = colorHex;
         mark.dataset.text = text;
+        mark.dataset.addedAt = String(addedAt);
         const transColor = this._getTranslucentColor(colorHex);
         mark.style.backgroundColor = transColor;
         mark.style.backgroundImage = 'none';
@@ -260,6 +262,7 @@ class TextHighlighter {
             text: text,
             color: colorHex,
             textHex: paletteObj.textHex,
+            addedAt: addedAt,
             element: mark
         });
 
@@ -373,6 +376,19 @@ class TextHighlighter {
         });
     }
 
+    /**
+     * Returns highlights added strictly after the given timestamp (ms), ordered
+     * newest-first (most recently added at the top). Used by the vocabulary table
+     * to bubble freshly painted terms up to the top of the summary list.
+     * Falls back to current timestamp for older highlights that lack addedAt.
+     */
+    getHighlightsAddedAfter(cutoff = 0, items = null) {
+        const all = items || this.getAllHighlightedItems();
+        return all
+            .filter(h => (h.addedAt || 0) > cutoff)
+            .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+    }
+
     autoHighlightKeyTerms(container) {
         if (!container) return;
         const text = container.innerText;
@@ -413,7 +429,8 @@ class TextHighlighter {
                             id: markId,
                             text: match,
                             color: color.hex,
-                            textHex: color.textHex
+                            textHex: color.textHex,
+                            addedAt: Date.now()
                         });
                         return `<mark class="highlight-mark" data-highlight-id="${markId}" data-color="${color.hex}" data-text="${this._escapeHTMLAttr(match)}" style="background-color: ${color.hex};">${match}</mark>`;
                     });
@@ -556,7 +573,8 @@ class TextHighlighter {
                             id: markId,
                             text: match,
                             color: colorHex,
-                            textHex: paletteObj.textHex
+                            textHex: paletteObj.textHex,
+                            addedAt: Date.now()
                         });
                         const transColor = this._getTranslucentColor(colorHex);
                         return `<mark class="highlight-mark" data-highlight-id="${markId}" data-color="${colorHex}" data-text="${this._escapeHTMLAttr(match)}" style="background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important;">${match}</mark>`;

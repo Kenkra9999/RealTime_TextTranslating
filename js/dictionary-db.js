@@ -264,6 +264,19 @@ class DictionaryDB {
         return this._estimateIPA(cleanWord);
     }
 
+    /**
+     * True only when the word has a REAL, curated dictionary entry (with an
+     * accurate IPA). Returns false when getIPA() would fall back to the rough
+     * _estimateIPA() heuristic — the caller can then fetch a correct IPA from AI.
+     */
+    hasRealEntry(word) {
+        if (!word) return false;
+        const cleanWord = word.trim().toLowerCase().replace(/^[^\w]+|[^\w]+$/g, '');
+        if (this.dict[cleanWord]) return true;
+        const withHyphens = word.trim().toLowerCase();
+        return !!this.dict[withHyphens];
+    }
+
     getPOS(word, sentence = '') {
         if (!word) return 'n.';
         const clean = word.trim().toLowerCase().replace(/^[^\w]+|[^\w]+$/g, '');

@@ -58,6 +58,12 @@ class LinguaApp {
         this.matchModeActive = false;
         this._matchPinnedKey = null;  // English key pinned by a click; cleared on outside click
 
+        // Accurate IPA overrides fetched from AI for words NOT in the curated offline
+        // dictionary (whose dictionaryDB.getIPA would be a wrong estimate). Keyed by
+        // lowercased word/phrase → "/ipa/". Shared across the whole app so every vocab
+        // row + popup shows the correct pronunciation.
+        this._ipaOverrides = new Map();
+
         this._bindElements();
         this._bindEvents();
         this._initResizer();
@@ -167,6 +173,7 @@ class LinguaApp {
             <div class="lookup-popup-meaning" id="lookupPopupMeaning">
                 <span class="lookup-popup-spinner"></span> Đang tra cứu...
             </div>
+            <div class="lookup-popup-breakdown" id="lookupPopupBreakdown" style="display:none;"></div>
             <div class="lookup-popup-example-block" id="lookupPopupExampleBlock" style="display:none;">
                 <div class="lookup-popup-example-label">💡 Ví dụ minh hoạ</div>
                 <div class="lookup-popup-example" id="lookupPopupExample">"..."</div>
@@ -371,6 +378,79 @@ class LinguaApp {
      * once available (if an API key is configured). Debounced/guarded so a fast-moving
      * mouse never causes an older lookup to clobber a newer one.
      */
+    /**
+     * Expands a short part-of-speech tag ("adj.", "n", "v.") into a clear,
+     * user-facing label like "adjective (adj)", "noun (n)", "verb (v)".
+     * Falls back to the raw tag if unknown.
+     */
+    _expandPos(pos) {
+        if (!pos) return '';
+        let p = String(pos).trim().toLowerCase().replace(/[\[\]]/g, '').replace(/\.+$/, '');
+        const MAP = {
+            'n': ['noun', 'n'],
+            'noun': ['noun', 'n'],
+            'v': ['verb', 'v'],
+            'verb': ['verb', 'v'],
+            'adj': ['adjective', 'adj'],
+            'adjective': ['adjective', 'adj'],
+            'adv': ['adverb', 'adv'],
+            'adverb': ['adverb', 'adv'],
+            'prep': ['preposition', 'prep'],
+            'preposition': ['preposition', 'prep'],
+            'conj': ['conjunction', 'conj'],
+            'conjunction': ['conjunction', 'conj'],
+            'pron': ['pronoun', 'pron'],
+            'pronoun': ['pronoun', 'pron'],
+            'interj': ['interjection', 'interj'],
+            'det': ['determiner', 'det'],
+            'aux': ['auxiliary', 'aux'],
+            'art': ['article', 'art'],
+            'num': ['numeral', 'num'],
+            'phr': ['phrase', 'phr'],
+            'phrase': ['phrase', 'phr'],
+            'idiom': ['idiom', 'idiom']
+        };
+        // Handle compound tags like "n. phr." / "v. phr."
+        if (/phr/.test(p) && p !== 'phr' && p !== 'phrase') {
+            const head = p.replace(/\s*phr\.?.*$/, '').trim();
+            const base = MAP[head];
+            if (base) return `${base[0]} phrase (${base[1]} phr)`;
+            return 'phrase (phr)';
+        }
+        const hit = MAP[p];
+        if (hit) return `${hit[0]} (${hit[1]})`;
+        return pos.replace(/[\[\]]/g, '');
+    }
+
+    /**
+     * HTML-escapes a sentence and wraps the first occurrence of `term` (or, for a
+     * VI meaning, its first comma-separated variant) in a highlight span so the
+     * looked-up word/phrase stands out inside its example sentence.
+     */
+    _highlightTermInSentence(sentence, term) {
+        const safeSentence = this._escapeHTML(sentence || '');
+        if (!term) return safeSentence;
+
+        // A VI meaning may be "sự biến đổi, sự chuyển đổi" — try each variant,
+        // longest first, so we match the most specific phrase available.
+        const variants = String(term)
+            .split(/[,;/]/)
+            .map(s => s.trim())
+            .filter(s => s.length >= 2)
+            .sort((a, b) => b.length - a.length);
+        if (variants.length === 0) variants.push(String(term).trim());
+
+        for (const v of variants) {
+            const safeTerm = this._escapeHTML(v);
+            const escapedForRegex = safeTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const re = new RegExp(escapedForRegex, 'i');
+            if (re.test(safeSentence)) {
+                return safeSentence.replace(re, (m) => `<span class="lookup-popup-hl">${m}</span>`);
+            }
+        }
+        return safeSentence;
+    }
+
     async _showLookupFor(word, sentence, rect) {
         this._lookupHoverWord = word;
         const mySeq = ++this._lookupRequestSeq;
@@ -382,52 +462,87 @@ class LinguaApp {
         const ipaEl = document.getElementById('lookupPopupIpa');
         const posEl = document.getElementById('lookupPopupPos');
         const meaningEl = document.getElementById('lookupPopupMeaning');
+        const breakdownEl = document.getElementById('lookupPopupBreakdown');
         const exampleBlockEl = document.getElementById('lookupPopupExampleBlock');
         const exampleEl = document.getElementById('lookupPopupExample');
         const exampleViEl = document.getElementById('lookupPopupExampleVi');
         const structuresWrapEl = document.getElementById('lookupPopupStructures');
         const structuresListEl = document.getElementById('lookupPopupStructuresList');
 
-        // Instant offline baseline (dictionary or heuristic IPA estimate)
+        const isPhrase = (word || '').trim().includes(' ');
+
         const dict = window.dictionaryDB;
         wordEl.textContent = word;
-        ipaEl.textContent = dict ? dict.getIPA(word) : '/.../';
-        const initialPos = dict ? dict.getPOS(word, sentence) : 'n.';
-        posEl.textContent = initialPos ? (initialPos.startsWith('[') ? initialPos : `[${initialPos}]`) : '[n.]';
+        // Show an accurate IPA immediately when we have one (curated dict or a
+        // previously fetched AI override); otherwise blank until lookupWord resolves,
+        // so we never flash a wrong estimated pronunciation.
+        ipaEl.textContent = this._accurateIPA(word);
+        const initialPos = isPhrase ? 'phr.' : (dict ? dict.getPOS(word, sentence) : 'n.');
+        posEl.textContent = this._expandPos(initialPos) || 'noun (n)';
         const offlineMeaning = dict ? dict.getMeaning(word) : null;
         meaningEl.innerHTML = offlineMeaning
             ? this._escapeHTML(offlineMeaning)
             : `<span class="lookup-popup-spinner"></span> Đang tra cứu...`;
-        // Hide example + structures until the AI (or fallback) returns data
         exampleBlockEl.style.display = 'none';
         exampleEl.textContent = '';
         exampleViEl.textContent = '';
         structuresWrapEl.style.display = 'none';
         structuresListEl.innerHTML = '';
+        breakdownEl.style.display = 'none';
+        breakdownEl.innerHTML = '';
 
         try {
             const result = await this.translator.lookupWord(word, sentence);
-            if (mySeq !== this._lookupRequestSeq) return; // a newer hover superseded this request
+            if (mySeq !== this._lookupRequestSeq) return;
             if (!result) return;
 
             wordEl.textContent = result.word || word;
             ipaEl.textContent = result.ipa || ipaEl.textContent;
             const resPos = result.pos || initialPos;
-            posEl.textContent = resPos.startsWith('[') ? resPos : `[${resPos}]`;
+            posEl.textContent = this._expandPos(resPos) || 'noun (n)';
             meaningEl.textContent = result.meaning || 'Không tìm thấy nghĩa phù hợp';
 
-            // Show the example sentence block only when we have a real example
-            // (never the original source sentence — by design, per user request).
+            // Per-word breakdown (only meaningful for multi-word phrases). Each row
+            // flows on one line: word  /ipa/  full-pos  meaning — matching the
+            // requested Oxford-style layout.
+            const breakdown = Array.isArray(result.breakdown) ? result.breakdown : [];
+            const showBreakdown = breakdown.length > 1; // single words don't need a sub-list
+            if (showBreakdown) {
+                breakdownEl.innerHTML = breakdown.map((b) => {
+                    const w = (b.word || '').toLowerCase();
+                    const p = this._expandPos(b.pos || '');
+                    const ip = (b.ipa || '').trim();
+                    const m = (b.meaning || '').trim();
+                    return `
+                        <div class="lookup-popup-breakdown-row">
+                            <span class="lookup-popup-bd-word">${this._escapeHTML(w)}</span>
+                            <span class="lookup-popup-bd-ipa">${this._escapeHTML(ip)}</span>
+                            <span class="lookup-popup-bd-pos">${this._escapeHTML(p)}</span>
+                            <span class="lookup-popup-bd-meaning">${this._escapeHTML(m)}</span>
+                        </div>
+                    `;
+                }).join('');
+                breakdownEl.style.display = 'block';
+            } else {
+                breakdownEl.style.display = 'none';
+                breakdownEl.innerHTML = '';
+            }
+
             if (result.example && result.example.trim() && result.example.trim().toLowerCase() !== word.toLowerCase()) {
-                exampleEl.textContent = `"${result.example.trim()}"`;
-                exampleViEl.textContent = result.exampleVi && result.exampleVi.trim()
-                    ? `→ ${result.exampleVi.trim()}`
-                    : '';
+                // No surrounding quotes — plain sentence. Highlight the looked-up
+                // word/phrase inside both the English example and its VI translation.
+                const enWord = result.word || word;
+                exampleEl.innerHTML = this._highlightTermInSentence(result.example.trim(), enWord);
+                const viText = result.exampleVi && result.exampleVi.trim() ? result.exampleVi.trim() : '';
+                if (viText) {
+                    const viTerm = (result.meaning || '').trim();
+                    exampleViEl.innerHTML = `→ ${this._highlightTermInSentence(viText, viTerm)}`;
+                } else {
+                    exampleViEl.textContent = '';
+                }
                 exampleBlockEl.style.display = 'block';
             }
 
-            // Render the 2-3 common structures, dropping any whose example
-            // accidentally echoes the source sentence.
             const structures = Array.isArray(result.structures) ? result.structures : [];
             const srcLower = (sentence || '').trim().toLowerCase();
             const isEcho = (ex) => {
@@ -469,7 +584,6 @@ class LinguaApp {
                 structuresWrapEl.style.display = 'block';
             }
 
-            // Popup content length may have changed → reposition to stay in-viewport
             this._positionLookupPopup(rect);
         } catch (err) {
             if (mySeq !== this._lookupRequestSeq) return;
@@ -2845,6 +2959,117 @@ class LinguaApp {
     }
 
     /**
+     * Returns the MOST ACCURATE IPA for a word/phrase:
+     *   1. AI override (fetched for non-dictionary words) — always correct.
+     *   2. Curated dictionary entry — correct.
+     *   3. '' (empty) when only a rough estimate would be available — we prefer
+     *      showing nothing over a WRONG phonetic transcription, and an async AI
+     *      pass (_correctIpaForSession) fills it in shortly after.
+     */
+    _accurateIPA(word) {
+        const key = (word || '').toLowerCase().trim();
+        if (!key) return '';
+        if (this._ipaOverrides && this._ipaOverrides.has(key)) return this._ipaOverrides.get(key);
+        const dict = window.dictionaryDB;
+        if (dict && dict.hasRealEntry && dict.hasRealEntry(key)) return dict.getIPA(key) || '';
+        return '';
+    }
+
+    /**
+     * Fires a single AI IPA request for `word` when we don't have a verified IPA
+     * yet. Idempotent — words already in `_ipaOverrides` or the curated dict are
+     * skipped. When the AI responds, the override is stored and the active vocab
+     * accordion is re-rendered so rows flip from `/.../` to the real IPA.
+     */
+    _maybeFetchIpaForWord(word) {
+        const key = (word || '').toLowerCase().trim();
+        if (!key) return;
+        if (this._ipaOverrides && this._ipaOverrides.has(key)) return;
+        const dict = window.dictionaryDB;
+        if (dict && dict.hasRealEntry && dict.hasRealEntry(key)) return;
+        if (!this.translator || typeof this.translator._fetchIpaForWords !== 'function') return;
+        if (this._inflightIpaFetches && this._inflightIpaFetches.has(key)) return;
+        if (!this._inflightIpaFetches) this._inflightIpaFetches = new Set();
+        this._inflightIpaFetches.add(key);
+        this.translator._fetchIpaForWords([key])
+            .then((map) => {
+                const ipa = (map && map[key] ? map[key] : '').trim();
+                if (ipa) {
+                    this._ipaOverrides.set(key, ipa);
+                    // Stamp onto every matching vocab row across sessions.
+                    (this.vocabSessions || []).forEach((s) => {
+                        (s.vocabList || []).forEach((v) => {
+                            const vKey = (v.original || v.term || v.text || v.word || '').toLowerCase().trim();
+                            if (vKey === key) v.ipa = ipa;
+                        });
+                    });
+                    this.renderVocabAccordion();
+                }
+            })
+            .catch(() => { /* swallow — leave row as /.../ */ })
+            .finally(() => this._inflightIpaFetches.delete(key));
+    }
+
+    /**
+     * Collects every word/phrase in the session (vocabList + highlights) that lacks
+     * an accurate IPA (not in the curated dictionary and not already overridden),
+     * fetches correct IPA from AI in one batched call, stores it in _ipaOverrides
+     * and on the vocab rows, then re-renders. Safe to call repeatedly — already
+     * resolved words are skipped, so it makes at most one AI call per new word.
+     */
+    async _correctIpaForSession(session) {
+        if (!session || !this.translator || typeof this.translator._fetchIpaForWords !== 'function') return;
+        const dict = window.dictionaryDB;
+
+        // Words that already carry a trustworthy IPA on their vocab row (curated dict
+        // or AI translate/scan). We never store estimates anymore, so a non-empty ipa
+        // here is reliable — no need to re-fetch it.
+        const alreadyGood = new Set();
+        (session.vocabList || []).forEach(v => {
+            const key = (v.original || v.term || v.text || v.word || '').toLowerCase().trim();
+            if (key && v.ipa && v.ipa.trim() && !/\.\.\./.test(v.ipa)) alreadyGood.add(key);
+        });
+
+        const candidates = new Set();
+        const consider = (w) => {
+            const key = (w || '').toLowerCase().trim();
+            if (!key) return;
+            if (this._ipaOverrides.has(key)) return;
+            if (alreadyGood.has(key)) return;              // already has a good IPA
+            if (dict && dict.hasRealEntry && dict.hasRealEntry(key)) return; // curated → already correct
+            candidates.add(key);
+        };
+        (session.vocabList || []).forEach(v => consider(v.original || v.term || v.text || v.word));
+        (session.highlights || []).forEach(h => consider(h.text));
+
+        if (candidates.size === 0) return;
+
+        let map = {};
+        try {
+            map = await this.translator._fetchIpaForWords(Array.from(candidates)) || {};
+        } catch (e) {
+            return; // AI unavailable — leave IPA blank rather than wrong
+        }
+
+        let changed = false;
+        Object.keys(map).forEach((k) => {
+            const key = k.toLowerCase().trim();
+            const ipa = (map[k] || '').trim();
+            if (!ipa) return;
+            this._ipaOverrides.set(key, ipa);
+            changed = true;
+            // Also stamp the accurate IPA onto any matching vocab row.
+            (session.vocabList || []).forEach(v => {
+                if ((v.original || '').toLowerCase().trim() === key) v.ipa = ipa;
+            });
+        });
+
+        if (changed && this.activeSessionId === session.id) {
+            this.renderVocabAccordion();
+        }
+    }
+
+    /**
      * Merge highlighted terms with their AI/dictionary vocab data into one flat
      * array of display rows, used to build each accordion document's table.
      * Deduplicates so each distinct word/phrase appears as exactly ONE row,
@@ -2868,7 +3093,7 @@ class LinguaApp {
             catch (e) { return ''; }
         };
         const safeIPA = (w) => {
-            try { return (window.dictionaryDB && window.dictionaryDB.getIPA) ? window.dictionaryDB.getIPA(w) : ''; }
+            try { return this._accurateIPA(w); }
             catch (e) { return ''; }
         };
         const safeMeaning = (w) => {
@@ -2879,13 +3104,25 @@ class LinguaApp {
         const normaliseVocab = (v) => {
             const word = (v.original || v.term || v.text || v.word || v.english || '').toString().trim();
             if (!word) return null;
+            // IMPORTANT: never trust a stored v.ipa as fallback. Earlier passes may
+            // have written a wrong phonetic estimate (e.g. `/perpetual interrupʃən/`)
+            // for words not in the curated dictionary and not yet fetched from AI.
+            // `_accurateIPA` only returns verified (dict + AI override) IPA, so we
+            // use it as the SINGLE source of truth. While the AI IPA is being fetched,
+            // we render `/.../` so the user knows it's loading rather than seeing a lie.
+            let ipa = this._accurateIPA(word);
+            if (!ipa) {
+                ipa = '/.../';
+                // Kick off a fetch for this specific row so it gets filled ASAP.
+                this._maybeFetchIpaForWord(word);
+            }
             return {
                 word,
                 color: v.color || '#fff3a8',
                 category: v.category || (word.includes(' ')
                     ? "Cụm từ kết hợp (Collocation)"
                     : (safePOS(word) || 'vocabulary')),
-                ipa: v.ipa || safeIPA(word),
+                ipa,
                 contextMeaning: v.contextMeaning || v.translatedTermInVN ||
                     v.meaning || v.meaningVi || safeMeaning(word),
                 example: v.example || v.exampleEn || ''
@@ -2907,6 +3144,28 @@ class LinguaApp {
                 seen.add(key);
                 out.push({ ...item, index: out.length + 1 });
             });
+
+            // MERGE any freshly-highlighted words that aren't in the AI vocabList yet
+            // so they show INSTANTLY (with a placeholder meaning). _autoFillMeaningsForSession
+            // fills the meaning shortly after; this avoids the "new word missing / old
+            // words jump" flicker. Appended at the end so existing rows never move.
+            uniqueHighlights.forEach((h) => {
+                const word = (h.text || '').trim();
+                if (!word) return;
+                const key = word.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                out.push({
+                    index: out.length + 1,
+                    word,
+                    color: h.color || '#fff3a8',
+                    category: word.includes(' ') ? "Cụm từ kết hợp (Collocation)" : (safePOS(word) || 'vocabulary'),
+                    ipa: safeIPA(word),
+                    contextMeaning: safeMeaning(word) || "...",
+                    example: ""
+                });
+            });
+
             try {
                 console.log('[DEBUG _computeDisplayItems] RETURN from vocabList path, out.length=', out.length, 'first=', out[0] || null);
             } catch (e) {}
@@ -2920,12 +3179,19 @@ class LinguaApp {
                 return w && (w === t || t.includes(w) || w.includes(t));
             });
             const word = h.text || '';
+            // Same rule as above: never display a stored estimate. Show /.../ and
+            // request an AI IPA so the row becomes correct shortly.
+            let ipa = this._accurateIPA(word);
+            if (!ipa) {
+                ipa = '/.../';
+                this._maybeFetchIpaForWord(word);
+            }
             return {
                 index: idx + 1,
                 word,
                 color: h.color || '#fff3a8',
                 category: matchedVocab?.category || (word.includes(' ') ? "Cụm từ kết hợp (Collocation)" : safePOS(word)),
-                ipa: matchedVocab?.ipa || safeIPA(word),
+                ipa,
                 contextMeaning: matchedVocab?.contextMeaning || matchedVocab?.translatedTermInVN || safeMeaning(word) || "...",
                 example: matchedVocab?.example || matchedVocab?.exampleEn || ""
             };
@@ -2987,6 +3253,10 @@ class LinguaApp {
         this.activeSessionId = session.id;
 
         this.renderVocabAccordion();
+
+        // Fetch ACCURATE IPA from AI for any words not in the curated dictionary so
+        // the table never shows a wrong estimated pronunciation.
+        this._correctIpaForSession(session).catch(() => {});
     }
 
     toggleVocabSession(sessionId) {
@@ -3014,8 +3284,86 @@ class LinguaApp {
         if (!this.activeSessionId) return;
         const session = this.vocabSessions.find(s => s.id === this.activeSessionId);
         if (!session) return;
+        const previousHighs = session.highlights || [];
         session.highlights = items;
+
+        // Detect truly NEW terms (added since the last AI analysis pass).
+        const knownKeys = new Set(
+            (session.vocabList || []).map(v => (v.original || '').toLowerCase().trim()).filter(Boolean)
+        );
+        const cutoff = session.lastAnalyzedAt || 0;
+        const prevKeys = new Set(previousHighs.map(h => (h.text || '').toLowerCase().trim()));
+        const newKeys = new Set();
+        items.forEach(h => {
+            const k = (h.text || '').toLowerCase().trim();
+            if (!k) return;
+            if (knownKeys.has(k)) return;
+            if (prevKeys.has(k)) return;
+            if ((h.addedAt || 0) <= cutoff) return;
+            newKeys.add(k);
+        });
+
         this.renderVocabAccordion();
+
+        // Auto-fetch meanings for new terms in the background (dict first, free API fallback).
+        if (newKeys.size > 0) {
+            this._autoFillMeaningsForSession(session, Array.from(newKeys));
+        }
+
+        // Always correct IPA for any non-dictionary words (covers terms that already
+        // had a meaning and thus skipped _autoFillMeaningsForSession).
+        this._correctIpaForSession(session).catch(() => {});
+    }
+
+    async _autoFillMeaningsForSession(session, newKeys) {
+        if (!session || !this.translator || newKeys.length === 0) return;
+
+        const colorByWord = new Map();
+        (session.highlights || []).forEach(h => {
+            const k = (h.text || '').toLowerCase().trim();
+            if (!k || colorByWord.has(k)) return;
+            colorByWord.set(k, h);
+        });
+
+        for (const key of newKeys) {
+            const word = key;
+            const dictHit = (window.dictionaryDB && window.dictionaryDB.getMeaning) ? window.dictionaryDB.getMeaning(word) : '';
+            if (dictHit && dictHit.trim() && dictHit.trim() !== word) continue;
+
+            try {
+                const meaning = await this.translator._translateSentenceFree(word);
+                if (!meaning || meaning === word) continue;
+                if (!session.vocabList) session.vocabList = [];
+                const existingIdx = session.vocabList.findIndex(v =>
+                    (v.original || '').toLowerCase().trim() === key
+                );
+                const h = colorByWord.get(key) || {};
+                const entry = {
+                    original: word,
+                    color: h.color || '#fff3a8',
+                    category: word.includes(' ') ? 'Cụm từ kết hợp (Collocation)' : 'vocabulary',
+                    // Only store an IPA we KNOW is accurate; otherwise leave blank and
+                    // let _correctIpaForSession fill it from AI (avoids wrong estimates).
+                    ipa: this._accurateIPA(word),
+                    contextMeaning: meaning,
+                    translatedTermInVN: meaning,
+                    example: '',
+                    isAutoResolved: true,
+                    resolvedAt: Date.now()
+                };
+                if (existingIdx >= 0) {
+                    session.vocabList[existingIdx] = { ...session.vocabList[existingIdx], ...entry };
+                } else {
+                    session.vocabList.push(entry);
+                }
+                if (this.activeSessionId === session.id) this.renderVocabAccordion();
+            } catch (e) {
+                // Swallow individual failures; user can hit "Cập nhật nghĩa" to retry.
+            }
+        }
+
+        // Fetch ACCURATE IPA from AI for every word not in the curated dictionary.
+        this._correctIpaForSession(session).catch(() => {});
     }
 
     /**
@@ -3179,6 +3527,7 @@ class LinguaApp {
             session.vocabList = freshVocabData.map(v => existingByKey.get(v.original.toLowerCase().trim()) || v);
             if (this.activeSessionId === sessionId) this.currentVocabData = session.vocabList;
             this.renderVocabAccordion();
+            await this._correctIpaForSession(session);
         } catch (e) {
             console.warn('Refresh vocab session error:', e);
             alert('Không thể cập nhật nghĩa cho một số từ mới. Vui lòng thử lại.');
@@ -3484,7 +3833,9 @@ class LinguaApp {
         for (const h of uniqueHighlights) {
             const word = h.text;
             const dictMeaning = window.dictionaryDB ? window.dictionaryDB.getMeaning(word) : null;
-            const ipa = window.dictionaryDB ? window.dictionaryDB.getIPA(word) : "/.../";
+            // Only keep an IPA we KNOW is accurate (curated dict or AI override);
+            // otherwise blank, to be filled by _correctIpaForSession from AI.
+            const ipa = this._accurateIPA(word);
             const pos = window.dictionaryDB ? window.dictionaryDB.getPOS(word) : "n.";
 
             let category = "Từ vựng";

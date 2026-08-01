@@ -870,100 +870,168 @@ html[data-theme="midnight"] mark.highlight-mark.match-active {
 
 .lookup-popup {
     position: absolute; z-index: 1200;
-    width: 300px; max-width: 90vw;
-    padding: 14px 16px;
+    width: 340px; max-width: 92vw;
+    max-height: 75vh; overflow-y: auto;
+    padding: 12px 14px;
     background: var(--bg-card-solid);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
     animation: fadeIn 0.12s ease-out;
     pointer-events: auto;
+    font-size: 13px;
+    line-height: 1.5;
 }
 .lookup-popup-header {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 8px; margin-bottom: 6px;
+    gap: 8px; margin-bottom: 4px;
 }
 .lookup-popup-word {
     font-family: var(--font-heading);
-    font-size: 17px; font-weight: 800;
+    font-size: 18px; font-weight: 800;
     color: var(--primary-dark);
     text-transform: lowercase;
+    letter-spacing: -0.2px;
 }
 .lookup-popup-audio-btn {
     background: var(--primary-light); border: 1px solid var(--border-color);
     color: var(--primary); border-radius: 50%;
-    width: 30px; height: 30px; flex-shrink: 0;
+    width: 28px; height: 28px; flex-shrink: 0;
     display: inline-flex; align-items: center; justify-content: center;
-    cursor: pointer; font-size: 14px; transition: transform 0.15s ease, background 0.15s ease;
+    cursor: pointer; font-size: 13px; transition: transform 0.15s ease, background 0.15s ease;
 }
 .lookup-popup-audio-btn:hover { transform: scale(1.12); background: var(--primary); color: #fff; }
 .lookup-popup-row {
-    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+    display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px;
+    flex-wrap: wrap;
 }
 .lookup-popup-ipa {
     font-family: 'Lora', Georgia, serif; font-style: italic;
-    font-size: 13px; color: var(--accent);
+    font-size: 15px; font-weight: 600; color: var(--accent);
+    letter-spacing: 0.2px;
 }
 .lookup-popup-pos {
-    font-size: 11px; font-weight: 700; color: var(--text-muted);
-    background: var(--bg-strip); border-radius: 8px; padding: 1px 8px;
+    font-size: 13.5px; font-weight: 800; color: #fff;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    border: 1px solid var(--primary-dark);
+    border-radius: 6px; padding: 3px 11px;
+    letter-spacing: 0.3px;
+    text-transform: lowercase;
+    white-space: nowrap;
 }
 .lookup-popup-meaning {
     font-size: 14.5px; font-weight: 700; color: var(--text-main);
-    line-height: 1.5; margin-bottom: 6px;
+    line-height: 1.45; margin-bottom: 6px;
 }
+
+/* Per-word breakdown — shown when the lookup is a multi-word phrase (or even
+   single word, as a single row showing the IPA + POS + meaning of the word). */
+.lookup-popup-breakdown {
+    display: flex; flex-direction: column; gap: 4px;
+    margin: 6px 0;
+    padding: 8px 10px;
+    background: var(--bg-strip);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+.lookup-popup-breakdown-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    align-items: baseline;
+    font-size: 12.5px;
+    line-height: 1.5;
+    padding: 3px 0;
+    border-bottom: 1px dotted var(--border-color);
+}
+.lookup-popup-breakdown-row:last-child { border-bottom: none; }
+.lookup-popup-bd-word {
+    font-weight: 800;
+    font-family: 'Lora', Georgia, serif;
+    color: var(--primary-dark);
+    font-size: 13.5px;
+}
+.lookup-popup-bd-ipa {
+    font-family: 'Lora', Georgia, serif;
+    font-style: italic;
+    color: var(--accent);
+    font-size: 12.5px;
+}
+.lookup-popup-bd-pos {
+    font-size: 11px; font-weight: 800;
+    color: var(--primary-dark);
+    background: var(--primary-light);
+    border: 1px solid var(--primary);
+    border-radius: 4px;
+    padding: 1px 6px;
+    white-space: nowrap;
+}
+.lookup-popup-bd-meaning {
+    color: var(--text-main);
+    font-weight: 600;
+    font-size: 12.5px;
+    flex-basis: 100%;
+    padding-left: 2px;
+}
+
 .lookup-popup-example-block {
-    margin-top: 8px;
-    padding-top: 8px;
+    margin-top: 6px;
+    padding-top: 6px;
     border-top: 1px dashed var(--border-color);
 }
 .lookup-popup-example-label {
-    font-size: 11px; font-weight: 800; letter-spacing: 0.3px;
+    font-size: 10.5px; font-weight: 800; letter-spacing: 0.4px;
     color: var(--text-muted); text-transform: uppercase;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
 }
 .lookup-popup-example {
     font-size: 12.5px; color: var(--text-main); font-style: italic;
-    line-height: 1.55;
+    line-height: 1.5;
 }
 .lookup-popup-example-vi {
-    font-size: 12.5px; color: var(--accent-3); line-height: 1.55; margin-top: 2px;
+    font-size: 12.5px; color: var(--accent-3); line-height: 1.5; margin-top: 2px;
+}
+.lookup-popup-hl {
+    background: linear-gradient(180deg, transparent 55%, #fde68a 55%);
+    font-weight: 800; font-style: normal;
+    color: var(--primary-dark);
+    padding: 0 1px; border-radius: 2px;
 }
 .lookup-popup-structures {
-    margin-top: 10px;
-    padding-top: 10px;
+    margin-top: 8px;
+    padding-top: 8px;
     border-top: 1px solid var(--border-color);
 }
 .lookup-popup-structures-label {
-    font-size: 11px; font-weight: 800; letter-spacing: 0.3px;
+    font-size: 10.5px; font-weight: 800; letter-spacing: 0.4px;
     color: var(--text-muted); text-transform: uppercase;
-    margin-bottom: 6px;
+    margin-bottom: 5px;
 }
 .lookup-popup-structures-list {
-    display: flex; flex-direction: column; gap: 8px;
+    display: flex; flex-direction: column; gap: 6px;
 }
 .lookup-popup-structure-item {
     background: var(--bg-strip);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 8px 10px;
+    border-radius: 7px;
+    padding: 6px 9px;
 }
 .lookup-popup-structure-name {
     font-family: 'Lora', Georgia, serif;
-    font-size: 13px; font-weight: 800; color: var(--primary-dark);
+    font-size: 12.5px; font-weight: 800; color: var(--primary-dark);
     margin-bottom: 2px;
 }
 .lookup-popup-structure-note {
     font-size: 11.5px; color: var(--text-muted);
-    font-style: italic; line-height: 1.45; margin-bottom: 4px;
+    font-style: italic; line-height: 1.4; margin-bottom: 3px;
 }
 .lookup-popup-structure-example {
-    font-size: 12.5px; color: var(--text-main);
-    font-style: italic; line-height: 1.5;
+    font-size: 12px; color: var(--text-main);
+    font-style: italic; line-height: 1.45;
 }
 .lookup-popup-structure-example-vi {
-    font-size: 12.5px; color: var(--accent-3);
-    line-height: 1.5; margin-top: 2px;
+    font-size: 12px; color: var(--accent-3);
+    line-height: 1.45; margin-top: 1px;
 }
 .lookup-popup-spinner {
     display: inline-block; width: 11px; height: 11px;
@@ -1030,11 +1098,14 @@ mark.highlight-mark:hover, mark:hover {
     filter: brightness(1.04);
 }
 
-/* Dark mode, Cosmos & Midnight themes: High-contrast crisp font on soft pastel background */
+/* Dark mode, Cosmos & Midnight themes: highlighted text keeps the SAME colour as
+   the surrounding normal text (crisp white on these dark themes) — never a
+   different/darker colour. A soft shadow keeps it readable over the pastel tint. */
 html[data-theme="dark"] mark.highlight-mark,
 html[data-theme="cosmos"] mark.highlight-mark,
 html[data-theme="midnight"] mark.highlight-mark {
-    color: #0f172a !important;
+    color: inherit !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
     box-shadow: none !important;
 }
 
@@ -1160,6 +1231,44 @@ html[data-theme="midnight"] mark.highlight-mark {
 .vocab-table tbody tr:last-child td { border-bottom: none; }
 .vocab-table tbody tr:hover { background: var(--primary-light); }
 .word-badge { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text-main); }
+
+/* "MỚI" badge — marks freshly painted (post-AI) vocabulary rows so the user
+   immediately sees what they just added at the top of the table. */
+.vocab-new-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(239, 68, 68, 0.35);
+    animation: vocab-new-badge-pulse 2s ease-in-out infinite;
+}
+@keyframes vocab-new-badge-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+}
+/* Subtle row background tint while a fresh row is waiting for its meaning. */
+.vocab-table tbody tr.vocab-row-is-new td {
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.06), transparent 60%);
+}
+.vocab-table tbody tr.vocab-row-is-new:hover td {
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.12), var(--primary-light) 60%);
+}
+
+/* Inline spinner shown in the "Nghĩa ngữ cảnh" cell while free translation API is in-flight. */
+.vocab-pending-spinner {
+    display: inline-block;
+    width: 11px; height: 11px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--primary-color, #6366f1);
+    border-radius: 50%;
+    animation: vocab-pending-spin 0.8s linear infinite;
+    vertical-align: -2px;
+}
+@keyframes vocab-pending-spin { to { transform: rotate(360deg); } }
 
 /* Category tags ? colour-coded to match highlight palette */
 .category-tag {
@@ -1996,17 +2105,17 @@ html[data-theme="cosmos"] [style*="background: var(--primary-light)"][style*="bo
    browser "use light-mode UA styles for this element only", so inline bg-colors survive. */
 html[data-theme="dark"] mark.highlight-mark,
 html[data-theme="cosmos"] mark.highlight-mark {
-    color-scheme: light;               /* prevents browser from FORCING light UA styles on dark bg */
-    color: #2c2218 !important;         /* dark espresso text on pastel backgrounds for strong contrast */
-    /* NO brightness/saturate filter — JS already sets soft pastel inline.
-       We instead keep a uniform gentle opacity so the marks look "tinted" not "stamped". */
-    opacity: 0.78;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    /* Keep the looked-up/highlighted word the SAME crisp colour as normal text.
+       Full opacity so the text never looks dimmed; the pastel tint stays behind it. */
+    color: inherit !important;
+    opacity: 1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+    box-shadow: none !important;
 }
 html[data-theme="dark"] mark.highlight-mark:hover,
 html[data-theme="cosmos"] mark.highlight-mark:hover {
-    opacity: 0.95;
-    color: #1a1510 !important;
+    filter: brightness(1.08);
+    color: inherit !important;
 }
 
 /* Section title decorative bar adapts to primary colour */
