@@ -66,11 +66,13 @@ class PDFExporter {
 
         if (modalEl && containerEl) {
             containerEl.innerHTML = `
-                <div class="no-print" style="margin-bottom: 16px; padding: 12px 16px; background: #fffbe6; border: 1.5px solid #ffe58f; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-family: 'Plus Jakarta Sans', sans-serif;">
-                    <div style="font-size: 13.5px; font-weight: 800; color: #8c5e3c;">🎨 Tùy Chỉnh Phông Chữ &amp; In Nhanh:</div>
+                <div class="no-print" style="margin-bottom: 16px; padding: 14px 18px; background: linear-gradient(135deg, #fffbe6 0%, #fef3c7 100%); border: 1.5px solid #fde68a; border-radius: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-family: 'Plus Jakarta Sans', sans-serif; box-shadow: 0 4px 14px rgba(217,119,6,0.08);">
+                    <div style="font-size: 14px; font-weight: 800; color: #8c5e3c; display: flex; align-items: center; gap: 6px;">
+                        <span>🎨 Tùy Chỉnh Phông Chữ &amp; In Nhanh</span>
+                    </div>
                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                        <span style="font-size: 12px; font-weight: 700; color: #8c5e3c;">🔤 Phông chữ:</span>
-                        <select onchange="document.querySelector('.lc-pdf-root').style.fontFamily = this.value" style="padding: 5px 10px; border-radius: 6px; border: 1px solid #cbd5e1; font-weight: 700; font-size: 12.5px; outline: none; background: #fff;">
+                        <span style="font-size: 12.5px; font-weight: 700; color: #8c5e3c;">🔤 Phông chữ:</span>
+                        <select onchange="document.querySelector('.lc-pdf-root').style.fontFamily = this.value" style="padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-weight: 700; font-size: 12.5px; outline: none; background: #ffffff; color: #1e293b; cursor: pointer;">
                             <option value="'Lora', Georgia, serif" selected>Lora (Serif thanh lịch)</option>
                             <option value="'Plus Jakarta Sans', sans-serif">Plus Jakarta Sans</option>
                             <option value="'Merriweather', serif">Merriweather</option>
@@ -78,18 +80,29 @@ class PDFExporter {
                             <option value="'Literata', serif">Literata</option>
                             <option value="'Playfair Display', serif">Playfair Display</option>
                         </select>
-                        <button onclick="window.print()" style="padding: 7px 16px; background: #8c5e3c; color: #fff; border: none; border-radius: 6px; font-weight: 800; font-size: 13px; cursor: pointer; box-shadow: 0 2px 8px rgba(140,94,60,0.25);">🖨️ In / Lưu PDF</button>
+                        <button onclick="window.print()" class="btn-pdf-animated btn-pdf-print" style="padding: 8px 18px; font-size: 13px;">
+                            <span>🖨️ In / Lưu PDF</span>
+                        </button>
                     </div>
                 </div>
-                <div style="background: #ffffff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 4px 14px rgba(0,0,0,0.05);">
+                <div style="background: #ffffff; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(0,0,0,0.06);">
                     ${innerHTML}
                 </div>
             `;
             modalEl.style.display = 'flex';
+            modalEl.classList.add('active');
+
+            const closeModal = () => {
+                modalEl.classList.remove('active');
+                modalEl.style.display = 'none';
+            };
+
             if (closeBtn) {
-                closeBtn.onclick = () => { modalEl.style.display = 'none'; };
+                closeBtn.onclick = closeModal;
             }
-            modalEl.onclick = (e) => { if (e.target === modalEl) modalEl.style.display = 'none'; };
+            modalEl.onclick = (e) => {
+                if (e.target === modalEl) closeModal();
+            };
         }
 
         // 2. Open UTF-8 Blob URL Tab
@@ -98,11 +111,11 @@ class PDFExporter {
             const blob = new Blob([fullHTML], { type: 'text/html;charset=utf-8' });
             const blobURL = URL.createObjectURL(blob);
             win = window.open(blobURL, '_blank');
-        } catch (e) {}
+        } catch (e) { }
 
         if (win) {
             setTimeout(() => {
-                try { win.focus(); } catch (e) {}
+                try { win.focus(); } catch (e) { }
             }, 300);
         }
 
@@ -123,11 +136,59 @@ class PDFExporter {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
     <style>
+        .btn-pdf-animated {
+            position: relative !important;
+            overflow: hidden !important;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            cursor: pointer !important;
+            font-weight: 700 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 8px !important;
+            border-radius: 999px !important;
+            font-family: 'Plus Jakarta Sans', sans-serif !important;
+        }
+        .btn-pdf-animated::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -150%;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.35) 50%, transparent 100%);
+            transform: skewX(-20deg);
+            transition: left 0.6s ease;
+            pointer-events: none;
+        }
+        .btn-pdf-animated:hover::before { left: 150%; }
+        .btn-pdf-animated:hover { transform: translateY(-2px) scale(1.02) !important; filter: brightness(1.05) !important; }
+        .btn-pdf-animated:active { transform: translateY(1px) scale(0.97) !important; }
+
+        .btn-pdf-primary {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #1e40af 100%) !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.25) !important;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
+            padding: 9px 20px !important;
+            font-size: 13px !important;
+        }
+        .btn-pdf-primary:hover { box-shadow: 0 6px 20px rgba(37, 99, 235, 0.48) !important; }
+
+        .btn-pdf-print {
+            background: linear-gradient(135deg, #8c5e3c 0%, #72472b 50%, #5c3a21 100%) !important;
+            color: #ffffff !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            box-shadow: 0 4px 14px rgba(140, 94, 60, 0.3) !important;
+            padding: 9px 20px !important;
+            font-size: 13px !important;
+        }
+        .btn-pdf-print:hover { box-shadow: 0 6px 20px rgba(140, 94, 60, 0.45) !important; }
+
         @media print {
             body { padding: 0 !important; margin: 0 !important; background: #ffffff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
             .no-print { display: none !important; }
             .lc-pdf-wrapper { padding: 0 !important; box-shadow: none !important; border-radius: 0 !important; max-width: 100% !important; border: none !important; }
             @page { margin: 12mm; }
+            tr, .lc-reading-p-row, .lc-table-row { page-break-inside: avoid !important; break-inside: avoid !important; }
             mark {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
@@ -145,11 +206,11 @@ class PDFExporter {
                 <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Thay đổi kiểu chữ, cỡ chữ và giãn dòng cho vừa mắt trước khi In / Lưu.</div>
             </div>
             <div style="display: flex; gap: 10px;">
-                <button onclick="downloadDirectly()" style="padding: 9px 18px; background: #2563eb; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; box-shadow: 0 3px 10px rgba(37,99,235,0.25); display: flex; align-items: center; gap: 6px;">
-                    ⬇️ Tải PDF Về Máy
+                <button id="btnDirectDownload" onclick="downloadDirectly()" class="btn-pdf-animated btn-pdf-primary">
+                    <span>⬇️ Tải PDF Về Máy</span>
                 </button>
-                <button onclick="window.print()" style="padding: 9px 18px; background: #8c5e3c; color: #ffffff; border: none; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 13px; box-shadow: 0 3px 10px rgba(140,94,60,0.25); display: flex; align-items: center; gap: 6px;">
-                    🖨️ In / Lưu PDF
+                <button onclick="window.print()" class="btn-pdf-animated btn-pdf-print">
+                    <span>🖨️ In / Lưu PDF</span>
                 </button>
             </div>
         </div>
@@ -186,9 +247,9 @@ class PDFExporter {
             <div style="display: flex; align-items: center; gap: 6px; background: #ffffff; padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd5e1;">
                 <span style="font-size: 12px; font-weight: 700; color: #8c5e3c;">↕️ Giãn dòng:</span>
                 <select id="pdfLineHeightSelect" onchange="changePDFLineHeight(this.value)" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #94a3b8; font-weight: 700; color: #1e293b; background: #ffffff; cursor: pointer; font-size: 12.5px; outline: none;">
-                    <option value="1.6">1.6 (Gọn gàng)</option>
-                    <option value="2.1" selected>2.1 (Thoáng mắt Rõ ràng)</option>
-                    <option value="2.4">2.4 (Rộng rãi)</option>
+                    <option value="1.5" selected>1.5 (Gọn gàng chuẩn vừa vặn)</option>
+                    <option value="1.8">1.8 (Thoáng mắt)</option>
+                    <option value="2.1">2.1 (Rộng rãi)</option>
                 </select>
             </div>
         </div>
@@ -215,19 +276,47 @@ class PDFExporter {
             var ps = document.querySelectorAll('.lc-reading-p-row td p');
             ps.forEach(function(p) { p.style.lineHeight = lh; });
         }
-        function downloadDirectly() {
-            if (window.html2pdf) {
+        async function downloadDirectly() {
+            var btn = document.getElementById('btnDirectDownload');
+            var origHTML = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span>⌛ Đang khởi tạo PDF...</span>';
+            }
+            try {
+                if (document.fonts && document.fonts.ready) {
+                    await document.fonts.ready;
+                }
+                await new Promise(function(resolve) { setTimeout(resolve, 300); });
+
                 var element = document.getElementById('pdfCaptureTarget');
-                var opt = {
-                    margin: [10, 10, 12, 10],
-                    filename: '${filename}',
-                    image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
-                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-                };
-                window.html2pdf().set(opt).from(element).save();
-            } else {
+                if (window.html2pdf && element) {
+                    var opt = {
+                        margin: [10, 10, 12, 10],
+                        filename: '${filename}',
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: {
+                            scale: 2,
+                            useCORS: true,
+                            allowTaint: true,
+                            backgroundColor: '#ffffff',
+                            scrollX: 0,
+                            scrollY: 0
+                        },
+                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }
+                    };
+                    await window.html2pdf().set(opt).from(element).save();
+                } else {
+                    window.print();
+                }
+            } catch (err) {
+                console.error('[downloadDirectly] HTML2PDF failed, using window.print():', err);
                 window.print();
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = origHTML;
+                }
             }
         }
         ${autoPrint ? "setTimeout(function() { window.print(); }, 800);" : ""}
@@ -300,7 +389,7 @@ class PDFExporter {
         const font = fontFamily || "'Lora', Georgia, serif";
         return `<style>
             @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;700;800&family=Literata:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Roboto:wght@400;500;700&family=Work+Sans:wght@400;600;700&display=swap');
-            .lc-pdf-root { font-family: ${font}; color: #2b231d; font-size: 13.5px; line-height: 2.1; padding: 4px 6px; background: #ffffff; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+            .lc-pdf-root { font-family: ${font}; color: #2b231d; font-size: 13.5px; line-height: 1.5; padding: 4px 6px; background: #ffffff; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
             .lc-pdf-root * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
             .lc-header { position: relative; padding: 10px 0 12px; border-bottom: 2.5px solid #8c5e3c; margin-bottom: 16px; }
             .lc-brandbar { position: absolute; top: -4px; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #8c5e3c, #c08552); }
@@ -316,19 +405,21 @@ class PDFExporter {
             .lc-sub { font-size: 11px; font-weight: 600; color: #9a8578; }
 
             /* SIDE-BY-SIDE SYNCHRONIZED PARAGRAPH TABLE */
-            .lc-reading-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; border: 1px solid #e8ded3; border-radius: 8px; overflow: hidden; table-layout: fixed; }
+            .lc-reading-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; border: 1px solid #e8ded3; border-radius: 8px; overflow: hidden; table-layout: fixed; page-break-inside: auto; }
             .lc-reading-table th { padding: 9px 14px; font-size: 11.5px; font-weight: 800; color: #fff; background: #8c5e3c; letter-spacing: .3px; text-align: left; width: 50%; }
             .lc-col-vi { background: #6b4b2b !important; }
             .lc-flag { display: inline-block; background: rgba(255,255,255,.22); color: #fff; padding: 1px 5px; border-radius: 4px; font-size: 9px; font-weight: 800; margin-right: 4px; }
-            .lc-reading-p-row td { border-bottom: 1px solid #e8ded3; vertical-align: top; padding: 16px 18px; font-size: 13.5px; line-height: 2.1; width: 50%; word-spacing: 3px; letter-spacing: 0.35px; -webkit-font-smoothing: antialiased; }
+            .lc-reading-p-row { page-break-inside: avoid !important; break-inside: avoid !important; }
+            .lc-reading-p-row td { border-bottom: 1px solid #e8ded3; vertical-align: top; padding: 10px 14px; font-size: 13.5px; line-height: 1.5; width: 50%; word-spacing: normal; letter-spacing: normal; -webkit-font-smoothing: antialiased; }
             .lc-reading-p-row:last-child td { border-bottom: none; }
             .lc-col-en-body { border-right: 1px solid #e8ded3; background: #fffdf9; }
             .lc-col-vi-body { background: #fcfaf7; }
-            .lc-col-vi-body p, .lc-col-en-body p { margin: 0 0 12px 0 !important; line-height: 2.1 !important; text-align: justify !important; word-spacing: 3px !important; letter-spacing: 0.35px !important; font-size: 13.5px !important; -webkit-font-smoothing: antialiased !important; }
-            mark { background: var(--mark-bg, #fef08a) !important; background-color: var(--mark-bg, #fef08a) !important; font-weight: 800 !important; color: #0f172a !important; padding: 3px 8px !important; border-radius: 5px !important; display: inline-block !important; margin: 2px 4px !important; box-shadow: 0 1px 3px rgba(0,0,0,0.12) !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+            .lc-col-vi-body p, .lc-col-en-body p { margin: 0 0 8px 0 !important; line-height: 1.5 !important; text-align: left !important; word-spacing: normal !important; letter-spacing: normal !important; font-size: 13.5px !important; -webkit-font-smoothing: antialiased !important; }
+            mark { background-color: rgba(250, 204, 21, 0.45); background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
 
             /* VOCAB SUMMARY TABLE */
-            .lc-table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 4px; background: #ffffff; }
+            .lc-table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 4px; background: #ffffff; page-break-inside: auto; }
+            .lc-table tr, .lc-table-row { page-break-inside: avoid !important; break-inside: avoid !important; }
             .lc-table th { background-color: #8c5e3c !important; color: #ffffff !important; padding: 9px 10px; text-align: left; font-size: 11px; font-weight: 700; border: 1px solid #72492c; text-transform: uppercase; letter-spacing: .3px; }
             .lc-table td { border: 1px solid #e8ded3; padding: 8px 10px; vertical-align: top; }
             .lc-table tr:nth-child(even) td { background-color: #faf6f0 !important; }
@@ -445,10 +536,11 @@ class PDFExporter {
             const tmp = document.createElement('div');
             tmp.innerHTML = englishHTML;
             tmp.querySelectorAll('mark').forEach(m => {
-                const bg = (m.style && m.style.backgroundColor) || m.getAttribute('data-color') || '#fef08a';
+                const colorAttr = this._extractMarkColor(m);
+                const bg = this._softenColor(colorAttr);
                 m.removeAttribute('class');
                 m.removeAttribute('id');
-                m.setAttribute('style', `background:${bg} !important; background-color:${bg} !important; font-weight:800 !important; color:#0f172a !important; padding:3px 8px !important; border-radius:5px !important; display:inline-block !important; margin:2px 4px !important; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important;`);
+                m.setAttribute('style', `background-color: ${bg} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important;`);
             });
             tmp.querySelectorAll('script, style, button').forEach(el => el.remove());
             const blocks = tmp.querySelectorAll('p, div.paragraph-block');
@@ -474,61 +566,80 @@ class PDFExporter {
                 }
                 pText = this._escapeHTML(pText);
                 pText = pText.replace(/\[\[MARK::(.*?)::(.*?)\]\]/g, (match, color, inner) => {
-                    return `<mark style="background:${color} !important; background-color:${color} !important; font-weight:800 !important; color:#0f172a !important; padding:3px 8px !important; border-radius:5px !important; display:inline-block !important; margin:2px 4px !important; box-shadow:0 1px 3px rgba(0,0,0,0.12) !important; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important;">${inner}</mark>`;
+                    const bg = this._softenColor(color);
+                    return `<mark style="background-color: ${bg} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important;">${inner}</mark>`;
                 });
                 return pText;
             });
         }
 
-        // 2. Prepare Vietnamese paragraphs (Keep raw unescaped text for matching)
+        // 2. Prepare Vietnamese paragraphs
+        // IMPORTANT: When vietnameseHTML already contains <mark> tags, those colors
+        // were computed on-screen to be perfectly synchronized with the English
+        // highlights (same word → same color). We MUST reuse them verbatim instead
+        // of re-deriving colors from dictionaries/built-in maps (which defaults
+        // everything to yellow and mismatches the English side).
         let vnParas = [];
-        if (vietnameseHTML && (vietnameseHTML.includes('<mark') || vietnameseHTML.includes('highlight-mark'))) {
+        let vnAlreadyHighlighted = false;
+        const vnHTMLHasMarks = vietnameseHTML && (vietnameseHTML.includes('<mark') || vietnameseHTML.includes('highlight-mark'));
+
+        if (vnHTMLHasMarks) {
             const tmp = document.createElement('div');
             tmp.innerHTML = vietnameseHTML;
             tmp.querySelectorAll('mark').forEach(m => {
-                const bg = (m.style && m.style.backgroundColor) || m.getAttribute('data-color') || '#fef08a';
+                const colorAttr = this._extractMarkColor(m);
+                const bg = this._softenColor(colorAttr);
                 m.removeAttribute('class');
                 m.removeAttribute('id');
-                m.setAttribute('style', `background:${bg} !important; background-color:${bg} !important; font-weight:800 !important; color:#0f172a !important; padding:3px 8px !important; border-radius:5px !important; display:inline-block !important; margin:2px 4px !important; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important;`);
+                m.setAttribute('style', `background-color: ${bg} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important;`);
             });
             tmp.querySelectorAll('script, style, button').forEach(el => el.remove());
             const blocks = tmp.querySelectorAll('p, div.paragraph-block');
             if (blocks.length) {
-                vnParas = Array.from(blocks).map(b => cleanVnSpace(b.innerText || b.textContent || '').replace(/^#+\s*/g, ''));
+                vnParas = Array.from(blocks).map(b => b.innerHTML.replace(/^#+\s*/g, ''));
             } else {
-                vnParas = [cleanVnSpace(tmp.innerText || tmp.textContent || '').replace(/^#+\s*/g, '')];
+                vnParas = [tmp.innerHTML.replace(/^#+\s*/g, '')];
             }
+            vnAlreadyHighlighted = true;
         } else {
-            const cleanVn = (vietnameseText || '').replace(/^#+\s*/gm, '');
-            vnParas = cleanVn.split(/\n\s*\n/).filter(Boolean).map(p => cleanVnSpace(p));
+            const cleanVnText = (vietnameseText || '').replace(/^#+\s*/gm, '');
+            if (cleanVnText.trim()) {
+                vnParas = cleanVnText.split(/\n\s*\n/).filter(Boolean).map(p => cleanVnSpace(p));
+            } else if (vietnameseHTML) {
+                const tmp = document.createElement('div');
+                tmp.innerHTML = vietnameseHTML;
+                const blocks = tmp.querySelectorAll('p, div.paragraph-block');
+                vnParas = blocks.length ? Array.from(blocks).map(b => cleanVnSpace(b.textContent || b.innerText || '')) : [cleanVnSpace(tmp.textContent || tmp.innerText || '')];
+            }
         }
 
-        // 3. ENRICH VIETNAMESE HIGHLIGHT MATCHING CANDIDATES
+        // 3. ENRICH VIETNAMESE HIGHLIGHT MATCHING CANDIDATES WITH PRIORITY
         const vnTermMap = [];
-        const addVnCandidate = (rawWord, color) => {
+        const addVnCandidate = (rawWord, color, priority = 1) => {
             if (!rawWord) return;
             const clean = cleanVnSpace(rawWord).replace(/^#+\s*/g, '');
             if (clean.length < 2) return;
             const parts = clean.split(/[,;\n\/]/).map(s => cleanVnSpace(s)).filter(s => s.length >= 2);
+            if (!parts.includes(clean)) parts.unshift(clean);
             parts.forEach(part => {
-                vnTermMap.push({ term: part, color: color || '#fef08a' });
+                vnTermMap.push({ term: part, color: color || '#fef08a', priority });
             });
         };
 
+        // Priority 3: AI translatedTermInVN from vocabList and vocabRows
         (vocabRows || []).forEach(v => {
             const color = v.color || '#fef08a';
-            addVnCandidate(v.contextMeaning, color);
-            addVnCandidate(v.translatedTermInVN, color);
-            addVnCandidate(v.meaning, color);
+            if (v.translatedTermInVN) addVnCandidate(v.translatedTermInVN, color, 3);
+            if (v.contextMeaning) addVnCandidate(v.contextMeaning, color, 2);
         });
 
         (vocabList || []).forEach(v => {
             const color = v.color || '#fef08a';
-            addVnCandidate(v.contextMeaning, color);
-            addVnCandidate(v.translatedTermInVN, color);
-            addVnCandidate(v.meaning, color);
+            if (v.translatedTermInVN) addVnCandidate(v.translatedTermInVN, color, 3);
+            if (v.contextMeaning) addVnCandidate(v.contextMeaning, color, 2);
         });
 
+        // Priority 2 & 1: English highlights
         (highlights || []).forEach(h => {
             const word = cleanVnSpace(h.text || h.word);
             if (!word) return;
@@ -536,14 +647,28 @@ class PDFExporter {
 
             const vnMeaning = this._getVnTranslationForEnTerm(word, vocabRows, vocabList);
             if (vnMeaning) {
-                addVnCandidate(vnMeaning, color);
+                addVnCandidate(vnMeaning, color, 2);
+            } else if (window.dictionaryDB) {
+                const directM = window.dictionaryDB.getMeaning(word);
+                if (directM) {
+                    addVnCandidate(directM, color, 2);
+                } else if (word.includes(' ')) {
+                    const subWords = word.split(/\s+/).filter(w => w.length > 2);
+                    subWords.forEach(w => {
+                        const subM = window.dictionaryDB.getMeaning(w);
+                        if (subM) addVnCandidate(subM, color, 1);
+                    });
+                }
             }
         });
 
-        // Deduplicate and sort by length descending (longest phrases first)
+        // Deduplicate and sort by priority descending, then length descending
         const seenVn = new Set();
         const sortedVnItems = [];
-        vnTermMap.sort((a, b) => b.term.length - a.term.length);
+        vnTermMap.sort((a, b) => {
+            if (b.priority !== a.priority) return b.priority - a.priority;
+            return b.term.length - a.term.length;
+        });
         for (const item of vnTermMap) {
             const k = item.term.toLowerCase();
             if (!seenVn.has(k)) {
@@ -553,7 +678,10 @@ class PDFExporter {
         }
 
         // Apply highlights to Vietnamese paragraphs safely using [[MARK::color::text]]
-        vnParas = vnParas.map(p => {
+        // Skip entirely when the Vietnamese already came pre-highlighted with
+        // color-synchronized <mark> tags — re-processing would escape the HTML and
+        // destroy those marks / override their correct colors.
+        if (!vnAlreadyHighlighted) vnParas = vnParas.map(p => {
             let pText = cleanVnSpace(p);
             for (const item of sortedVnItems) {
                 const normT = cleanVnSpace(item.term);
@@ -570,7 +698,8 @@ class PDFExporter {
             pText = this._escapeHTML(pText);
             // Replace placeholders back with actual <mark> tags
             pText = pText.replace(/\[\[MARK::(.*?)::(.*?)\]\]/g, (match, color, inner) => {
-                return `<mark style="background:${color} !important; background-color:${color} !important; font-weight:800 !important; color:#0f172a !important; padding:3px 8px !important; border-radius:5px !important; display:inline-block !important; margin:2px 4px !important; box-shadow:0 1px 3px rgba(0,0,0,0.12) !important; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important;">${inner}</mark>`;
+                const bg = this._softenColor(color);
+                return `<mark style="background-color: ${bg} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important;">${inner}</mark>`;
             });
             return pText;
         });
@@ -589,8 +718,8 @@ class PDFExporter {
             const enP = enParas[i] || '';
             const vnP = vnParas[i] || '';
             rowsHTML += `<tr class="lc-reading-p-row">
-                <td class="lc-col lc-col-en-body"><p style="margin: 0 0 14px 0 !important; line-height: 2.1 !important; text-align: justify !important; word-spacing: 3px !important; letter-spacing: 0.35px !important; font-size: 13.5px !important;">${enP}</p></td>
-                <td class="lc-col lc-col-vi-body"><p style="margin: 0 0 14px 0 !important; line-height: 2.1 !important; text-align: justify !important; word-spacing: 3px !important; letter-spacing: 0.35px !important; font-size: 13.5px !important;">${vnP || '<span style="color:#9a8578; font-style:italic;">(Chưa có bản dịch)</span>'}</p></td>
+                <td class="lc-col lc-col-en-body"><p style="margin: 0 0 12px 0 !important; line-height: 1.8 !important; text-align: left !important; word-spacing: normal !important; letter-spacing: normal !important; font-size: 13.5px !important;">${enP}</p></td>
+                <td class="lc-col lc-col-vi-body"><p style="margin: 0 0 12px 0 !important; line-height: 1.8 !important; text-align: left !important; word-spacing: normal !important; letter-spacing: normal !important; font-size: 13.5px !important;">${vnP || '<span style="color:#9a8578; font-style:italic;">(Chưa có bản dịch)</span>'}</p></td>
             </tr>`;
         }
 
@@ -709,6 +838,43 @@ class PDFExporter {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    _extractMarkColor(m) {
+        if (!m) return '#fef08a';
+        let c = m.getAttribute('data-color');
+        if (c && c !== 'transparent' && c !== 'null' && c !== 'undefined') return c;
+        if (m.style) {
+            c = m.style.getPropertyValue('background-color') || m.style.backgroundColor;
+            if (c && c !== 'transparent' && c !== 'null') return c;
+        }
+        const styleAttr = m.getAttribute('style') || '';
+        const match = styleAttr.match(/background-color\s*:\s*([^;!]+)/i);
+        if (match && match[1]) {
+            c = match[1].trim();
+            if (c && c !== 'transparent') return c;
+        }
+        return '#fef08a';
+    }
+
+    _softenColor(hex) {
+        if (!hex || hex === 'transparent') return 'rgba(250, 204, 21, 0.62)';
+        const h = String(hex).toLowerCase().trim();
+        if (h.startsWith('rgba')) {
+            return h.replace(/rgba?\(([^)]+)\)/, (m, contents) => {
+                const parts = contents.split(',').map(s => s.trim());
+                if (parts.length >= 3) {
+                    return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, 0.62)`;
+                }
+                return h;
+            });
+        }
+        if (h.includes('#fef08a') || h.includes('#fff3a8') || h.includes('#fef9c3') || h.includes('yellow')) return 'rgba(250, 204, 21, 0.62)';
+        if (h.includes('#bbf7d0') || h.includes('#86efac') || h.includes('#dcfce7') || h.includes('green')) return 'rgba(74, 222, 128, 0.62)';
+        if (h.includes('#bae6fd') || h.includes('#7dd3fc') || h.includes('#e0f2fe') || h.includes('blue')) return 'rgba(56, 189, 248, 0.62)';
+        if (h.includes('#e9d5ff') || h.includes('#c084fc') || h.includes('#f3e8ff') || h.includes('purple')) return 'rgba(192, 132, 252, 0.62)';
+        if (h.includes('#fecdd3') || h.includes('#fda4af') || h.includes('#ffe4e6') || h.includes('pink')) return 'rgba(251, 113, 133, 0.62)';
+        return 'rgba(250, 204, 21, 0.62)';
     }
 }
 

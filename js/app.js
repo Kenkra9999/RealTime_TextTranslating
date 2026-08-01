@@ -7,7 +7,10 @@
 class LinguaApp {
     constructor() {
         this.highlighter = new TextHighlighter({
-            onHighlightsChange: (items) => this._onHighlightsLiveUpdate(items)
+            onHighlightsChange: (items) => {
+                this.updateVietnameseHighlights(items);
+                this._onHighlightsLiveUpdate(items);
+            }
         });
         this.translator = new ContextTranslator();
         this.pdfExporter = new PDFExporter();
@@ -34,6 +37,10 @@ class LinguaApp {
         this._lookupRequestSeq = 0;   // guards against stale async responses overwriting a newer hover
         this._lookupPinned = false;   // true after clicking a word: popup stays put until user clicks elsewhere
 
+        // Match Tracking Mode state ("Dò từ khớp")
+        this.matchModeActive = false;
+        this._matchPinnedKey = null;  // English key pinned by a click; cleared on outside click
+
         this._bindElements();
         this._bindEvents();
         this._initResizer();
@@ -41,6 +48,7 @@ class LinguaApp {
         this._initTypographyControls();
         this._initTheme();
         this._initLookupMode();
+        this._initMatchMode();
         this._initVocabResizer();
         this._loadSavedSettings();
 
@@ -212,6 +220,87 @@ class LinguaApp {
         }
     }
 
+    /**
+     * Match Tracking Mode ("Dò từ khớp"). Hovering (or clicking to pin) a highlighted term on
+     * EITHER side lights up its counterpart on the other side. Pairing works off a normalized
+     * English key: English <mark> elements carry data-text (set by the highlighter), Vietnamese
+     * <mark> elements carry data-en (set by renderMark). We normalize both to compare.
+     */
+    _initMatchMode() {
+        const norm = (s) => (s || '').toString().toLowerCase().trim()
+            .replace(/[\u00A0\u2000-\u200B]/g, ' ').replace(/\s+/g, ' ').normalize('NFC');
+        this._matchNorm = norm;
+
+        const keyFromMark = (mark) => {
+            if (!mark) return '';
+            // English side stores the literal term in data-text; VN side stores data-en.
+            return norm(mark.getAttribute('data-en') || mark.getAttribute('data-text') || mark.textContent);
+        };
+
+        const targets = [this.els.readingCanvas, this.els.translationCanvas].filter(Boolean);
+        targets.forEach(target => {
+            target.addEventListener('mousemove', (e) => {
+                if (!this.matchModeActive || this._matchPinnedKey) return;
+                const mark = e.target.closest ? e.target.closest('mark.highlight-mark') : null;
+                this._applyMatchHighlight(mark ? keyFromMark(mark) : null);
+            });
+            target.addEventListener('mouseleave', () => {
+                if (!this.matchModeActive || this._matchPinnedKey) return;
+                this._applyMatchHighlight(null);
+            });
+            target.addEventListener('click', (e) => {
+                if (!this.matchModeActive) return;
+                const mark = e.target.closest ? e.target.closest('mark.highlight-mark') : null;
+                if (mark) {
+                    e.stopPropagation();
+                    const key = keyFromMark(mark);
+                    // Click same term again to unpin; otherwise pin the new one.
+                    this._matchPinnedKey = (this._matchPinnedKey === key) ? null : key;
+                    this._applyMatchHighlight(this._matchPinnedKey || key);
+                } else {
+                    this._matchPinnedKey = null;
+                    this._applyMatchHighlight(null);
+                }
+            });
+        });
+
+        document.addEventListener('click', () => {
+            if (this.matchModeActive && this._matchPinnedKey) {
+                this._matchPinnedKey = null;
+                this._applyMatchHighlight(null);
+            }
+        });
+    }
+
+    _setMatchModeActive(active) {
+        this.matchModeActive = active;
+        [this.els.readingCanvas, this.els.translationCanvas].filter(Boolean).forEach(el => {
+            el.classList.toggle('match-mode-active', active);
+        });
+        if (!active) {
+            this._matchPinnedKey = null;
+            this._applyMatchHighlight(null);
+        }
+    }
+
+    /**
+     * Adds the .match-active glow class to every highlighted term (both sides) whose English
+     * key equals `key`, and clears it from all others. Passing null clears everything.
+     */
+    _applyMatchHighlight(key) {
+        const norm = this._matchNorm || ((s) => (s || '').toString().toLowerCase().trim());
+        const targets = [this.els.readingCanvas, this.els.translationCanvas].filter(Boolean);
+        targets.forEach(target => {
+            // Toggle .has-match on the canvas so the CSS can dim the non-matched highlights.
+            target.classList.toggle('has-match', !!key);
+            target.querySelectorAll('mark.highlight-mark').forEach(mark => {
+                if (!key) { mark.classList.remove('match-active'); return; }
+                const mk = norm(mark.getAttribute('data-en') || mark.getAttribute('data-text') || mark.textContent);
+                mark.classList.toggle('match-active', !!mk && mk === key);
+            });
+        });
+    }
+
     _scheduleHideLookupPopup() {
         if (this._lookupPinned) return; // Pinned (clicked) popups only close via an outside click
         clearTimeout(this._lookupHideTimer);
@@ -331,7 +420,8 @@ class LinguaApp {
         const dict = window.dictionaryDB;
         wordEl.textContent = word;
         ipaEl.textContent = dict ? dict.getIPA(word) : '/.../';
-        posEl.textContent = dict ? dict.getPOS(word) : '';
+        const initialPos = dict ? dict.getPOS(word, sentence) : 'n.';
+        posEl.textContent = initialPos ? (initialPos.startsWith('[') ? initialPos : `[${initialPos}]`) : '[n.]';
         const offlineMeaning = dict ? dict.getMeaning(word) : null;
         meaningEl.innerHTML = offlineMeaning
             ? this._escapeHTML(offlineMeaning)
@@ -350,7 +440,8 @@ class LinguaApp {
 
             wordEl.textContent = result.word || word;
             ipaEl.textContent = result.ipa || ipaEl.textContent;
-            posEl.textContent = result.pos || posEl.textContent;
+            const resPos = result.pos || initialPos;
+            posEl.textContent = resPos.startsWith('[') ? resPos : `[${resPos}]`;
             meaningEl.textContent = result.meaning || 'Không tìm thấy nghĩa phù hợp';
 
             // Show the example sentence block only when we have a real example
@@ -461,6 +552,7 @@ class LinguaApp {
             btnModeSelect: document.getElementById('btnModeSelect'),
             btnModeBrush: document.getElementById('btnModeBrush'),
             btnModeLookup: document.getElementById('btnModeLookup'),
+            btnModeMatch: document.getElementById('btnModeMatch'),
 
             // Font Scaler Buttons
             btnFontDec: document.getElementById('btnFontDec'),
@@ -561,21 +653,28 @@ class LinguaApp {
             });
         });
 
-        // Mode switch: Select vs Brush Pen vs Dictionary Lookup
-        this.els.btnModeSelect.addEventListener('click', () => {
-            this.els.btnModeSelect.classList.add('active');
+        // Mode switch: Select vs Brush Pen vs Dictionary Lookup vs Match Tracking
+        const clearModeButtons = () => {
+            this.els.btnModeSelect.classList.remove('active');
             this.els.btnModeBrush.classList.remove('active');
             this.els.btnModeLookup.classList.remove('active');
+            if (this.els.btnModeMatch) this.els.btnModeMatch.classList.remove('active');
+        };
+
+        this.els.btnModeSelect.addEventListener('click', () => {
+            clearModeButtons();
+            this.els.btnModeSelect.classList.add('active');
             this.highlighter.setMode('select');
             this._setLookupModeActive(false);
+            this._setMatchModeActive(false);
         });
 
         this.els.btnModeBrush.addEventListener('click', () => {
+            clearModeButtons();
             this.els.btnModeBrush.classList.add('active');
-            this.els.btnModeSelect.classList.remove('active');
-            this.els.btnModeLookup.classList.remove('active');
             this.highlighter.setMode('brush');
             this._setLookupModeActive(false);
+            this._setMatchModeActive(false);
             if (this.currentMode === 'edit') {
                 this.switchToReadingMode();
             }
@@ -583,15 +682,30 @@ class LinguaApp {
 
         // Dictionary Lookup Mode: hover any word to see meaning, IPA, POS & hear pronunciation
         this.els.btnModeLookup.addEventListener('click', () => {
+            clearModeButtons();
             this.els.btnModeLookup.classList.add('active');
-            this.els.btnModeSelect.classList.remove('active');
-            this.els.btnModeBrush.classList.remove('active');
             this.highlighter.setMode('lookup');
+            this._setMatchModeActive(false);
             this._setLookupModeActive(true);
             if (this.currentMode === 'edit') {
                 this.switchToReadingMode();
             }
         });
+
+        // Match Tracking Mode: hover/click a colored English term → its Vietnamese
+        // counterpart (same color) lights up on the other side, and vice-versa.
+        if (this.els.btnModeMatch) {
+            this.els.btnModeMatch.addEventListener('click', () => {
+                clearModeButtons();
+                this.els.btnModeMatch.classList.add('active');
+                this.highlighter.setMode('select');
+                this._setLookupModeActive(false);
+                this._setMatchModeActive(true);
+                if (this.currentMode === 'edit') {
+                    this.switchToReadingMode();
+                }
+            });
+        }
 
         // Font scaling controls
         this.els.btnFontDec.addEventListener('click', () => this.changeFontSize(-1));
@@ -695,6 +809,62 @@ class LinguaApp {
             const wasCollapsed = localStorage.getItem('lingua_header_collapsed') === '1';
             setCollapsed(wasCollapsed);
         }
+    }
+
+    /**
+     * Horizontal resizer between Left Pane (English) and Right Pane (Vietnamese).
+     */
+    _initResizer() {
+        const resizer = this.els.resizer;
+        const container = this.els.container;
+        const paneLeft = this.els.paneLeft;
+        const paneRight = this.els.paneRight;
+
+        if (!resizer || !container || !paneLeft || !paneRight) return;
+
+        const startDrag = (e) => {
+            e.preventDefault();
+            resizer.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+
+            const containerRect = container.getBoundingClientRect();
+
+            const onMove = (ev) => {
+                const clientX = ev.clientX || (ev.touches && ev.touches[0].clientX);
+                if (!clientX) return;
+                const offset = clientX - containerRect.left;
+                let percent = (offset / containerRect.width) * 100;
+                if (percent < 15) percent = 15;
+                if (percent > 85) percent = 85;
+
+                paneLeft.style.flex = `0 0 ${percent}%`;
+                paneRight.style.flex = `1 1 ${100 - percent}%`;
+            };
+
+            const onEnd = () => {
+                resizer.classList.remove('dragging');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onEnd);
+                document.removeEventListener('touchmove', onMove);
+                document.removeEventListener('touchend', onEnd);
+            };
+
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onEnd);
+            document.addEventListener('touchmove', onMove, { passive: false });
+            document.addEventListener('touchend', onEnd);
+        };
+
+        resizer.addEventListener('mousedown', startDrag);
+        resizer.addEventListener('touchstart', startDrag, { passive: false });
+
+        resizer.addEventListener('dblclick', () => {
+            paneLeft.style.flex = '0 0 50%';
+            paneRight.style.flex = '1 1 50%';
+        });
     }
 
     /**
@@ -1160,9 +1330,19 @@ class LinguaApp {
                 }
             );
 
-            this.renderTranslationResult(result.fullTranslation, highlights, result.vocabList);
+            // SINGLE-PASS ALIGNMENT — the translation already carries inline [[H:english]]…[[/H]]
+            // markers from turn 1 (exact position + exact color, straight from the AI). We no
+            // longer make a second "re-tag the whole translation" API call — that lượt 2 was slow
+            // and sometimes reworded the text. Instead the app matches any FORGOTTEN vocab item to
+            // its Vietnamese counterpart itself, biased to the correct sentence/paragraph
+            // (see _computeTranslatedHTML → PASS 2), guaranteeing full coverage ("đủ & đúng màu").
+            const alignments = [];
+            const renderText = result.fullTranslation;
+            this.currentSourceText = text;
+
+            this.renderTranslationResult(renderText, highlights, result.vocabList, alignments, text);
             this.currentVocabData = result.vocabList;
-            this._addVocabSession(text, highlights, result.vocabList);
+            this._addVocabSession(text, highlights, result.vocabList, renderText, alignments);
 
             this.els.transStatusBadge.textContent = "Hoàn tất";
         } catch (err) {
@@ -1178,9 +1358,31 @@ class LinguaApp {
         }
     }
 
-    renderTranslationResult(translatedText, highlights = [], vocabList = []) {
+    renderTranslationResult(translatedText, highlights = [], vocabList = [], alignments = [], sourceText = '') {
         if (!translatedText) return;
-        this.els.translationCanvas.innerHTML = this._computeTranslatedHTML(translatedText, highlights, vocabList);
+        this.currentSourceText = sourceText || this.currentSourceText || '';
+        const html = this._computeTranslatedHTML(translatedText, highlights, vocabList, alignments, this.currentSourceText);
+        this.els.translationCanvas.innerHTML = html;
+
+        // Keep the ORIGINAL marked translation ([[H:...]] tags intact) so that live
+        // re-highlighting and PDF export can rebuild the exact same highlights without
+        // having to re-guess Vietnamese positions.
+        this.els.translationCanvas.dataset.markedText = translatedText;
+        // Persist the English source so live re-highlighting can reuse sentence/paragraph
+        // position matching for any vocab item the AI forgot to wrap inline.
+        this.els.translationCanvas.dataset.sourceText = this.currentSourceText || '';
+        // Persist the alignment map so live re-highlighting (updateVietnameseHighlights)
+        // can reuse the exact same Vietnamese positions/colors after the initial render.
+        try { this.els.translationCanvas.dataset.alignments = JSON.stringify(alignments || []); } catch (e) { this.els.translationCanvas.dataset.alignments = '[]'; }
+
+        // Store clean raw unhighlighted text for live dynamic re-highlighting
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        tmp.querySelectorAll('mark').forEach(m => {
+            const textNode = document.createTextNode(m.textContent);
+            m.parentNode.replaceChild(textNode, m);
+        });
+        this.els.translationCanvas.dataset.rawHtml = tmp.innerHTML;
     }
 
     /**
@@ -1188,32 +1390,383 @@ class LinguaApp {
      * the English terms). Extracted from renderTranslationResult so it can also be cached
      * on a vocab session for later multi-document PDF export.
      */
-    _computeTranslatedHTML(translatedText, highlights = [], vocabList = []) {
-        let paragraphs = translatedText.split(/\n\s*\n/).filter(Boolean);
-        let formattedHTML = paragraphs.map(p => `<p class="paragraph-block">${this._escapeHTML(p)}</p>`).join('');
+    _computeTranslatedHTML(translatedText, highlights = [], vocabList = [], alignments = [], sourceText = '') {
+        // NFC-normalize so Unicode composition differences (e.g. "ế" as one vs two codepoints)
+        // between the translation and the AI's copied alignment phrases can't silently break the
+        // verbatim substring matching — a common reason a term ended up "chưa đủ" (not painted).
+        const raw = (translatedText || '').normalize('NFC');
 
-        const sortedVocab = [...vocabList].sort((a, b) => {
-            const lenA = (a.translatedTermInVN || a.contextMeaning || "").length;
-            const lenB = (b.translatedTermInVN || b.contextMeaning || "").length;
-            return lenB - lenA;
-        });
+        const norm = (s) => (s || '')
+            .toString()
+            .toLowerCase()
+            .trim()
+            .replace(/[\u00A0\u2000-\u200B]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .normalize('NFC');
 
-        sortedVocab.forEach(v => {
-            let hlObj = highlights.find(h => 
-                h.text.toLowerCase().trim() === v.original.toLowerCase().trim() ||
-                h.text.toLowerCase().includes(v.original.toLowerCase().trim()) ||
-                v.original.toLowerCase().includes(h.text.toLowerCase().trim())
-            );
-            const colorHex = v.color || (hlObj ? hlObj.color : (highlights[0] ? highlights[0].color : '#fff3a8'));
-            const termInVN = v.translatedTermInVN || v.contextMeaning;
+        // Resolve the authoritative color for an English term. Matching order:
+        //   1) exact (normalized) highlight.text  — the strongest, colour set on the English side
+        //   2) exact (normalized) vocab.original   — the AI's own color for that row
+        //   3) loose stem match against highlights — handles inflection like "witnessed" vs
+        //      "witness"/"witnessing" where the AI returned a slightly different form than the
+        //      highlighted word. We only accept it when one side clearly starts with the other
+        //      (min length 4) so short words don't collide.
+        //   4) yellow fallback.
+        const colorForEnglishTerm = (original) => {
+            const o = norm(original);
+            if (!o) return '#fef08a';
+            const hit = (highlights || []).find(h => norm(h.text || h.word) === o);
+            if (hit && hit.color) return hit.color;
+            const v = (vocabList || []).find(x => norm(x.original) === o);
+            if (v && v.color) return v.color;
+            const stem = (a, b) => {
+                if (a.length < 4 || b.length < 4) return false;
+                const shorter = a.length <= b.length ? a : b;
+                const longer = a.length <= b.length ? b : a;
+                return longer.startsWith(shorter);
+            };
+            const loose = (highlights || []).find(h => stem(norm(h.text || h.word), o));
+            if (loose && loose.color) return loose.color;
+            return '#fef08a';
+        };
 
-            if (termInVN && termInVN.length > 1) {
-                const regex = new RegExp(`(${this._escapeRegExp(termInVN)})`, 'gi');
-                formattedHTML = formattedHTML.replace(regex, `<mark class="highlight-mark" style="background-color: ${colorHex};">$1</mark>`);
+        // enKey = normalized English source term, embedded as data-en so the "Dò từ khớp"
+        // (match-tracking) mode can pair an English highlight with its Vietnamese counterpart.
+        const renderMark = (color, inner, enKey = '') => {
+            const transColor = this.highlighter ? this.highlighter._getTranslucentColor(color) : 'rgba(250, 204, 21, 0.45)';
+            const enAttr = enKey ? ` data-en="${this._escapeHTML(enKey)}"` : '';
+            return `<mark class="highlight-mark" data-color="${color}"${enAttr} style="background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important;">${inner}</mark>`;
+        };
+
+        const paragraphs = raw.split(/\n\s*\n/).filter(Boolean);
+
+        // ── HYBRID HIGHLIGHTING ──────────────────────────────────────────────
+        // 1) PRIMARY — honour the AI's inline markers [[H:english]]cụm việt[[/H]]:
+        //    exact position + exact mapping straight from the AI.
+        // 2) FILL-IN — the AI often forgets to wrap SOME items even though they exist
+        //    in the translation. For every vocab item that was NOT already wrapped,
+        //    fall back to matching translatedTermInVN as a verbatim substring, but only
+        //    in the text OUTSIDE the spans the AI already marked. This is why some
+        //    English words were highlighted while their Vietnamese counterparts were not.
+        // ─────────────────────────────────────────────────────────────────────
+
+        // Canonicalize any English term to the SAME key its highlight uses, so a vocab row
+        // ("witnessed") and its highlight ("witness") collapse into ONE group and can never be
+        // painted twice. Falls back to the term itself when nothing matches (auto-scan rows).
+        const stemMatch = (a, b) => {
+            if (a.length < 4 || b.length < 4) return false;
+            const shorter = a.length <= b.length ? a : b;
+            const longer = a.length <= b.length ? b : a;
+            return longer.startsWith(shorter);
+        };
+        const canonEn = (term) => {
+            const o = norm(term);
+            if (!o) return '';
+            const hit = (highlights || []).find(h => norm(h.text || h.word) === o);
+            if (hit) return norm(hit.text || hit.word);
+            const loose = (highlights || []).find(h => stemMatch(norm(h.text || h.word), o));
+            if (loose) return norm(loose.text || loose.word);
+            return o;
+        };
+
+        // Build ONE fill group per English term (keyed by its canonical English key). Each group
+        // holds the color (taken by INDEX from the English highlight → always the exact same
+        // color) plus every Vietnamese candidate phrase we know for it, longest first:
+        //   A) ALIGNMENT pass — { index, vn }: the authoritative, index-keyed counterpart.
+        //   B) vocabList.translatedTermInVN — the AI's own per-row Vietnamese phrase.
+        // At render time each group is placed AT MOST ONCE (no doubling) and is TRIED for every
+        // English term across all paragraphs (max coverage → "đủ 100%").
+        const buildFillGroups = () => {
+            const groups = new Map(); // enKey -> { en, color, candidates: [] }
+            const add = (enKey, color, vnRaw) => {
+                const vn = (vnRaw || '').toString().normalize('NFC').replace(/^#+\s*/g, '').trim();
+                if (!enKey || !vn) return;
+                if (!groups.has(enKey)) groups.set(enKey, { en: enKey, color: color || '#fef08a', candidates: [] });
+                const g = groups.get(enKey);
+                if (color && color !== '#fef08a') g.color = color; // prefer a real English color
+                if (!g.candidates.some(c => norm(c) === norm(vn))) g.candidates.push(vn);
+            };
+
+            (alignments || []).forEach(a => {
+                const h = (highlights || [])[a.index];
+                if (!h) return;
+                add(norm(h.text || h.word), h.color || '#fef08a', a.vn);
+            });
+
+            (vocabList || []).forEach(v => {
+                add(canonEn(v.original), colorForEnglishTerm(v.original), v.translatedTermInVN);
+            });
+
+            const arr = Array.from(groups.values());
+            arr.forEach(g => g.candidates.sort((a, b) => b.length - a.length));
+            // Longest primary candidate first so a phrase wins over a word nested inside it.
+            arr.sort((A, B) => (B.candidates[0] || '').length - (A.candidates[0] || '').length);
+            return arr;
+        };
+
+        const TOKEN_SPLIT = /(\[\[MARK::[^:]*?::[^:]*?::[\s\S]*?\]\])/g;
+
+        // Vietnamese "function words" that are meaningless to highlight on their own. Used to
+        // reject single-word fallback matches so we don't paint stray "của", "và", "một"...
+        const STOP_WORDS = new Set(['và','của','là','một','các','những','được','có','cho','với','đã','sẽ','đang','này','đó','khi','thì','mà','ở','trong','ra','vào','lên','xuống','rằng','nên','vì','do','bởi','để','từ','đến','the','a','an']);
+
+        // Build a SMALL set of candidate phrases for a fill term (longest first). We ONLY try:
+        //   1) the full phrase, then
+        //   2) variants with at most ONE edge word trimmed (front, back, or both),
+        // so if the AI added/dropped a leading/trailing word we still match the core — WITHOUT
+        // the runaway sub-phrase explosion that used to paint far too much text ("tô lố").
+        const buildWordRuns = (phrase) => {
+            const words = phrase.split(/\s+/).filter(Boolean);
+            const n = words.length;
+            const candidates = [];
+            if (n <= 1) {
+                candidates.push(words.join(' '));
+            } else {
+                candidates.push(words.join(' '));                    // full
+                candidates.push(words.slice(1).join(' '));           // drop front
+                candidates.push(words.slice(0, n - 1).join(' '));    // drop back
+                if (n >= 3) candidates.push(words.slice(1, n - 1).join(' ')); // drop both
             }
+            const runs = [];
+            const seen = new Set();
+            for (const run of candidates) {
+                const key = norm(run);
+                if (!run || seen.has(key)) continue;
+                const runWordCount = run.split(/\s+/).filter(Boolean).length;
+                // A single word is only worth highlighting if it is contentful.
+                if (runWordCount === 1) {
+                    if (run.length < 4) continue;
+                    if (STOP_WORDS.has(key)) continue;
+                }
+                seen.add(key);
+                runs.push(run);
+            }
+            return runs;
+        };
+
+        // Try to place ONE group in the given escaped paragraph text. We walk every Vietnamese
+        // candidate (longest first), and for each candidate try the full phrase then slightly
+        // trimmed variants, stopping at the FIRST occurrence found OUTSIDE existing MARK tokens.
+        // Returns { txt, placed }. Marks only the first occurrence so a common word is not
+        // painted everywhere it happens to appear.
+        // Turn a Vietnamese phrase into a regex source that is tolerant of (a) whitespace runs
+        // and (b) minor diacritic drift — every base vowel also matches its accented variants.
+        // This is the last-resort matcher so a term the AI transcribed with a slightly different
+        // accent/tone still gets highlighted instead of being dropped ("chưa đủ").
+        const VN_VOWELS = {
+            a: 'aàáảãạăằắẳẵặâầấẩẫậ', e: 'eèéẻẽẹêềếểễệ', i: 'iìíỉĩị',
+            o: 'oòóỏõọôồốổỗộơờớởỡợ', u: 'uùúủũụưừứửữự', y: 'yỳýỷỹỵ', d: 'dđ'
+        };
+        const looseVnRegexSource = (run) => {
+            const escapedHtml = this._escapeHTML(run);
+            let out = '';
+            for (const ch of escapedHtml) {
+                if (/\s/.test(ch)) { out += '[\\s\\u00A0]+'; continue; }
+                const lower = ch.toLowerCase();
+                let cls = null;
+                for (const base in VN_VOWELS) {
+                    if (VN_VOWELS[base].includes(lower)) { cls = VN_VOWELS[base]; break; }
+                }
+                if (cls) {
+                    out += `[${cls}${cls.toUpperCase()}]`;
+                } else {
+                    out += this._escapeRegExp(ch);
+                }
+            }
+            return out;
+        };
+
+        const tryPlaceGroup = (escapedText, group) => {
+            let txt = escapedText;
+            const enTok = (group.en || '').replace(/:/g, '');
+            const placeWith = (regex) => {
+                let placed = false;
+                txt = txt.split(TOKEN_SPLIT).map(part => {
+                    if (placed) return part;
+                    if (part.startsWith('[[MARK::')) return part;
+                    const replaced = part.replace(regex, `[[MARK::${group.color}::${enTok}::$1]]`);
+                    if (replaced !== part) placed = true;
+                    return replaced;
+                }).join('');
+                return placed;
+            };
+            // Strict pass first (exact, whitespace-tolerant) across all candidates & word-runs…
+            for (const candidate of group.candidates) {
+                for (const run of buildWordRuns(candidate)) {
+                    const esc = this._escapeRegExp(this._escapeHTML(run)).replace(/\\?\s+/g, '[\\s\\u00A0]+');
+                    if (placeWith(new RegExp(`(${esc})`, 'i'))) return { txt, placed: true };
+                }
+            }
+            // …then a diacritic-tolerant pass as a last resort.
+            for (const candidate of group.candidates) {
+                for (const run of buildWordRuns(candidate)) {
+                    if (placeWith(new RegExp(`(${looseVnRegexSource(run)})`, 'i'))) return { txt, placed: true };
+                }
+            }
+            return { txt, placed: false };
+        };
+
+        const hasMarkers = /\[\[H:[^\]]*?\]\][\s\S]*?\[\[\/H\]\]/.test(raw);
+
+        // Shared across ALL paragraphs so each English term is placed AT MOST ONCE total
+        // (no doubling) yet is guaranteed a chance to be placed SOMEWHERE (max coverage).
+        const placedEnKeys = new Set();
+
+        // PASS 1 — walk the AI's inline markers per paragraph, emit MARK tokens, and record
+        // which English keys are already satisfied so the fill pass won't re-add them.
+        const workingParas = paragraphs.map(p => {
+            const cleanP = p.replace(/^#+\s*/g, '');
+            let working = '';
+            if (hasMarkers) {
+                const re = /\[\[H:([^\]]*?)\]\]([\s\S]*?)\[\[\/H\]\]/g;
+                let last = 0;
+                let m;
+                while ((m = re.exec(cleanP)) !== null) {
+                    working += this._escapeHTML(cleanP.slice(last, m.index));
+                    const keyRaw = (m[1] || '').trim();
+                    let color, enKey;
+                    const asIdx = Number(keyRaw);
+                    if (Number.isInteger(asIdx) && asIdx >= 0 && (highlights || [])[asIdx]) {
+                        const h = highlights[asIdx];
+                        color = h.color || '#fef08a';
+                        enKey = norm(h.text || h.word);
+                    } else {
+                        color = colorForEnglishTerm(keyRaw);
+                        enKey = canonEn(keyRaw);
+                    }
+                    const innerVn = m[2];
+                    if (enKey) placedEnKeys.add(enKey);
+                    working += `[[MARK::${color}::${(enKey || '').replace(/:/g, '')}::${this._escapeHTML(innerVn)}]]`;
+                    last = re.lastIndex;
+                }
+                working += this._escapeHTML(cleanP.slice(last));
+            } else {
+                working = this._escapeHTML(cleanP);
+            }
+            return working;
         });
 
-        return formattedHTML;
+        // PASS 2 — for every English term the AI did NOT wrap inline, place its Vietnamese
+        // counterpart OURSELVES. To "match đúng" (and never paint the wrong occurrence of a
+        // repeated word) we bias the search to the paragraph where the English term actually
+        // appears in the source, mapping English-paragraph → Vietnamese-paragraph by position.
+        // If that preferred paragraph misses, we still scan the rest so no term is ever dropped
+        // ("không thiếu từ nào") — then we log any term we genuinely couldn't place.
+        //
+        // English source paragraphs (same \n\n splitting the translation uses). We locate a
+        // term's home paragraph here, then translate that index onto the Vietnamese paragraphs.
+        const enParas = (sourceText || '').normalize('NFC').split(/\n\s*\n/).filter(Boolean);
+        const enParasNorm = enParas.map(p => norm(p));
+        const nEn = enParasNorm.length;
+        const nVn = workingParas.length;
+
+        // Map an English paragraph index onto the Vietnamese paragraph list. When both sides have
+        // the same paragraph count (the usual case) it's 1:1; otherwise map proportionally.
+        const enToVnPara = (enIdx) => {
+            if (nEn === 0 || nVn === 0) return 0;
+            if (nEn === nVn) return enIdx;
+            return Math.min(nVn - 1, Math.round((enIdx / Math.max(1, nEn - 1)) * (nVn - 1)));
+        };
+
+        // Preferred Vietnamese-paragraph scan order for a group: the paragraph its English term
+        // lives in comes first, then every other paragraph as a safety net.
+        const preferredParaOrder = (enKey) => {
+            const order = [];
+            const seen = new Set();
+            for (let e = 0; e < nEn; e++) {
+                if (enKey && enParasNorm[e].includes(enKey)) {
+                    const v = enToVnPara(e);
+                    if (!seen.has(v)) { seen.add(v); order.push(v); }
+                }
+            }
+            for (let i = 0; i < nVn; i++) if (!seen.has(i)) { seen.add(i); order.push(i); }
+            return order;
+        };
+
+        const groups = buildFillGroups();
+        const unplaced = [];
+        for (const group of groups) {
+            if (!group.en || placedEnKeys.has(group.en)) continue;
+            let done = false;
+            for (const i of preferredParaOrder(group.en)) {
+                const { txt, placed } = tryPlaceGroup(workingParas[i], group);
+                if (placed) {
+                    workingParas[i] = txt;
+                    placedEnKeys.add(group.en);
+                    done = true;
+                    break;
+                }
+            }
+            if (!done) unplaced.push(group.en);
+        }
+
+        // Coverage report — surfaces any vocab item we couldn't paint (usually because the AI
+        // merged/split sentences so the Vietnamese phrase differs from translatedTermInVN).
+        if (unplaced.length) {
+            console.warn(`[highlight] Chưa tô được ${unplaced.length} cụm (có thể do dịch gộp/tách câu):`, unplaced);
+        }
+
+        // PASS 3 — convert all intermediate tokens into real <mark> elements.
+        const formatted = workingParas.map(working => {
+            const html = working.replace(/\[\[MARK::([^:]*?)::([^:]*?)::([\s\S]*?)\]\]/g, (match, color, enKey, inner) => {
+                return renderMark(color, inner, enKey);
+            });
+            return `<p class="paragraph-block">${html}</p>`;
+        });
+
+        return formatted.join('');
+    }
+
+    /**
+     * Strips the inline highlight markers [[H:original]]...[[/H]] from a translation,
+     * leaving clean human-readable Vietnamese text (used for the plain-text copy stored
+     * on sessions and passed to the PDF text fields).
+     */
+    _stripHighlightMarkers(text) {
+        return (text || '').replace(/\[\[H:[^\]]*?\]\]([\s\S]*?)\[\[\/H\]\]/g, '$1');
+    }
+
+    updateVietnameseHighlights(highlights = []) {
+        if (!this.els.translationCanvas) return;
+
+        // Reuse the alignment map computed at translation time so live re-highlighting
+        // keeps the exact same Vietnamese positions/colors.
+        let alignments = [];
+        try { alignments = JSON.parse(this.els.translationCanvas.dataset.alignments || '[]'); } catch (e) { alignments = []; }
+        const sourceText = this.els.translationCanvas.dataset.sourceText || this.currentSourceText || '';
+
+        // Prefer the marked translation (with [[H:...]] tags) so highlight positions come
+        // straight from the AI. Fall back to the stripped raw HTML for legacy sessions.
+        const markedText = this.els.translationCanvas.dataset.markedText;
+        if (markedText && markedText.trim()) {
+            this.els.translationCanvas.innerHTML = this._computeTranslatedHTML(
+                markedText,
+                highlights,
+                this.currentVocabData || [],
+                alignments,
+                sourceText
+            );
+            return;
+        }
+
+        let rawVnHTML = this.els.translationCanvas.dataset.rawHtml;
+        if (!rawVnHTML || rawVnHTML.includes('Bản dịch tiếng Việt')) return;
+
+        const tmp = document.createElement('div');
+        tmp.innerHTML = rawVnHTML;
+        const textContent = Array.from(tmp.querySelectorAll('p, div.paragraph-block'))
+            .map(p => p.innerText || p.textContent || '')
+            .join('\n\n');
+
+        const updatedHTML = this._computeTranslatedHTML(
+            textContent || rawVnHTML,
+            highlights,
+            this.currentVocabData || [],
+            alignments,
+            sourceText
+        );
+
+        this.els.translationCanvas.innerHTML = updatedHTML;
     }
 
     /**
@@ -1351,9 +1904,10 @@ class LinguaApp {
      * then Translate on the same paragraph) merges into the same entry instead of
      * creating a duplicate "Văn bản N" — one entry per distinct text, as requested.
      */
-    _addVocabSession(sourceText, highlights = [], vocabList = []) {
+    _addVocabSession(sourceText, highlights = [], vocabList = [], vietnameseMarked = '', alignments = []) {
         const normalized = sourceText.replace(/\s+/g, ' ').trim();
         let session = this.vocabSessions.find(s => s.sourceText === normalized);
+        const cleanVn = this._stripHighlightMarkers(vietnameseMarked || '');
 
         try {
             console.log('[DEBUG _addVocabSession]', {
@@ -1368,6 +1922,11 @@ class LinguaApp {
             session.highlights = highlights;
             session.vocabList = vocabList;
             session.expanded = true;
+            if (alignments && alignments.length) session.alignments = alignments;
+            if (vietnameseMarked) {
+                session.vietnameseMarked = vietnameseMarked;
+                session.vietnameseText = cleanVn;
+            }
         } else {
             this.sessionCounter++;
             session = {
@@ -1376,6 +1935,9 @@ class LinguaApp {
                 preview: normalized.slice(0, 70),
                 highlights,
                 vocabList,
+                alignments: alignments || [],
+                vietnameseMarked: vietnameseMarked || '',
+                vietnameseText: cleanVn,
                 expanded: true
             };
             this.vocabSessions.push(session);
@@ -1951,7 +2513,11 @@ class LinguaApp {
             this.pdfExporter = new PDFExporter();
         }
         let englishText = (this.els.inputText ? this.els.inputText.value : '').trim();
+        if (!englishText && this.els.readingCanvas) {
+            englishText = (this.els.readingCanvas.innerText || this.els.readingCanvas.textContent || '').trim();
+        }
         let vietnameseText = (this.els.translationCanvas ? this.els.translationCanvas.innerText : '').trim();
+        let vietnameseMarked = (this.els.translationCanvas ? (this.els.translationCanvas.dataset.markedText || '') : '');
         let vietnameseHTML = (this.els.translationCanvas ? this.els.translationCanvas.innerHTML : '') || '';
         let rawEnHTML = (this.els.readingCanvas ? this.els.readingCanvas.innerHTML : '') || '';
         let highlights = [];
@@ -1964,6 +2530,7 @@ class LinguaApp {
         if (activeS) {
             if (!englishText) englishText = activeS.sourceText || '';
             if (!vietnameseText) vietnameseText = activeS.vietnameseText || '';
+            if (!vietnameseMarked) vietnameseMarked = activeS.vietnameseMarked || '';
             if (!vietnameseHTML) vietnameseHTML = activeS.vietnameseHTML || '';
         }
 
@@ -1988,6 +2555,18 @@ class LinguaApp {
         let title = "Tài Liệu Dịch & Từ Vựng Ngữ Cảnh";
 
         const activeFont = document.getElementById('fontFamilySelect') ? document.getElementById('fontFamilySelect').value : "'Lora', Georgia, serif";
+
+        // Re-compute fresh, 100% color-synchronized Vietnamese HTML right before PDF preview.
+        // Prefer the marked translation (inline [[H:...]] tags) so highlights land exactly where
+        // the AI put them; fall back to the plain text for legacy sessions.
+        let pdfAlignments = [];
+        try { pdfAlignments = JSON.parse(this.els.translationCanvas.dataset.alignments || '[]'); } catch (e) { pdfAlignments = []; }
+        if ((!pdfAlignments || !pdfAlignments.length) && activeS && activeS.alignments) pdfAlignments = activeS.alignments;
+
+        const vnSource = vietnameseMarked || vietnameseText;
+        if (vnSource) {
+            vietnameseHTML = this._computeTranslatedHTML(vnSource, highlights, vocabList, pdfAlignments, englishText || this.currentSourceText || '');
+        }
 
         await this.pdfExporter.previewPDF({
             documentTitle: title,
@@ -2020,12 +2599,18 @@ class LinguaApp {
         const mergedHighlights = [...(session.highlights || []), ...canvasHighlights];
         const mergedVocab = [...(session.vocabList || []), ...(this.currentVocabData || [])];
 
+        let freshVnHTML = session.vietnameseHTML || '';
+        const vnSessionSource = session.vietnameseMarked || session.vietnameseText;
+        if (vnSessionSource) {
+            freshVnHTML = this._computeTranslatedHTML(vnSessionSource, mergedHighlights, mergedVocab, session.alignments || [], session.sourceText || '');
+        }
+
         await this.pdfExporter.previewPDF({
             documentTitle: defaultTitle,
             englishText: session.sourceText || '',
             vietnameseText: session.vietnameseText || '',
             englishHTML: session.readingHTML || session.sourceText || '',
-            vietnameseHTML: session.vietnameseHTML || '',
+            vietnameseHTML: freshVnHTML,
             vocabList: mergedVocab,
             highlights: mergedHighlights,
             fontFamily: activeFont
@@ -2037,7 +2622,11 @@ class LinguaApp {
             this.pdfExporter = new PDFExporter();
         }
         let englishText = (this.els.inputText ? this.els.inputText.value : '').trim();
+        if (!englishText && this.els.readingCanvas) {
+            englishText = (this.els.readingCanvas.innerText || this.els.readingCanvas.textContent || '').trim();
+        }
         let vietnameseText = (this.els.translationCanvas ? this.els.translationCanvas.innerText : '').trim();
+        let vietnameseMarked = (this.els.translationCanvas ? (this.els.translationCanvas.dataset.markedText || '') : '');
         let vietnameseHTML = (this.els.translationCanvas ? this.els.translationCanvas.innerHTML : '') || '';
         let rawEnHTML = (this.els.readingCanvas ? this.els.readingCanvas.innerHTML : '') || '';
         let highlights = [];
@@ -2050,6 +2639,7 @@ class LinguaApp {
         if (activeS) {
             if (!englishText) englishText = activeS.sourceText || '';
             if (!vietnameseText) vietnameseText = activeS.vietnameseText || '';
+            if (!vietnameseMarked) vietnameseMarked = activeS.vietnameseMarked || '';
             if (!vietnameseHTML) vietnameseHTML = activeS.vietnameseHTML || '';
         }
 
@@ -2066,6 +2656,15 @@ class LinguaApp {
             return;
         }
 
+        let pdfAlignments = [];
+        try { pdfAlignments = JSON.parse(this.els.translationCanvas.dataset.alignments || '[]'); } catch (e) { pdfAlignments = []; }
+        if ((!pdfAlignments || !pdfAlignments.length) && activeS && activeS.alignments) pdfAlignments = activeS.alignments;
+
+        const vnSource = vietnameseMarked || vietnameseText;
+        if (vnSource) {
+            vietnameseHTML = this._computeTranslatedHTML(vnSource, highlights, vocabList, pdfAlignments, englishText || this.currentSourceText || '');
+        }
+
         const englishHTML = rawEnHTML.trim()
             ? rawEnHTML
             : englishText.split(/\n\s*\n/).filter(Boolean)
@@ -2078,10 +2677,16 @@ class LinguaApp {
         } catch (e) {}
 
         const btnInline = document.getElementById('btnExportPDFInline');
-        const originalLabel = btnInline ? btnInline.innerHTML : '';
+        const btnHeader = document.getElementById('btnExportPDFHeader');
+        const origInline = btnInline ? btnInline.innerHTML : '';
+        const origHeader = btnHeader ? btnHeader.innerHTML : '';
         if (btnInline) {
             btnInline.disabled = true;
-            btnInline.innerHTML = '⌛ Đang tạo...';
+            btnInline.innerHTML = '<span>⌛ Đang tạo PDF...</span>';
+        }
+        if (btnHeader) {
+            btnHeader.disabled = true;
+            btnHeader.innerHTML = '<span>⌛ Đang tạo...</span>';
         }
 
         try {
@@ -2111,7 +2716,11 @@ class LinguaApp {
         } finally {
             if (btnInline) {
                 btnInline.disabled = false;
-                btnInline.innerHTML = originalLabel;
+                btnInline.innerHTML = origInline;
+            }
+            if (btnHeader) {
+                btnHeader.disabled = false;
+                btnHeader.innerHTML = origHeader;
             }
         }
     }
@@ -2145,9 +2754,12 @@ class LinguaApp {
 
         try {
             const enHTML = session.englishHTML || this._buildHighlightedEnglishHTML(session.sourceText || '', session.highlights || []);
-            const vnHTML = session.vietnameseHTML || '';
             const enText = session.sourceText || '';
             const vnText = session.vietnameseText || '';
+            const vnSource = session.vietnameseMarked || vnText;
+            const vnHTML = vnSource
+                ? this._computeTranslatedHTML(vnSource, session.highlights || [], session.vocabList || [], session.alignments || [], enText)
+                : (session.vietnameseHTML || '');
 
             await this.pdfExporter.exportToPDF({
                 documentTitle: title,

@@ -25,6 +25,187 @@ class ContextTranslator {
         this.scanOpenaiModel = localStorage.getItem('lingua_scan_openai_model') || 'gpt-4o';
     }
 
+    /**
+     * Resolves the highlight color for an AI vocab item, matching its English "original"
+     * back to the highlighted English term. Uses collapse-whitespace + inflection-tolerant
+     * matching so "witnessed" still gets the color of the highlighted "witness" (and vice
+     * versa). Falls back to yellow only when nothing plausibly matches. This keeps the
+     * English highlight color and the Vietnamese highlight color identical.
+     */
+    _resolveVocabColor(originalTerm, highlights = []) {
+        const norm = (s) => (s || '').toString().toLowerCase().trim()
+            .replace(/[\u00A0\u2000-\u200B]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .normalize('NFC');
+        const o = norm(originalTerm);
+        if (!o) return '#fef08a';
+        const exact = highlights.find(h => norm(h.text || h.word) === o);
+        if (exact && exact.color) return exact.color;
+        const stem = (a, b) => {
+            if (a.length < 4 || b.length < 4) return false;
+            const shorter = a.length <= b.length ? a : b;
+            const longer = a.length <= b.length ? b : a;
+            return longer.startsWith(shorter);
+        };
+        const loose = highlights.find(h => stem(norm(h.text || h.word), o));
+        if (loose && loose.color) return loose.color;
+        return '#fef08a';
+    }
+
+    /**
+     * DEDICATED ALIGNMENT PASS (marker-injection, PER-PARAGRAPH).
+     *
+     * WHY PER-PARAGRAPH: asking the AI to re-emit the WHOLE translation with tags fails on long
+     * texts — the answer gets truncated or lightly reworded, and a single altered character used
+     * to make us discard the ENTIRE marked document (→ big gaps). Instead we split the translation
+     * into paragraphs and align each one on its own, in parallel:
+     *   • each task is tiny → never truncated, near-perfect verbatim copy;
+     *   • the integrity check runs per paragraph → a bad paragraph only loses ITS OWN tags, every
+     *     other paragraph stays fully highlighted;
+     *   • we don't force every index into every paragraph → no over-painting.
+     *
+     * The AI wraps each highlight's Vietnamese counterpart in [[H:index]]…[[/H]]. The index makes
+     * the renderer take the color straight from highlights[index] (exact, never fuzzy) and the
+     * position from where the tag sits (exact). Returns { markedText, alignments }:
+     *   - markedText = paragraphs re-joined, tagged where trustworthy (plain where not);
+     *   - alignments = [{ index, vn }] harvested from EVERY paragraph attempt (fill-in fallback).
+     */
+    async alignHighlightsToTranslation(highlights = [], translatedText = '') {
+        const empty = { markedText: '', alignments: [] };
+        const cleanVn = (translatedText || '').toString().trim();
+        if (!Array.isArray(highlights) || highlights.length === 0 || !cleanVn) return empty;
+
+        const paragraphs = cleanVn.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+        if (paragraphs.length === 0) return empty;
+
+        const results = await Promise.all(
+            paragraphs.map(p => this._alignParagraphMarkers(highlights, p).catch(() => ({ marked: '', alignments: [] })))
+        );
+
+        // Rebuild the document: use the tagged paragraph when it passed the integrity check,
+        // otherwise the original plain paragraph (app.js fill-in will paint it via alignments).
+        const markedParas = results.map((r, i) => (r && r.marked) ? r.marked : paragraphs[i]);
+        const markedText = markedParas.join('\n\n');
+
+        // Collect alignments from all attempts, de-duped by index (keep the first / shortest vn).
+        const byIndex = new Map();
+        results.forEach(r => (r && r.alignments ? r.alignments : []).forEach(a => {
+            const prev = byIndex.get(a.index);
+            if (!prev || a.vn.length < prev.vn.length) byIndex.set(a.index, a);
+        }));
+        const alignments = Array.from(byIndex.values());
+
+        const anyTagged = /\[\[H:\d+\]\][\s\S]*?\[\[\/H\]\]/.test(markedText);
+        return { markedText: anyTagged ? markedText : '', alignments };
+    }
+
+    /**
+     * Aligns ONE paragraph: asks the AI to return that paragraph verbatim with [[H:index]] tags
+     * around the Vietnamese counterparts of whichever highlighted English terms appear in it.
+     * Returns { marked, alignments }. `marked` is '' when the returned text failed the integrity
+     * check (tags stripped must still equal the original paragraph); alignments are still returned
+     * so the app can fall back to substring fill-in.
+     */
+    async _alignParagraphMarkers(highlights, paragraph) {
+        const fail = { marked: '', alignments: [] };
+        const para = (paragraph || '').toString().trim();
+        if (!para) return fail;
+
+        const numbered = highlights
+            .map((h, i) => `${i}. "${(h.text || h.word || '').toString().replace(/"/g, "'").trim()}"`)
+            .join('\n');
+
+        const prompt = `Bạn là chuyên gia đối chiếu song ngữ Anh-Việt. Dưới đây là MỘT ĐOẠN bản dịch tiếng Việt và một DANH SÁCH CỤM TỪ TIẾNG ANH được đánh số (từ 0).
+Nhiệm vụ: TRẢ LẠI CHÍNH XÁC đoạn tiếng Việt đó (giữ nguyên từng ký tự, dấu câu, chữ hoa/thường), NHƯNG với MỖI cụm tiếng Anh trong danh sách mà có phần dịch XUẤT HIỆN trong đoạn này, hãy bọc phần dịch tương ứng bằng cặp thẻ đánh số: [[H:INDEX]]cụm tiếng Việt[[/H]] — INDEX là ĐÚNG số thứ tự của cụm tiếng Anh.
+
+Ví dụ: danh sách có "0. \"humans\"", "1. \"walking slowly\"" và đoạn là "Những con người đang đi bộ chậm rãi." → trả về:
+"Những [[H:0]]con người[[/H]] đang [[H:1]]đi bộ chậm rãi[[/H]]."
+
+QUY TẮC BẮT BUỘC:
+- ‼️ TUYỆT ĐỐI KHÔNG sửa/dịch lại/thêm/bớt bất kỳ chữ nào. CHỈ được CHÈN cặp thẻ [[H:INDEX]] và [[/H]]. Xóa hết thẻ đi thì phải GIỐNG HỆT đoạn gốc 100%.
+- Bọc thẻ cho MỌI cụm tiếng Anh mà bạn tìm thấy phần dịch tương ứng trong đoạn này. Hãy tìm KỸ, đừng bỏ sót cụm nào đang có mặt trong đoạn.
+- KHÔNG bắt buộc phải dùng hết mọi index: cụm nào KHÔNG xuất hiện trong đoạn này thì BỎ QUA (đừng bọc bừa, đừng bọc cụm không liên quan).
+- Bọc đúng cụm tiếng Việt LIỀN MẠCH, NGẮN GỌN, sát nghĩa nhất của riêng cụm đó (không bọc cả câu, không lấn sang cụm khác). INDEX phải TRÙNG đúng nghĩa của cụm. Các thẻ KHÔNG được chồng chéo.
+
+Trả về DUY NHẤT JSON (không kèm markdown), field "marked" là đoạn đã chèn thẻ:
+{
+  "marked": "…đoạn tiếng Việt đã chèn thẻ [[H:index]]…[[/H]]…"
+}
+
+DANH SÁCH CỤM TỪ TIẾNG ANH:
+${numbered}
+
+ĐOẠN BẢN DỊCH (giữ nguyên, chỉ chèn thẻ):
+"""
+${para}
+"""`;
+
+        const skeleton = (s) => (s || '').toString().toLowerCase().normalize('NFC')
+            .replace(/\[\[h:\d+\]\]|\[\[\/h\]\]/gi, '')
+            .replace(/[^\p{L}\p{N}]/gu, '');
+
+        const extractAlignments = (marked) => {
+            const out = [];
+            const re = /\[\[H:(\d+)\]\]([\s\S]*?)\[\[\/H\]\]/g;
+            let m;
+            while ((m = re.exec(marked)) !== null) {
+                const index = Number(m[1]);
+                const vn = (m[2] || '').trim();
+                if (Number.isInteger(index) && index >= 0 && index < highlights.length && vn) {
+                    out.push({ index, vn });
+                }
+            }
+            return out;
+        };
+
+        let raw = '';
+        if (this.provider === 'openai' && this.openaiApiKey) {
+            const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.openaiApiKey}` },
+                body: JSON.stringify({
+                    model: this.openaiModel,
+                    messages: [{ role: 'user', content: prompt }],
+                    response_format: { type: 'json_object' },
+                    temperature: 0
+                })
+            });
+            if (!resp.ok) return fail;
+            const data = await resp.json();
+            raw = data.choices?.[0]?.message?.content || '';
+        } else if (this.geminiApiKey) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiApiKey}`;
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0, responseMimeType: 'application/json' }
+                })
+            });
+            if (!resp.ok) return fail;
+            const data = await resp.json();
+            raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        } else {
+            return fail;
+        }
+
+        let parsed;
+        try {
+            parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+        } catch (e) {
+            return fail;
+        }
+        const marked = (parsed && typeof parsed.marked === 'string') ? parsed.marked : '';
+        if (!marked) return fail;
+
+        const alignments = extractAlignments(marked);
+        // Integrity check on THIS paragraph only. If the AI reworded it, drop the tagged text but
+        // keep the alignments so the app can still substring-fill them onto the original paragraph.
+        const ok = skeleton(marked) === skeleton(para);
+        return { marked: ok ? marked : '', alignments };
+    }
+
     setUseSeparateScanApi(enabled) {
         this.useSeparateScanApi = !!enabled;
         localStorage.setItem('lingua_use_separate_scan_api', this.useSeparateScanApi);
@@ -127,8 +308,12 @@ class ContextTranslator {
         }
 
         let completedCount = 0;
+        const chunkLower = chunks.map(c => c.toLowerCase());
         const chunkPromises = chunks.map(async (chunkText, i) => {
-            const chunkHighlights = highlightedItems.filter(item => chunkText.includes(item.text));
+            // Case-insensitive membership: a highlight like "Witnessed" (capitalised at the
+            // start of a sentence) must still be attached to a chunk that contains "witnessed".
+            const cl = chunkLower[i];
+            const chunkHighlights = highlightedItems.filter(item => cl.includes((item.text || '').toLowerCase()));
 
             let result;
             if (this.provider === 'openai' && this.openaiApiKey) {
@@ -211,13 +396,18 @@ class ContextTranslator {
 Bạn là một chuyên gia dịch thuật và nhà ngôn ngữ học Tiếng Anh - Tiếng Việt cao cấp, chuyên biên soạn tài liệu học từ vựng chuyên sâu.
 Nhiệm vụ:
 1. Dịch đoạn văn tiếng Anh bên dưới sang tiếng Việt mượt mà, tự nhiên và CHUẨN XÁC NGHĨA TRONG NGỮ CẢNH.
+   ⚡ QUY TẮC ĐÁNH DẤU TỐI QUAN TRỌNG: Ngay TRONG "translatedText", với MỖI item từ vựng bạn phân tích ở dưới, hãy BỌC chính xác cụm từ tiếng Việt tương ứng bằng cặp thẻ: [[H:ENGLISH_ORIGINAL]]cụm tiếng Việt[[/H]]
+   Trong đó ENGLISH_ORIGINAL là ĐÚNG chuỗi tiếng Anh gốc ở trường "original" của item đó (giữ nguyên chữ thường, không dấu ngoặc).
+   Ví dụ: câu tiếng Anh "humans are walking slowly" → dịch "Những [[H:humans]]con người[[/H]] đang [[H:walking slowly]]đi bộ chậm rãi[[/H]]."
+   BẮT BUỘC: cụm tiếng Việt nằm giữa 2 thẻ phải là NGHĨA ĐÚNG của cụm tiếng Anh đó tại ĐÚNG vị trí nó xuất hiện trong câu. KHÔNG bọc nhầm sang từ khác. Mỗi item chỉ cần bọc 1 lần (ở lần xuất hiện đầu tiên). Nếu một cụm tiếng Anh không thực sự xuất hiện trong đoạn thì không bọc.
+   ‼️ CỰC KỲ QUAN TRỌNG: BẮT BUỘC phải bọc thẻ cho TẤT CẢ MỌI item trong "vocabList" — TUYỆT ĐỐI KHÔNG được bỏ sót bất kỳ item nào. Số cặp thẻ [[H:...]]...[[/H]] trong "translatedText" PHẢI BẰNG ĐÚNG số phần tử trong "vocabList". Sau khi dịch xong, hãy TỰ RÀ SOÁT lại: mỗi item ở vocabList đều phải có đúng 1 cặp thẻ tương ứng trong bản dịch. Nếu thiếu, hãy thêm vào cho đủ trước khi trả kết quả.
 2. Phân tích chi tiết danh sách từ/cụm từ/cấu trúc được yêu cầu: [${highlightListStr}] (Nếu danh sách trống, hãy tự động QUÉT CHI TIẾT VÀ ĐẦY ĐỦ toàn bộ đoạn văn để trích xuất TỐI THIỂU 15-20 mục hay nhất và đa dạng nhất, bao gồm ĐỦ các nhóm: Trạng từ+Động từ, Trạng từ+Tính từ, Trạng từ+Danh từ, Cụm từ kết hợp/Collocations, Cụm động từ/Phrasal Verbs, Thành ngữ/Idioms, TẤT CẢ các Cấu trúc ngữ pháp xuất hiện trong bài dù dễ hay khó, và các Danh từ/Động từ/Tính từ/Trạng từ học thuật hoặc khó khác. Không bỏ sót mục nào đáng học).
 3. Cho mỗi item, phân tích chi tiết:
    - "original": Từ, Cụm từ hoặc Cấu trúc tiếng Anh
    - "category": Phân loại chính xác trong các nhãn sau: ["Trạng từ + Động từ (Adv+Verb)", "Trạng từ + Tính từ (Adv+Adj)", "Trạng từ + Danh từ (Adv+Noun)", "Cụm từ kết hợp (Collocation)", "Cấu trúc ngữ pháp (Structure)", "Cụm động từ (Phrasal Verb)", "Thành ngữ (Idiom)", "Danh từ (Noun)", "Động từ (Verb)", "Tính từ (Adj)", "Trạng từ (Adv)", "Giới từ/Liên từ (Prep/Conj)"]
    - "ipa": Phiên âm chuẩn IPA
    - "contextMeaning": Nghĩa tiếng Việt chuẩn xác nhất theo đúng ngữ cảnh bài viết này
-   - "translatedTermInVN": Từ/cụm từ tương ứng mà bạn ĐÃ DÙNG trong bản dịch tiếng Việt
+   - "translatedTermInVN": Phải là CHÍNH XÁC cụm từ tiếng Việt bạn đã BỌC giữa 2 thẻ [[H:...]]...[[/H]] cho item này trong "translatedText" (không kèm thẻ).
    - "exampleEn": Một câu ví dụ minh họa tiếng Anh (KHÁC câu trong bài) ngắn gọn, tự nhiên
    - "exampleVi": Bản dịch tiếng Việt của câu ví dụ trên
    - "explanation": Giải thích NGẮN GỌN bằng TIẾNG VIỆT (1-2 câu, tối đa 60-80 từ) về nghĩa, cách dùng, sắc thái hoặc lưu ý khi dùng từ/cụm từ này. Nếu là collocation/idiom/structure thì giải thích ý nghĩa + cách dùng. Nếu là từ đơn thì giải thích nghĩa chính + cách dùng phổ biến.
@@ -229,7 +419,7 @@ Nhiệm vụ:
 
 Trả về ĐÚNG định dạng JSON sau (không kèm markdown block ngoài):
 {
-  "translatedText": "Bản dịch tiếng Việt mượt mà...",
+  "translatedText": "Người kiểm toán đã [[H:meticulously scrutinize]]xem xét tỉ mỉ[[/H]] mọi giao dịch...",
   "vocabList": [
     {
       "original": "meticulously scrutinize",
@@ -292,17 +482,10 @@ ${textChunk}
 
         return {
             translatedText: jsonResult.translatedText || "",
-            vocabList: (jsonResult.vocabList || []).map(v => {
-                const hl = highlights.find(h => 
-                    h.text.toLowerCase().trim() === v.original.toLowerCase().trim() ||
-                    h.text.toLowerCase().includes(v.original.toLowerCase().trim()) ||
-                    v.original.toLowerCase().includes(h.text.toLowerCase().trim())
-                );
-                return {
-                    ...v,
-                    color: hl ? hl.color : '#fef08a'
-                };
-            })
+            vocabList: (jsonResult.vocabList || []).map(v => ({
+                ...v,
+                color: this._resolveVocabColor(v.original, highlights)
+            }))
         };
     }
 
@@ -317,13 +500,18 @@ ${textChunk}
 Bạn là một chuyên gia dịch thuật và nhà ngôn ngữ học Tiếng Anh - Tiếng Việt cao cấp, chuyên biên soạn tài liệu học từ vựng chuyên sâu.
 Nhiệm vụ:
 1. Dịch đoạn văn tiếng Anh bên dưới sang tiếng Việt mượt mà, tự nhiên và CHUẨN XÁC NGHĨA TRONG NGỮ CẢNH.
+   ⚡ QUY TẮC ĐÁNH DẤU TỐI QUAN TRỌNG: Ngay TRONG "translatedText", với MỖI item từ vựng bạn phân tích ở dưới, hãy BỌC chính xác cụm từ tiếng Việt tương ứng bằng cặp thẻ: [[H:ENGLISH_ORIGINAL]]cụm tiếng Việt[[/H]]
+   Trong đó ENGLISH_ORIGINAL là ĐÚNG chuỗi tiếng Anh gốc ở trường "original" của item đó (giữ nguyên chữ thường, không dấu ngoặc).
+   Ví dụ: câu tiếng Anh "humans are walking slowly" → dịch "Những [[H:humans]]con người[[/H]] đang [[H:walking slowly]]đi bộ chậm rãi[[/H]]."
+   BẮT BUỘC: cụm tiếng Việt nằm giữa 2 thẻ phải là NGHĨA ĐÚNG của cụm tiếng Anh đó tại ĐÚNG vị trí nó xuất hiện trong câu. KHÔNG bọc nhầm sang từ khác. Mỗi item chỉ cần bọc 1 lần (ở lần xuất hiện đầu tiên). Nếu một cụm tiếng Anh không thực sự xuất hiện trong đoạn thì không bọc.
+   ‼️ CỰC KỲ QUAN TRỌNG: BẮT BUỘC phải bọc thẻ cho TẤT CẢ MỌI item trong "vocabList" — TUYỆT ĐỐI KHÔNG được bỏ sót bất kỳ item nào. Số cặp thẻ [[H:...]]...[[/H]] trong "translatedText" PHẢI BẰNG ĐÚNG số phần tử trong "vocabList". Sau khi dịch xong, hãy TỰ RÀ SOÁT lại: mỗi item ở vocabList đều phải có đúng 1 cặp thẻ tương ứng trong bản dịch. Nếu thiếu, hãy thêm vào cho đủ trước khi trả kết quả.
 2. Phân tích chi tiết danh sách từ/cụm từ/cấu trúc được yêu cầu: [${highlightListStr}] (Nếu danh sách trống, hãy tự động QUÉT CHI TIẾT VÀ ĐẦY ĐỦ toàn bộ đoạn văn để trích xuất TỐI THIỂU 15-20 mục hay nhất và đa dạng nhất, bao gồm ĐỦ các nhóm: Trạng từ+Động từ, Trạng từ+Tính từ, Trạng từ+Danh từ, Cụm từ kết hợp/Collocations, Cụm động từ/Phrasal Verbs, Thành ngữ/Idioms, TẤT CẢ các Cấu trúc ngữ pháp xuất hiện trong bài dù dễ hay khó, và các Danh từ/Động từ/Tính từ/Trạng từ học thuật hoặc khó khác. Không bỏ sót mục nào đáng học).
 3. Cho mỗi item, phân tích chi tiết:
    - "original": Từ, Cụm từ hoặc Cấu trúc tiếng Anh
    - "category": Phân loại chính xác trong các nhãn sau: ["Trạng từ + Động từ (Adv+Verb)", "Trạng từ + Tính từ (Adv+Adj)", "Trạng từ + Danh từ (Adv+Noun)", "Cụm từ kết hợp (Collocation)", "Cấu trúc ngữ pháp (Structure)", "Cụm động từ (Phrasal Verb)", "Thành ngữ (Idiom)", "Danh từ (Noun)", "Động từ (Verb)", "Tính từ (Adj)", "Trạng từ (Adv)", "Giới từ/Liên từ (Prep/Conj)"]
    - "ipa": Phiên âm chuẩn IPA (nếu là từ/cụm từ)
    - "contextMeaning": Nghĩa tiếng Việt chuẩn xác nhất theo đúng ngữ cảnh bài viết này
-   - "translatedTermInVN": Từ/cụm từ tương ứng mà bạn ĐÃ DÙNG trong bản dịch tiếng Việt
+   - "translatedTermInVN": Phải là CHÍNH XÁC cụm từ tiếng Việt bạn đã BỌC giữa 2 thẻ [[H:...]]...[[/H]] cho item này trong "translatedText" (không kèm thẻ).
    - "exampleEn": Một câu ví dụ minh họa tiếng Anh (KHÁC câu trong bài) ngắn gọn, tự nhiên
    - "exampleVi": Bản dịch tiếng Việt của câu ví dụ trên
    - "explanation": Giải thích NGẮN GỌN bằng TIẾNG VIỆT (1-2 câu, tối đa 60-80 từ) về nghĩa, cách dùng, sắc thái hoặc lưu ý khi dùng từ/cụm từ này. Nếu là collocation/idiom/structure thì giải thích ý nghĩa + cách dùng. Nếu là từ đơn thì giải thích nghĩa chính + cách dùng phổ biến.
@@ -335,7 +523,7 @@ Nhiệm vụ:
 
 Trả về ĐÚNG định dạng JSON sau (không kèm markdown block ngoài):
 {
-  "translatedText": "Bản dịch tiếng Việt mượt mà...",
+  "translatedText": "Internet đã gây ra một sự [[H:profound paradigm shift]]chuyển đổi tư duy sâu sắc[[/H]]...",
   "vocabList": [
     {
       "original": "profound paradigm shift",
@@ -403,17 +591,10 @@ ${textChunk}
 
         return {
             translatedText: jsonResult.translatedText || "",
-            vocabList: (jsonResult.vocabList || []).map(v => {
-                const hl = highlights.find(h => 
-                    h.text.toLowerCase().trim() === v.original.toLowerCase().trim() ||
-                    h.text.toLowerCase().includes(v.original.toLowerCase().trim()) ||
-                    v.original.toLowerCase().includes(h.text.toLowerCase().trim())
-                );
-                return {
-                    ...v,
-                    color: hl ? hl.color : '#fef08a'
-                };
-            })
+            vocabList: (jsonResult.vocabList || []).map(v => ({
+                ...v,
+                color: this._resolveVocabColor(v.original, highlights)
+            }))
         };
     }
 
@@ -685,7 +866,7 @@ Trả về ĐÚNG JSON (không kèm markdown, không giải thích thêm):
         for (const item of itemsToProcess) {
             const word = item.text || item;
             const ipa = window.dictionaryDB ? window.dictionaryDB.getIPA(word) : "/.../";
-            let localMeaning = window.dictionaryDB?.dict[word.toLowerCase()]?.meaning;
+            let localMeaning = window.dictionaryDB ? window.dictionaryDB.getMeaning(word) : null;
             const catInfo = item.category || null;
 
             processedItems.push({ word, ipa, localMeaning, color: item.color || '#fef08a', category: catInfo });

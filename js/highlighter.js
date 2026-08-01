@@ -7,17 +7,17 @@ class TextHighlighter {
     constructor(options = {}) {
         this.container = options.container || null;
         this.onHighlightsChange = options.onHighlightsChange || null;
-        this.currentColor = options.defaultColor || '#fff3a8'; // Default soft pastel yellow
+        this.currentColor = options.defaultColor || 'rgba(250, 204, 21, 0.35)'; // Soft translucent yellow
         this.mode = 'select'; // 'select' (Mouse selection + popup) vs 'brush' (Instant Pen Highlight)
         this.highlights = new Map(); // id -> { id, text, color, paragraphIdx }
         this.nextId = 1;
 
         this.colorPalette = [
-            { id: 'yellow', hex: '#fef08a', textHex: '#854d0e', label: 'Vàng' },
-            { id: 'green',  hex: '#bbf7d0', textHex: '#166534', label: 'Xanh lá' },
-            { id: 'blue',   hex: '#bae6fd', textHex: '#075985', label: 'Xanh dương' },
-            { id: 'purple', hex: '#e9d5ff', textHex: '#6b21a8', label: 'Tím' },
-            { id: 'pink',   hex: '#fecdd3', textHex: '#9f1239', label: 'Hồng' }
+            { id: 'yellow', hex: 'rgba(250, 204, 21, 0.35)', textHex: '#854d0e', label: 'Vàng' },
+            { id: 'green', hex: 'rgba(74, 222, 128, 0.35)', textHex: '#166534', label: 'Xanh lá' },
+            { id: 'blue', hex: 'rgba(56, 189, 248, 0.35)', textHex: '#075985', label: 'Xanh dương' },
+            { id: 'purple', hex: 'rgba(192, 132, 252, 0.35)', textHex: '#6b21a8', label: 'Tím' },
+            { id: 'pink', hex: 'rgba(251, 113, 133, 0.35)', textHex: '#9f1239', label: 'Hồng' }
         ];
 
         this._initTooltip();
@@ -117,7 +117,9 @@ class TextHighlighter {
                         this.removeMark(mark);
                     } else {
                         // If different color -> update to new color
-                        mark.style.backgroundColor = this.currentColor;
+                        const transColor = this._getTranslucentColor(this.currentColor);
+                        mark.style.backgroundImage = `linear-gradient(180deg, transparent 52%, ${transColor} 52%)`;
+                        mark.style.backgroundColor = 'transparent';
                         mark.dataset.color = this.currentColor;
                         const markId = mark.dataset.highlightId;
                         if (this.highlights.has(markId)) {
@@ -237,7 +239,9 @@ class TextHighlighter {
         mark.dataset.highlightId = markId;
         mark.dataset.color = colorHex;
         mark.dataset.text = text;
-        mark.style.backgroundColor = colorHex;
+        const transColor = this._getTranslucentColor(colorHex);
+        mark.style.backgroundColor = transColor;
+        mark.style.backgroundImage = 'none';
         mark.title = `Từ/Cụm từ đã tô màu: "${text}"`;
 
         try {
@@ -390,7 +394,7 @@ class TextHighlighter {
         targetPhrases.forEach(term => {
             const regex = new RegExp(`\\b(${this._escapeRegExp(term)})\\b`, 'gi');
             const paragraphs = container.querySelectorAll('p, div.paragraph-block');
-            
+
             paragraphs.forEach(p => {
                 if (p.querySelector('mark')) return;
                 if (count >= 50) return;
@@ -446,7 +450,7 @@ class TextHighlighter {
             }
             try {
                 range.setStart(startNode, startOffset);
-            } catch (e) {}
+            } catch (e) { }
         }
 
         // Expand end offset to end of word
@@ -460,7 +464,7 @@ class TextHighlighter {
             }
             try {
                 range.setEnd(endNode, endOffset);
-            } catch (e) {}
+            } catch (e) { }
         }
 
         return range;
@@ -484,25 +488,25 @@ class TextHighlighter {
 
         const categoryColorMap = {
             // Short keys (offline engine)
-            'collocation':  '#fef08a',
+            'collocation': '#fef08a',
             'phrasal_verb': '#bbf7d0',
-            'adv_combo':    '#bae6fd',
-            'idiom':        '#e9d5ff',
-            'grammar':      '#e9d5ff',
-            'vocabulary':   '#fecdd3',
+            'adv_combo': '#bae6fd',
+            'idiom': '#e9d5ff',
+            'grammar': '#e9d5ff',
+            'vocabulary': '#fecdd3',
             // Vietnamese labels (from AI translation API responses)
-            'Cụm từ kết hợp (Collocation)':          '#fef08a',
-            'Cụm động từ (Phrasal Verb)':             '#bbf7d0',
-            'Trạng từ + Động từ (Adv+Verb)':          '#bae6fd',
-            'Trạng từ + Tính từ (Adv+Adj)':           '#bae6fd',
-            'Trạng từ + Danh từ (Adv+Noun)':          '#bae6fd',
-            'Thành ngữ (Idiom)':                      '#e9d5ff',
-            'Cấu trúc ngữ pháp (Structure)':          '#e9d5ff',
-            'Giới từ/Liên từ (Prep/Conj)':            '#e9d5ff',
-            'Danh từ (Noun)':                         '#fecdd3',
-            'Động từ (Verb)':                         '#fecdd3',
-            'Tính từ (Adj)':                          '#fecdd3',
-            'Trạng từ (Adv)':                         '#fecdd3',
+            'Cụm từ kết hợp (Collocation)': '#fef08a',
+            'Cụm động từ (Phrasal Verb)': '#bbf7d0',
+            'Trạng từ + Động từ (Adv+Verb)': '#bae6fd',
+            'Trạng từ + Tính từ (Adv+Adj)': '#bae6fd',
+            'Trạng từ + Danh từ (Adv+Noun)': '#bae6fd',
+            'Thành ngữ (Idiom)': '#e9d5ff',
+            'Cấu trúc ngữ pháp (Structure)': '#e9d5ff',
+            'Giới từ/Liên từ (Prep/Conj)': '#e9d5ff',
+            'Danh từ (Noun)': '#fecdd3',
+            'Động từ (Verb)': '#fecdd3',
+            'Tính từ (Adj)': '#fecdd3',
+            'Trạng từ (Adv)': '#fecdd3',
         };
         const defaultColor = '#fef08a';
 
@@ -554,7 +558,8 @@ class TextHighlighter {
                             color: colorHex,
                             textHex: paletteObj.textHex
                         });
-                        return `<mark class="highlight-mark" data-highlight-id="${markId}" data-color="${colorHex}" data-text="${this._escapeHTMLAttr(match)}" style="background-color: ${colorHex};">${match}</mark>`;
+                        const transColor = this._getTranslucentColor(colorHex);
+                        return `<mark class="highlight-mark" data-highlight-id="${markId}" data-color="${colorHex}" data-text="${this._escapeHTMLAttr(match)}" style="background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important;">${match}</mark>`;
                     });
                 });
 
@@ -576,9 +581,41 @@ class TextHighlighter {
         return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
+    _getTranslucentColor(hex) {
+        if (!hex || hex === 'transparent') return 'rgba(250, 204, 21, 0.45)';
+        const h = String(hex).toLowerCase().trim();
+        if (h.startsWith('rgba')) {
+            return h.replace(/rgba?\(([^)]+)\)/, (m, contents) => {
+                const parts = contents.split(',').map(s => s.trim());
+                if (parts.length >= 3) {
+                    return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, 0.45)`;
+                }
+                return h;
+            });
+        }
+        if (h.includes('fef08a') || h.includes('fff3a8') || h.includes('fef9c3') || h.includes('yellow')) return 'rgba(250, 204, 21, 0.45)';
+        if (h.includes('bbf7d0') || h.includes('86efac') || h.includes('dcfce7') || h.includes('green')) return 'rgba(74, 222, 128, 0.45)';
+        if (h.includes('bae6fd') || h.includes('7dd3fc') || h.includes('e0f2fe') || h.includes('blue')) return 'rgba(56, 189, 248, 0.45)';
+        if (h.includes('e9d5ff') || h.includes('c084fc') || h.includes('f3e8ff') || h.includes('purple')) return 'rgba(192, 132, 252, 0.45)';
+        if (h.includes('fecdd3') || h.includes('fda4af') || h.includes('ffe4e6') || h.includes('pink')) return 'rgba(251, 113, 133, 0.45)';
+        return 'rgba(250, 204, 21, 0.45)';
+    }
+
+    /**
+     * Fires the onHighlightsChange callback with the current highlight list.
+     * This is called after every highlight mutation (create/remove/recolor/clear).
+     * It was previously referenced in 7 places but never defined — which threw
+     * "this._notifyChange is not a function" right after a highlight was inserted,
+     * aborting the very next line (e.g. getAllHighlightedItems() in handleTranslate),
+     * so the English side and the Vietnamese side ended up using different term lists.
+     * Wrapped in try/catch so a consumer error can never break highlighting itself.
+     */
     _notifyChange() {
-        if (typeof this.onHighlightsChange === 'function') {
+        if (typeof this.onHighlightsChange !== 'function') return;
+        try {
             this.onHighlightsChange(this.getAllHighlightedItems());
+        } catch (err) {
+            console.warn('onHighlightsChange callback failed:', err);
         }
     }
 }

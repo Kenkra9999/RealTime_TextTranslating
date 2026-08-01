@@ -1,0 +1,10 @@
+# CodeGraph local index (per-machine, auto-generated)
+.codegraph/
+.codegraph-*/
+
+# Node
+node_modules/
+
+# OS / editor cruft
+Thumbs.db
+.DS_Store

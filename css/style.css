@@ -328,8 +328,9 @@ html[data-theme="cosmos"] body::before {
 .font-serif-reading,
 .reading-canvas,
 .translation-canvas {
-    letter-spacing: 0.15px;
-    word-spacing: 1.5px;
+    letter-spacing: normal !important;
+    word-spacing: normal !important;
+    text-align: left !important;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -738,6 +739,35 @@ body.vocab-resize-dragging { user-select: none; cursor: row-resize !important; }
 .lookup-mode-active { cursor: help; }
 .lookup-mode-active mark.highlight-mark { cursor: help; }
 
+/* ========== MATCH TRACKING MODE ("Dò từ khớp") ========== */
+.match-mode-active { cursor: pointer; }
+.match-mode-active mark.highlight-mark {
+    cursor: pointer;
+    transition: box-shadow .15s ease, outline-color .15s ease, transform .12s ease, filter .15s ease;
+}
+/* While match mode is on, dim non-selected highlights slightly so the matched pair pops. */
+.match-mode-active.has-match mark.highlight-mark:not(.match-active) {
+    filter: saturate(.55) opacity(.55);
+}
+/* The matched pair on BOTH sides: strong ring + lift + glow so it stands out clearly. */
+mark.highlight-mark.match-active {
+    outline: 2.5px solid var(--primary, #b45309);
+    outline-offset: 1px;
+    border-radius: 4px !important;
+    transform: translateY(-1px);
+    z-index: 5;
+    position: relative;
+    filter: saturate(1.25) brightness(1.03);
+    box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.18), 0 4px 14px rgba(0, 0, 0, 0.18) !important;
+    font-weight: 700 !important;
+}
+html[data-theme="dark"] mark.highlight-mark.match-active,
+html[data-theme="cosmos"] mark.highlight-mark.match-active,
+html[data-theme="midnight"] mark.highlight-mark.match-active {
+    outline-color: #fbbf24;
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.25), 0 4px 16px rgba(0, 0, 0, 0.5) !important;
+}
+
 .lookup-popup {
     position: absolute; z-index: 1200;
     width: 300px; max-width: 90vw;
@@ -878,31 +908,31 @@ body.vocab-resize-dragging { user-select: none; cursor: row-resize !important; }
 .pane-resizer:hover .resizer-handle, .pane-resizer.dragging .resizer-handle { background: var(--primary); }
 
 /* ========== HIGHLIGHTS ========== */
-/* Highlights: background fill is a soft pastel, while text font stays 100% bright, sharp and crisp */
-mark.highlight-mark {
-    padding: 2px 5px;
-    border-radius: 4px;
+/* Highlights: background fill is a soft gentle pastel, compact fitting around words without line spacing gaps */
+mark.highlight-mark, mark {
+    background-color: rgba(250, 204, 21, 0.45);
+    background-image: none !important;
+    padding: 1px 3px !important;
+    margin: 0 !important;
+    display: inline !important;
+    border-radius: 3px !important;
+    box-shadow: none !important;
+    line-height: inherit !important;
+    color: inherit !important;
     cursor: pointer;
-    font-weight: 700;
-    opacity: 1 !important; /* 100% text font brightness — never dim or fade text */
-    color: #1f2937;        /* High-contrast crisp font */
-    transition: filter 0.18s ease, box-shadow 0.18s ease;
-    background-clip: padding-box;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    transition: filter 0.18s ease;
 }
 
-mark.highlight-mark:hover {
-    filter: brightness(1.06);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+mark.highlight-mark:hover, mark:hover {
+    filter: brightness(1.04);
 }
 
-/* Dark mode, Cosmos & Midnight themes: High-contrast crisp dark font on soft pastel background */
+/* Dark mode, Cosmos & Midnight themes: High-contrast crisp font on soft pastel background */
 html[data-theme="dark"] mark.highlight-mark,
 html[data-theme="cosmos"] mark.highlight-mark,
 html[data-theme="midnight"] mark.highlight-mark {
-    color: #0f172a !important; /* Deep crisp font for maximum legibility on pastel fills */
-    font-weight: 700;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    color: #0f172a !important;
+    box-shadow: none !important;
 }
 
 /* Floating Selection Tooltip */
@@ -1369,11 +1399,23 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     position: fixed; inset: 0;
     background: rgba(20, 14, 8, 0.48);
     backdrop-filter: blur(5px);
-    display: flex; align-items: center; justify-content: center;
+    display: none; align-items: center; justify-content: center;
     z-index: 2000; opacity: 0; pointer-events: none;
     transition: opacity 0.22s ease;
 }
-.modal-overlay.active { opacity: 1; pointer-events: auto; }
+.modal-overlay:not(.active) {
+    display: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+.modal-overlay:not(.active) * {
+    pointer-events: none !important;
+}
+.modal-overlay.active {
+    display: flex !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
 .modal-card {
     width: 90%; max-width: 560px;
     background: var(--bg-card-solid);
@@ -1383,6 +1425,7 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     box-shadow: var(--shadow-lg);
     display: flex; flex-direction: column; gap: 14px;
     max-height: 90vh; overflow-y: auto;
+    pointer-events: auto;
 }
 .modal-header {
     display: flex; justify-content: space-between; align-items: center;
@@ -1652,12 +1695,179 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     flex: 1 1 220px;
 }
 
-/* ========== PRINT ========== */
+/* ========== ANIMATED PREMIUM PDF BUTTONS ========== */
+@keyframes pdfBtnShimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+@keyframes pdfBtnPulse {
+    0%, 100% { box-shadow: 0 4px 15px rgba(37, 99, 235, 0.35), 0 0 0 0 rgba(37, 99, 235, 0.4); }
+    50% { box-shadow: 0 6px 22px rgba(37, 99, 235, 0.5), 0 0 0 8px rgba(37, 99, 235, 0); }
+}
+@keyframes pdfBtnSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.btn-pdf-animated {
+    position: relative !important;
+    overflow: hidden !important;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    cursor: pointer !important;
+    font-weight: 700 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+}
+.btn-pdf-animated * {
+    pointer-events: none !important;
+}
+.btn-pdf-animated::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -150%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.35) 50%, transparent 100%);
+    transform: skewX(-20deg);
+    transition: left 0.6s ease;
+    pointer-events: none;
+}
+.btn-pdf-animated:hover::before {
+    left: 150%;
+}
+.btn-pdf-animated:hover {
+    transform: translateY(-2.5px) scale(1.025) !important;
+    filter: brightness(1.05) !important;
+}
+.btn-pdf-animated:active {
+    transform: translateY(1px) scale(0.97) !important;
+}
+
+.btn-pdf-primary {
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #1e40af 100%) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.25) !important;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
+    border-radius: 999px !important;
+    padding: 8px 18px !important;
+    font-size: 13px !important;
+}
+.btn-pdf-primary:hover {
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.48), 0 0 12px rgba(59, 130, 246, 0.4) !important;
+}
+
+.btn-pdf-secondary {
+    background: linear-gradient(135deg, #8c5e3c 0%, #72472b 50%, #5c3a21 100%) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 4px 14px rgba(140, 94, 60, 0.3) !important;
+    border-radius: 999px !important;
+    padding: 8px 18px !important;
+    font-size: 13px !important;
+}
+.btn-pdf-secondary:hover {
+    box-shadow: 0 6px 20px rgba(140, 94, 60, 0.45), 0 0 12px rgba(192, 133, 82, 0.4) !important;
+}
+
+.btn-pdf-print {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 4px 14px rgba(5, 150, 105, 0.3) !important;
+    border-radius: 999px !important;
+    padding: 8px 18px !important;
+    font-size: 13px !important;
+}
+.btn-pdf-print:hover {
+    box-shadow: 0 6px 20px rgba(5, 150, 105, 0.45), 0 0 12px rgba(52, 211, 153, 0.4) !important;
+}
+
+/* ========== COMPREHENSIVE PRINT STYLES (Fixes PDF output visibility) ========== */
 @media print {
-    .app-header, .header-toolbar, .pane-resizer, .btn, .audio-btn,
-    .font-size-controls, .typography-controls-bar, .theme-toggle { display: none !important; }
-    .split-screen-container { height: auto !important; flex-direction: column !important; }
-    .pane { width: 100% !important; }
+    /* Hide all main app non-printable interface elements */
+    header.app-header,
+    .doodle-blob,
+    .header-toolbar,
+    .pane-resizer,
+    .vocab-resizer,
+    .vocab-export-bar,
+    .modal-header,
+    .modal-close,
+    .no-print,
+    #progressStatusContainer {
+        display: none !important;
+    }
+
+    /* Force background, body, and html to auto height and white background */
+    html, body {
+        background: #ffffff !important;
+        color: #1e293b !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        height: auto !important;
+        overflow: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+
+    /* Expand Modal & Container to 100% full printable layout */
+    .modal-overlay, #pdfPreviewModal {
+        position: static !important;
+        background: transparent !important;
+        backdrop-filter: none !important;
+        display: block !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .modal-card {
+        max-width: 100% !important;
+        width: 100% !important;
+        max-height: none !important;
+        overflow: visible !important;
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+    }
+
+    #pdfModalContainer, .lc-pdf-wrapper, .lc-pdf-root {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+        background: #ffffff !important;
+        display: block !important;
+        overflow: visible !important;
+    }
+
+    /* Prevent breaking table rows and cards across page splits */
+    .lc-reading-table, .lc-table {
+        page-break-inside: auto;
+    }
+    .lc-reading-p-row, .lc-table-row, tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+    .lc-header, .lc-section-title {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+    }
+
+    /* Force high-contrast visible text and highlight background colors */
+    mark {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+        color: #0f172a !important;
+        display: inline-block !important;
+    }
 }
 
 /* ========== DARK-MODE OVERRIDES for hardcoded modal inline colors ========== */

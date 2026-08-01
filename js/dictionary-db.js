@@ -228,7 +228,7 @@ class DictionaryDB {
             "well represented": { ipa: "/ˌwel ˌrep.rɪˈzen.tɪd/", pos: "adj. phr.", meaning: "được đại diện nhiều, phân bố rộng" },
             "wide range": { ipa: "/waɪd reɪndʒ/", pos: "n. phr.", meaning: "phạm vi rộng, đa dạng" },
             "open grassland": { ipa: "/ˈoʊ.pən ˈɡrɑːs.lænd/", pos: "n. phr.", meaning: "đồng cỏ mở, thảo nguyên" },
-            "social structures": { ipa: "/ˈsoʊ.ʃəl ˈstrʌk.tʃərz/", pos: "n. phr.", meaning: "cấu trúc xã hội, tổ chức bầy đàn" },
+"social structures": { ipa: "/ˈsoʊ.ʃəl ˈstrʌk.tʃərz/", pos: "n. phr.", meaning: "cấu trúc xã hội, tổ chức bầy đàn" },
             "domestic animals": { ipa: "/dəˈmes.tɪk ˈæn.ɪ.məlz/", pos: "n. phr.", meaning: "động vật nuôi, gia súc" },
             "domestic cattle": { ipa: "/dəˈmes.tɪk ˈkæt.əl/", pos: "n. phr.", meaning: "gia súc nuôi" },
             "common features": { ipa: "/ˈkɒm.ən ˈfiː.tʃərz/", pos: "n. phr.", meaning: "đặc điểm chung" },
@@ -264,17 +264,85 @@ class DictionaryDB {
         return this._estimateIPA(cleanWord);
     }
 
-    getPOS(word) {
-        if (!word) return "n.";
-        const cleanWord = word.trim().toLowerCase().replace(/^[^\w]+|[^\w]+$/g, '');
-        if (this.dict[cleanWord]) return this.dict[cleanWord].pos;
+    getPOS(word, sentence = '') {
+        if (!word) return 'n.';
+        const clean = word.trim().toLowerCase().replace(/^[^\w]+|[^\w]+$/g, '');
+        if (!clean) return 'n.';
+        if (this.dict[clean]) return this.dict[clean].pos;
         const withHyphens = word.trim().toLowerCase();
         if (this.dict[withHyphens]) return this.dict[withHyphens].pos;
-        if (cleanWord.endsWith('ly')) return 'adv.';
-        if (cleanWord.endsWith('ive') || cleanWord.endsWith('ous') || cleanWord.endsWith('ful') || cleanWord.endsWith('ic') || cleanWord.endsWith('able') || cleanWord.endsWith('al')) return 'adj.';
-        if (cleanWord.endsWith('tion') || cleanWord.endsWith('sion') || cleanWord.endsWith('ment') || cleanWord.endsWith('ness') || cleanWord.endsWith('ity')) return 'n.';
-        if (cleanWord.endsWith('ize') || cleanWord.endsWith('ise') || cleanWord.endsWith('ate') || cleanWord.endsWith('ed') || cleanWord.endsWith('ing')) return 'v.';
-        return 'n./v.';
+
+        // Fast functional & closed-class word bank
+        const FAST_POS = {
+            'i': 'pron.', 'you': 'pron.', 'he': 'pron.', 'she': 'pron.', 'it': 'pron.',
+            'we': 'pron.', 'they': 'pron.', 'me': 'pron.', 'him': 'pron.', 'her': 'pron.',
+            'us': 'pron.', 'them': 'pron.', 'my': 'pron.', 'your': 'pron.', 'his': 'pron.',
+            'their': 'pron.', 'our': 'pron.', 'this': 'pron.', 'that': 'pron.', 'these': 'pron.',
+            'those': 'pron.', 'who': 'pron.', 'whom': 'pron.', 'whose': 'pron.', 'which': 'pron.',
+            'what': 'pron.', 'myself': 'pron.', 'yourself': 'pron.', 'himself': 'pron.',
+            'in': 'prep.', 'on': 'prep.', 'at': 'prep.', 'to': 'prep.', 'for': 'prep.',
+            'with': 'prep.', 'by': 'prep.', 'from': 'prep.', 'about': 'prep.', 'into': 'prep.',
+            'through': 'prep.', 'over': 'prep.', 'under': 'prep.', 'between': 'prep.',
+            'against': 'prep.', 'during': 'prep.', 'without': 'prep.', 'before': 'prep.',
+            'after': 'prep.', 'above': 'prep.', 'below': 'prep.', 'across': 'prep.',
+            'and': 'conj.', 'but': 'conj.', 'or': 'conj.', 'nor': 'conj.', 'so': 'conj.',
+            'yet': 'conj.', 'because': 'conj.', 'although': 'conj.',
+            'while': 'conj.', 'if': 'conj.', 'unless': 'conj.', 'since': 'conj.',
+            'is': 'v.', 'am': 'v.', 'are': 'v.', 'was': 'v.', 'were': 'v.',
+            'be': 'v.', 'been': 'v.', 'being': 'v.', 'have': 'v.', 'has': 'v.',
+            'had': 'v.', 'do': 'v.', 'does': 'v.', 'did': 'v.', 'can': 'v.',
+            'could': 'v.', 'will': 'v.', 'would': 'v.', 'shall': 'v.', 'should': 'v.',
+            'may': 'v.', 'might': 'v.', 'must': 'v.', 'get': 'v.', 'got': 'v.',
+            'make': 'v.', 'made': 'v.', 'go': 'v.', 'went': 'v.', 'gone': 'v.',
+            'take': 'v.', 'took': 'v.', 'see': 'v.', 'saw': 'v.', 'seen': 'v.',
+            'know': 'v.', 'knew': 'v.', 'known': 'v.', 'think': 'v.', 'thought': 'v.',
+            'very': 'adv.', 'too': 'adv.', 'so': 'adv.', 'quite': 'adv.', 'just': 'adv.',
+            'already': 'adv.', 'always': 'adv.', 'never': 'adv.', 'often': 'adv.',
+            'sometimes': 'adv.', 'usually': 'adv.', 'virtually': 'adv.', 'really': 'adv.',
+            'also': 'adv.', 'almost': 'adv.', 'even': 'adv.', 'now': 'adv.', 'then': 'adv.',
+            'here': 'adv.', 'there': 'adv.', 'away': 'adv.', 'back': 'adv.'
+        };
+        if (FAST_POS[clean]) return FAST_POS[clean];
+
+        // Suffix Rules
+        if (clean.endsWith('ly')) return 'adv.';
+        if (clean.endsWith('ous') || clean.endsWith('ious') || clean.endsWith('eous') ||
+            clean.endsWith('ic') || clean.endsWith('ical') || clean.endsWith('al') ||
+            clean.endsWith('ive') || clean.endsWith('ful') || clean.endsWith('less') ||
+            clean.endsWith('able') || clean.endsWith('ible') || clean.endsWith('ish') ||
+            clean.endsWith('ent') || clean.endsWith('ant') || clean.endsWith('ary')) {
+            return 'adj.';
+        }
+        if (clean.endsWith('tion') || clean.endsWith('sion') || clean.endsWith('ment') ||
+            clean.endsWith('ness') || clean.endsWith('ity') || clean.endsWith('ance') ||
+            clean.endsWith('ence') || clean.endsWith('er') || clean.endsWith('or') ||
+            clean.endsWith('ship') || clean.endsWith('ism') || clean.endsWith('ist') ||
+            clean.endsWith('logy') || clean.endsWith('graphy') || clean.endsWith('th')) {
+            return 'n.';
+        }
+        if (clean.endsWith('ize') || clean.endsWith('ise') || clean.endsWith('fy') ||
+            clean.endsWith('ate') || clean.endsWith('ed') || clean.endsWith('ing')) {
+            return 'v.';
+        }
+
+        // Sentence Syntax Rules
+        if (sentence) {
+            const lowerSent = sentence.toLowerCase();
+            const wordsInSent = lowerSent.match(/[a-z'-]+/g) || [];
+            const idx = wordsInSent.indexOf(clean);
+            if (idx > 0) {
+                const prev = wordsInSent[idx - 1];
+                if (['is', 'am', 'are', 'was', 'were', 'be', 'been', 'being', 'became', 'seems', 'virtually', 'extremely', 'very', 'quite'].includes(prev)) {
+                    return 'adj.';
+                }
+                if (['a', 'an', 'the', 'my', 'your', 'his', 'her', 'its', 'our', 'their'].includes(prev)) {
+                    return 'n.';
+                }
+                if (prev === 'to') return 'v.';
+            }
+        }
+
+        return 'n.';
     }
 
     /**
