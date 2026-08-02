@@ -1,19 +1,23 @@
 ﻿/**
  * LinguaContext Pro - Advanced AI Translation & Deep Structure Engine
- * Supports both OpenAI ChatGPT API (GPT-4o, GPT-4o-mini, GPT-4-turbo)
- * and Google Gemini API (Gemini 2.5 Flash, Gemini 2.0 Flash, Gemini 1.5 Flash).
+ * Supports OpenAI ChatGPT, Google Gemini, and Groq (Llama 3.x) APIs.
  * Deep extraction of Nouns, Verbs, Adjectives, Adverbs, Collocations, Phrasal Verbs,
  * Idioms, Adverb+Verb combinations, and Grammar Structures.
  */
 class ContextTranslator {
     constructor() {
-        this.provider = localStorage.getItem('lingua_ai_provider') || 'gemini'; // 'openai' or 'gemini'
+        this.provider = localStorage.getItem('lingua_ai_provider') || 'groq'; // 'openai' | 'gemini' | 'groq'
         this.geminiApiKey = localStorage.getItem('lingua_gemini_api_key') || '';
-        // Default to the most accurate model (Pro) rather than the fast/cheap one, for best translation quality
         this.geminiModel = localStorage.getItem('lingua_gemini_model') || 'gemini-2.5-pro';
 
         this.openaiApiKey = localStorage.getItem('lingua_openai_api_key') || '';
         this.openaiModel = localStorage.getItem('lingua_openai_model') || 'gpt-4o';
+
+        // Groq: empty by default — user must paste their key in Settings (the key in this constructor
+        // was revoked after being shared publicly on 2026-08-02; never hardcode keys again).
+        this.groqApiKey = localStorage.getItem('lingua_groq_api_key') || '';
+        this.groqModel = localStorage.getItem('lingua_groq_model') || 'llama-3.3-70b-versatile';
+
         this.autoScanEnabled = localStorage.getItem('lingua_auto_scan_ai') !== 'false';
 
         // Dedicated (separate) API config for the "AI Quét Từ & Cấu Trúc Hay" auto-scan feature
@@ -23,6 +27,8 @@ class ContextTranslator {
         this.scanGeminiModel = localStorage.getItem('lingua_scan_gemini_model') || 'gemini-2.5-pro';
         this.scanOpenaiApiKey = localStorage.getItem('lingua_scan_openai_api_key') || '';
         this.scanOpenaiModel = localStorage.getItem('lingua_scan_openai_model') || 'gpt-4o';
+        this.scanGroqApiKey = localStorage.getItem('lingua_scan_groq_api_key') || '';
+        this.scanGroqModel = localStorage.getItem('lingua_scan_groq_model') || 'llama-3.3-70b-versatile';
     }
 
     /**
@@ -110,6 +116,27 @@ class ContextTranslator {
                 if (!resp.ok) return null;
                 const data = await resp.json();
                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!text) return null;
+                try { return JSON.parse(text); } catch (e) { return null; }
+            } catch (e) { return null; }
+        }
+        if (this.groqApiKey) {
+            try {
+                const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${this.groqApiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: this.groqModel,
+                        messages: [{ role: 'user', content: prompt }],
+                        temperature: 0
+                    })
+                });
+                if (!resp.ok) return null;
+                const data = await resp.json();
+                const text = data.choices?.[0]?.message?.content;
                 if (!text) return null;
                 try { return JSON.parse(text); } catch (e) { return null; }
             } catch (e) { return null; }
@@ -511,12 +538,118 @@ ${para}
             if (this.scanProvider === 'gemini' && this.scanGeminiApiKey) {
                 return { provider: 'gemini', apiKey: this.scanGeminiApiKey, model: this.scanGeminiModel };
             }
+            if (this.scanProvider === 'groq' && this.scanGroqApiKey) {
+                return { provider: 'groq', apiKey: this.scanGroqApiKey, model: this.scanGroqModel };
+            }
         }
-        // Fallback to main API config
+        // Fallback to main API config (Groq → OpenAI → Gemini)
+        if (this.provider === 'groq' && this.groqApiKey) {
+            return { provider: 'groq', apiKey: this.groqApiKey, model: this.groqModel };
+        }
         if (this.provider === 'openai' && this.openaiApiKey) {
             return { provider: 'openai', apiKey: this.openaiApiKey, model: this.openaiModel };
         }
         return { provider: 'gemini', apiKey: this.geminiApiKey, model: this.geminiModel };
+    }
+
+    /**
+     * Lightweight API connectivity check used by the Settings "🧪 Test" button.
+     * Each method returns { ok: true, latencyMs } on success or { ok: false, error }.
+     * We send a tiny prompt (just "ping") so the round-trip stays fast (<2s typical).
+     */
+    async pingOpenAI(key, model) {
+        if (!key || !key.trim()) return { ok: false, error: 'Chưa nhập API key' };
+        const m = model || 'gpt-4o-mini';
+        const start = Date.now();
+        try {
+            const res = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${key.trim()}`
+                },
+                body: JSON.stringify({
+                    model: m,
+                    messages: [{ role: 'user', content: 'ping' }],
+                    max_tokens: 4,
+                    temperature: 0
+                })
+            });
+            const latencyMs = Date.now() - start;
+            if (!res.ok) {
+                let msg = `HTTP ${res.status}`;
+                try {
+                    const errBody = await res.json();
+                    if (errBody && errBody.error && errBody.error.message) msg = errBody.error.message;
+                } catch (e) { /* not JSON */ }
+                return { ok: false, error: msg, latencyMs };
+            }
+            return { ok: true, latencyMs };
+        } catch (e) {
+            return { ok: false, error: e.message || 'Lỗi mạng', latencyMs: Date.now() - start };
+        }
+    }
+
+    async pingGemini(key, model) {
+        if (!key || !key.trim()) return { ok: false, error: 'Chưa nhập API key' };
+        const m = model || 'gemini-2.5-flash';
+        const start = Date.now();
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${key.trim()}`;
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: 'ping' }] }],
+                    generationConfig: { maxOutputTokens: 4, temperature: 0 }
+                })
+            });
+            const latencyMs = Date.now() - start;
+            if (!res.ok) {
+                let msg = `HTTP ${res.status}`;
+                try {
+                    const errBody = await res.json();
+                    if (errBody && errBody.error && errBody.error.message) msg = errBody.error.message;
+                } catch (e) { /* not JSON */ }
+                return { ok: false, error: msg, latencyMs };
+            }
+            return { ok: true, latencyMs };
+        } catch (e) {
+            return { ok: false, error: e.message || 'Lỗi mạng', latencyMs: Date.now() - start };
+        }
+    }
+
+    async pingGroq(key, model) {
+        if (!key || !key.trim()) return { ok: false, error: 'Chưa nhập API key' };
+        const m = model || 'llama-3.3-70b-versatile';
+        const start = Date.now();
+        try {
+            const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${key.trim()}`
+                },
+                body: JSON.stringify({
+                    model: m,
+                    messages: [{ role: 'user', content: 'ping' }],
+                    max_tokens: 4,
+                    temperature: 0
+                })
+            });
+            const latencyMs = Date.now() - start;
+            if (!res.ok) {
+                let msg = `HTTP ${res.status}`;
+                try {
+                    const errBody = await res.json();
+                    if (errBody && errBody.error && errBody.error.message) msg = errBody.error.message;
+                } catch (e) { /* not JSON */ }
+                return { ok: false, error: msg, latencyMs };
+            }
+            return { ok: true, latencyMs };
+        } catch (e) {
+            return { ok: false, error: e.message || 'Lỗi mạng', latencyMs: Date.now() - start };
+        }
     }
 
     setAutoScanEnabled(enabled) {
@@ -541,6 +674,20 @@ ${para}
         this.openaiModel = model;
         localStorage.setItem('lingua_openai_api_key', this.openaiApiKey);
         localStorage.setItem('lingua_openai_model', model);
+    }
+
+    setGroqConfig(key, model) {
+        this.groqApiKey = key.trim();
+        this.groqModel = model;
+        localStorage.setItem('lingua_groq_api_key', this.groqApiKey);
+        localStorage.setItem('lingua_groq_model', model);
+    }
+
+    setScanGroqConfig(key, model) {
+        this.scanGroqApiKey = key.trim();
+        this.scanGroqModel = model;
+        localStorage.setItem('lingua_scan_groq_api_key', this.scanGroqApiKey);
+        localStorage.setItem('lingua_scan_groq_model', model);
     }
 
     chunkText(text, maxWordsPerChunk = 600) {
@@ -1022,17 +1169,56 @@ if (!isPhrase && Array.isArray(result.breakdown) && result.breakdown[0] && resul
     if (fetched && this._sanitizeAiIpa(fetched, cleanWord)) result.ipa = fetched;
 }
 
-        // Example sentence MUST be a natural, real English sentence containing the
-        // word/phrase (per user's required form: "I eat breakfast every morning.").
-        // If AI didn't supply one, ask AI again with a focused example-only prompt.
-        // Only fall back to a template sentence if AI is truly unavailable.
-        if (!result.example || !this._looksLikeNaturalExample(result.example, cleanWord)) {
-            const aiEx = await this._generateExampleWithAI(cleanWord).catch(() => null);
-            if (aiEx && aiEx.example) {
-                result.example = aiEx.example;
-                result.exampleVi = aiEx.exampleVi || result.exampleVi;
+        // Example sentence MUST come from AI (random natural sentence from real life /
+// science / etc.) — we NEVER use a hardcoded template, because a templated
+// sentence repeated for every word looks obviously fake ("The teacher explained
+// the meaning of X to the students.").
+//
+// Strategy:
+// 1. If `_lookupWithAI` already gave a natural-looking example, keep it.
+// 2. Otherwise call `_generateExampleWithAI` with the dedicated example-only
+//    prompt — that prompt explicitly forbids "The word X..." style filler.
+// 3. If the example is still bad after that single retry, retry with up to 3
+//    attempts of a different example-only prompt that uses random topic hints
+//    so the AI picks a different natural sentence each time.
+// 4. If AI is truly unavailable (no API key / network error), set
+//    `result.example = null` and `result.exampleUnavailable = true`. The UI
+//    then shows a hint instead of a fake sentence.
+let exampleRetries = 0;
+const _exampleLooksGood = (s) => s && s.trim() && s.trim().toLowerCase() !== word.toLowerCase() && this._looksLikeNaturalExample(s, cleanWord);
+if (!_exampleLooksGood(result.example)) {
+    // First attempt: dedicated example-only prompt.
+    let aiEx = await this._generateExampleWithAI(cleanWord).catch(() => null);
+    if (_exampleLooksGood(aiEx && aiEx.example)) {
+        result.example = aiEx.example.trim();
+        result.exampleVi = (aiEx.exampleVi || '').trim() || result.exampleVi;
+    } else {
+        // Retry up to 3 times with a randomized topic hint so the AI produces a
+        // DIFFERENT natural sentence on each attempt (not a fixed template).
+        const topicHints = [
+            'everyday conversation', 'a news headline', 'a science textbook',
+            'a travel blog', 'a movie review', 'a recipe blog', 'a sports article',
+            'a history book', 'a tech blog', 'a diary entry', 'a business email',
+            'a children\'s story', 'a weather report', 'a documentary script'
+        ];
+        while (exampleRetries < 3 && !_exampleLooksGood(result.example)) {
+            const topic = topicHints[(exampleRetries + (cleanWord.length % topicHints.length)) % topicHints.length];
+            aiEx = await this._generateExampleWithAI(cleanWord, topic).catch(() => null);
+            exampleRetries++;
+            if (_exampleLooksGood(aiEx && aiEx.example)) {
+                result.example = aiEx.example.trim();
+                result.exampleVi = (aiEx.exampleVi || '').trim() || result.exampleVi;
+                break;
             }
         }
+        if (!_exampleLooksGood(result.example)) {
+            // AI truly unavailable or kept producing bad examples — signal the UI
+            // to show a hint instead of a fake templated sentence.
+            result.example = null;
+            result.exampleUnavailable = true;
+        }
+    }
+}
 
         // Ensure the example has a Vietnamese translation.
         if (result.example && !result.exampleVi) {
@@ -1041,17 +1227,13 @@ if (!isPhrase && Array.isArray(result.breakdown) && result.breakdown[0] && resul
             } catch (e) { /* ignore */ }
         }
 
-        // Last-resort fallback ONLY when no AI is configured at all.
-        if (!result.example) {
-            const en = cleanWord.includes(' ')
-                ? `The ${cleanWord} was clearly visible in the report.`
-                : `She used the word "${cleanWord}" in her essay.`;
-            result.example = en;
-            if (!result.exampleVi) {
-                try { result.exampleVi = (await this._translateSentenceFree(en)) || en; }
-                catch (e) { result.exampleVi = en; }
-            }
-        }
+// Last-resort: if example is still empty, DO NOT use a hardcoded template.
+// Instead signal the UI to show a hint asking the user to configure an API key
+// (otherwise the example would look like an obvious fake "The teacher explained
+// the meaning of X to the students." repeated for every word).
+if (!result.example) {
+    result.exampleUnavailable = true;
+}
 
         this._lookupCache.set(cacheKey, result);
         return result;
@@ -1067,19 +1249,44 @@ if (!isPhrase && Array.isArray(result.breakdown) && result.breakdown[0] && resul
         const ex = example.trim().toLowerCase();
         const w = word.trim().toLowerCase();
         if (ex.length < 8) return false;
-        // Reject known placeholder shapes.
-        const bad = [
-            `the word "${w}"`,
-            `the phrase "${w}"`,
-            `example with ${w}`,
-            `this is ${w}`,
-            `${w} is commonly used`,
-            `${w} appears in`
-        ];
-        if (bad.some(b => ex.includes(b))) return false;
         // Must contain the word (or, for phrases, its first significant token).
         const firstTok = w.split(/\s+/)[0];
-        return ex.includes(w) || ex.includes(firstTok);
+        if (!ex.includes(w) && !ex.includes(firstTok)) return false;
+        // Reject known placeholder / "AI chêm từ" shapes. The quoted-word
+        // patterns use a regex character class so we accept any of " ' " '
+        // wrapping the term. Escape the term so regex specials are safe.
+        const escW = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const Q = `["'\u201C\u2018]`;                                          // " ' " '
+        const sq = `${Q}${escW}${Q}`;
+        const bad = [
+            new RegExp(`the\\s+word\\s+${sq}`, 'i'),                            // "The word X..."
+            new RegExp(`the\\s+phrase\\s+${sq}`, 'i'),                          // "The phrase X..."
+            new RegExp(`the\\s+term\\s+${sq}`, 'i'),                            // "The term X..."
+            new RegExp(`example\\s+with\\s+${escW}\\b`, 'i'),                   // "Example with X"
+            new RegExp(`example\\s+of\\s+${escW}\\b`, 'i'),                     // "Example of X"
+            new RegExp(`\\bthis\\s+is\\s+${escW}\\b`, 'i'),                     // "This is X"
+            new RegExp(`\\b${escW}\\s+is\\s+commonly\\s+used\\b`, 'i'),         // "X is commonly used"
+            new RegExp(`\\b${escW}\\s+is\\s+used\\b`, 'i'),                     // "X is used"
+            new RegExp(`\\b${escW}\\s+appears\\s+in\\b`, 'i'),                  // "X appears in"
+            new RegExp(`\\bwe\\s+use\\s+${escW}\\b`, 'i'),                      // "We use X..."
+            new RegExp(`\\bwe\\s+can\\s+see\\s+${escW}\\b`, 'i'),               // "We can see X..."
+            new RegExp(`\\bthe\\s+${escW}\\s+used\\b`, 'i'),                    // "The X used Y to Z..."
+            new RegExp(`\\b${escW}\\s+in\\s+a\\s+sentence\\b`, 'i'),            // "... X in a sentence"
+            new RegExp(`\\busing\\s+${escW}\\s+in\\b`, 'i'),                    // "Using X in..."
+            new RegExp(`\\bhere\\s+is\\s+a\\s+sentence\\b`, 'i'),               // "Here is a sentence with X"
+            new RegExp(`\\bshe\\s+used\\s+the\\s+${escW}\\b`, 'i'),             // "She used the word X..."
+            new RegExp(`\\bhe\\s+used\\s+the\\s+${escW}\\b`, 'i'),
+            new RegExp(`\\bthey\\s+used\\s+the\\s+${escW}\\b`, 'i'),
+            new RegExp(`\\bused\\s+the\\s+${escW}\\s+to\\b`, 'i'),              // "Used the X to..."
+            new RegExp(`\\bused\\s+${escW}\\s+to\\b`, 'i'),                     // "Used X to..." (singer used however to)
+            new RegExp(`\\b${escW}\\s+used\\s+to\\b`, 'i'),                     // "X used to..." (the other ordering)
+            new RegExp(`\\bused\\s+${escW}\\s+in\\b`, 'i'),                     // "Used X in..."
+            new RegExp(`\\bin\\s+the\\s+${escW}\\b`, 'i'),                       // "In the X..." (chêm từ)
+            new RegExp(`\\bteacher\\s+explained\\s+(?:the\\s+)?(?:meaning\\s+of\\s+)?${escW}\\b`, 'i'), // "The teacher explained (the meaning of) X"
+            new RegExp(`\\bexplained\\s+(?:the\\s+)?(?:meaning\\s+of\\s+)?${escW}\\b`, 'i')         // "Explained X..." (any form)
+        ];
+        if (bad.some(re => re.test(ex))) return false;
+        return true;
     }
 
     /**
@@ -1124,17 +1331,41 @@ if (!isPhrase && Array.isArray(result.breakdown) && result.breakdown[0] && resul
      * translation for a word/phrase. Used when the main lookup response lacked a
      * usable example. Returns {example, exampleVi} or null when AI unavailable.
      */
-    async _generateExampleWithAI(word) {
+    async _generateExampleWithAI(word, topicHint) {
         const hasOpenAI = this.provider === 'openai' && this.openaiApiKey;
-        const hasGemini = this.geminiApiKey && (this.provider === 'gemini' || !this.openaiApiKey);
-        if (!hasOpenAI && !hasGemini) return null;
+        const hasGemini = this.geminiApiKey && (this.provider === 'gemini' || (!hasOpenAI && !this.groqApiKey));
+        const hasGroq = this.groqApiKey && (this.provider === 'groq' || (!hasOpenAI && !hasGemini));
+        if (!hasOpenAI && !hasGemini && !hasGroq) return null;
 
-        const prompt = `Cho 1 câu tiếng Anh TỰ NHIÊN, NGẮN GỌN, DỄ HIỂU (như câu ví dụ trong từ điển Oxford/Cambridge) có chứa "${word}", kèm bản dịch tiếng Việt tự nhiên.
+        // When retrying, mix in a topic hint so the AI picks a different natural
+        // sentence each time instead of repeating a template.
+        const topicLine = topicHint
+            ? `\nGỢI Ý NGỮ CẢNH: hãy đặt câu ví dụ vào bối cảnh "${topicHint}" để câu trông tự nhiên và khác biệt mỗi lần.`
+            : '';
+
+        const prompt = `Cho 1 câu tiếng Anh TỰ NHIÊN, NGẮN GỌN, DỄ HIỂU (đúng kiểu câu ví dụ trong từ điển Oxford/Cambridge) có chứa "${word}", kèm bản dịch tiếng Việt tự nhiên.${topicLine}
+
+QUY TẮC BẮT BUỘC:
+1. Câu tiếng Anh phải là câu ĐỜI THỰC mà người bản xứ sẽ nói/viết — không phải câu ngữ pháp khô khan hay câu minh hoạ "lấy từ điền vào".
+2. Câu PHẢI CÓ CHỨA "${word}" một cách tự nhiên (đúng vị trí ngữ pháp, đúng nghĩa phổ biến nhất của từ).
+3. KHÔNG ĐƯỢC dùng các mẫu câu kiểu:
+   - "The word ${word} means ..." / "The phrase ${word} ..."
+   - "Example with ${word}" / "This is ${word}" / "${word} is commonly used"
+   - "The X used ${word} to ..." / "We can see ${word} in ..." (câu chêm từ vào cho có)
+   - "Using ${word} in a sentence: ..." / "Here is a sentence with ${word}"
+   - "The teacher explained the meaning of ${word} to the students." (khuôn mẫu lặp lại)
+4. Độ dài: 8-15 từ. Câu càng giống sách báo/tạp chí càng tốt.
+5. Bản dịch tiếng Việt phải tự nhiên, truyền đạt đúng nghĩa và giữ nguyên cách dùng "${word}" trong câu gốc.
+
 VÍ DỤ MẪU đúng yêu cầu:
 - "eat" → {"example":"I eat breakfast every morning.","exampleVi":"Tôi ăn sáng mỗi buổi sáng."}
+- "however" → {"example":"She was tired; however, she kept on working.","exampleVi":"Cô ấy mệt; tuy nhiên, cô vẫn tiếp tục làm việc."}
 - "profound transformation" → {"example":"Technology has brought about a profound transformation in modern society.","exampleVi":"Công nghệ đã mang lại một sự biến đổi sâu sắc trong xã hội hiện đại."}
-KHÔNG dùng câu mẫu kiểu "The word X...", "Example with X", "This is X".
-Trả về ĐÚNG JSON: {"example":"...","exampleVi":"..."}`;
+
+VÍ DỤ MẪU SAI (tuyệt đối KHÔNG làm thế này):
+- "however" → {"example":"The singer used however to transition from one song to another.","exampleVi":"..."} ❌ (câu chêm từ vào một cách gượng ép, không tự nhiên)
+
+Trả về ĐÚNG JSON (không kèm markdown, không kèm giải thích): {"example":"...","exampleVi":"..."}`;
 
         try {
             if (hasOpenAI) {
@@ -1167,6 +1398,21 @@ Trả về ĐÚNG JSON: {"example":"...","exampleVi":"..."}`;
                 const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
                 return JSON.parse(rawText.replace(/```json|```/g, '').trim());
             }
+            if (hasGroq) {
+                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.groqApiKey}` },
+                    body: JSON.stringify({
+                        model: this.groqModel,
+                        messages: [{ role: 'user', content: prompt }],
+                        temperature: 0.3
+                    })
+                });
+                if (!res.ok) return null;
+                const data = await res.json();
+                const rawText = data.choices?.[0]?.message?.content || '{}';
+                return JSON.parse(rawText.replace(/```json|```/g, '').trim());
+            }
         } catch (e) {
             return null;
         }
@@ -1186,8 +1432,9 @@ Trả về ĐÚNG JSON: {"example":"...","exampleVi":"..."}`;
         if (uniq.length === 0) return {};
 
         const hasOpenAI = this.provider === 'openai' && this.openaiApiKey;
-        const hasGemini = this.geminiApiKey && (this.provider === 'gemini' || !this.openaiApiKey);
-        if (!hasOpenAI && !hasGemini) return {};
+        const hasGemini = this.geminiApiKey && (this.provider === 'gemini' || (!hasOpenAI && !this.groqApiKey));
+        const hasGroq = this.groqApiKey && (this.provider === 'groq' || (!hasOpenAI && !hasGemini));
+        if (!hasOpenAI && !hasGemini && !hasGroq) return {};
 
         if (!this._ipaCache) this._ipaCache = new Map();
         const need = uniq.filter(w => !this._ipaCache.has(w));
@@ -1226,6 +1473,21 @@ Trả về ĐÚNG JSON dạng: {"word1":"/ipa1/","word2":"/ipa2/"} (key là từ
                     if (res.ok) {
                         const data = await res.json();
                         const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+                        obj = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+                    }
+                } else if (hasGroq) {
+                    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.groqApiKey}` },
+                        body: JSON.stringify({
+                            model: this.groqModel,
+                            messages: [{ role: 'user', content: prompt }],
+                            temperature: 0
+                        })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        const rawText = data.choices?.[0]?.message?.content || '{}';
                         obj = JSON.parse(rawText.replace(/```json|```/g, '').trim());
                     }
                 }
@@ -1355,8 +1617,9 @@ Trả về ĐÚNG JSON dạng: {"word1":"/ipa1/","word2":"/ipa2/"} (key là từ
      */
     async _lookupWithAI(word, _sentenceIgnored) {
         const hasOpenAI = this.provider === 'openai' && this.openaiApiKey;
-        const hasGemini = this.geminiApiKey && (this.provider === 'gemini' || !this.openaiApiKey);
-        if (!hasOpenAI && !hasGemini) return null;
+        const hasGemini = this.geminiApiKey && (this.provider === 'gemini' || (!hasOpenAI && !this.groqApiKey));
+        const hasGroq = this.groqApiKey && (this.provider === 'groq' || (!hasOpenAI && !hasGemini));
+        if (!hasOpenAI && !hasGemini && !hasGroq) return null;
 
         // PER USER REQUEST (Aug 1 2026): tra từ theo kiểu từ điển THẬT — không phụ thuộc
         // câu đang đọc. Trả nghĩa PHỔ BIẾN, ví dụ là câu tiếng Anh TỰ NHIÊN (như từ
@@ -1380,9 +1643,25 @@ YÊU CẦU BẮT BUỘC:
      {"word":"profound","ipa":"/prəˈfaʊnd/","pos":"adj.","meaning":"sâu sắc, sâu xa"},
      {"word":"transformation","ipa":"/ˌtrænsfəˈmeɪʃən/","pos":"n.","meaning":"sự biến đổi, sự chuyển đổi"}
    ]
-5. "example": BẮT BUỘC — MỘT câu tiếng Anh TỰ NHIÊN, NGẮN GỌN, DỄ HIỂU (kiểu câu ví dụ Oxford/Cambridge) CÓ CHỨA đúng từ/cụm từ. TUYỆT ĐỐI KHÔNG dùng "The word X...", "The phrase X...", "Example with X", "This is X", "X is commonly used". Phải là câu đời thực có nghĩa.
+5. "example": BẮT BUỘC — MỘT câu tiếng Anh TỰ NHIÊN, NGẮN GỌN, DỄ HIỂU (đúng kiểu câu ví dụ trong từ điển Oxford/Cambridge) CÓ CHỨA đúng từ/cụm từ đang học.
+   QUY TẮC CỨNG:
+   - Câu phải là câu ĐỜI THỰC người bản xứ sẽ nói/viết — không phải câu ngữ pháp khô khan hay câu chêm từ vào cho có.
+   - TUYỆT ĐỐI KHÔNG dùng các mẫu câu SIÊU SAI sau (AI hay mắc):
+     • "The word X..." / "The phrase X..." / "The term X..."
+     • "Example with X" / "Example of X" / "This is X" / "Here is X"
+     • "X is commonly used" / "X is used" / "X appears in"
+     • "She/He/They used the word X..." / "She/He/They used X to..." (chêm từ vào gượng ép)
+     • "The X used Y to Z..." (câu ngữ pháp khô khan)
+     • "Using X in a sentence: ..." / "Here is a sentence with X"
+     • "We use X when..." / "We can see X in..."
+   - Câu MẪU SAI CỤ THỂ (không được viết y chang):
+     • "institutions" → "She used the word 'institutions' in her essay." ❌
+     • "however" → "The singer used however to transition from one song to another." ❌
+   - Độ dài 8-15 từ. Càng giống sách báo/tạp chí càng tốt.
    MẪU ĐÚNG:
    - "eat" → "I eat breakfast every morning."
+   - "however" → "She was tired; however, she kept on working."
+   - "institutions" → "The charity works with local institutions to provide food and shelter."
    - "profound transformation" → "Technology has brought about a profound transformation in modern society."
 6. "exampleVi": bản dịch tiếng Việt TỰ NHIÊN của đúng câu example ở trên.
    MẪU: "I eat breakfast every morning." → "Tôi ăn sáng mỗi buổi sáng."
@@ -1428,6 +1707,22 @@ Trả về ĐÚNG JSON (không kèm markdown):
             if (!res.ok) throw new Error(`Gemini lookup error: ${res.status}`);
             const data = await res.json();
             const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+            return JSON.parse(rawText.replace(/```json|```/g, '').trim());
+        }
+
+        if (hasGroq) {
+            const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.groqApiKey}` },
+                body: JSON.stringify({
+                    model: this.groqModel,
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature: 0.2
+                })
+            });
+            if (!res.ok) throw new Error(`Groq lookup error: ${res.status}`);
+            const data = await res.json();
+            const rawText = data.choices?.[0]?.message?.content || '{}';
             return JSON.parse(rawText.replace(/```json|```/g, '').trim());
         }
 
@@ -1525,6 +1820,10 @@ Trả về ĐÚNG JSON (không kèm markdown):
                 }
             }
 
+            // Example is filled per-word by _enrichVocabExamplesWithAI, called from app.js
+            // after this function returns. We don't pre-fill a template because every
+            // word would end up showing the same sentence ("\"X\" is used in this
+            // context.") which looks fake and gets repeated across the whole vocab list.
             vocabList.push({
                 original: item.word,
                 color: item.color,
@@ -1532,7 +1831,7 @@ Trả về ĐÚNG JSON (không kèm markdown):
                 ipa: item.ipa,
                 contextMeaning: meaning,
                 translatedTermInVN: meaning,
-                example: `"${item.word}" is used in this context.`
+                example: ""
             });
         }
 
@@ -1540,6 +1839,57 @@ Trả về ĐÚNG JSON (không kèm markdown):
             translatedText: translatedText,
             vocabList: vocabList
         };
+    }
+
+    /**
+     * For every vocab entry that has no example yet, call the AI once with a unique
+     * topic hint so each word gets a DIFFERENT natural sentence. Mutates entries in
+     * place: entry.example (English) and entry.exampleVi (Vietnamese).
+     *
+     * @param {Array} vocabList - the vocab entries to enrich
+     * @param {Function} [onBatch] - optional callback invoked after each batch finishes
+     *                                with the number of items enriched so far. Used by
+     *                                the UI to re-render as examples stream in.
+     */
+    async _enrichVocabExamplesWithAI(vocabList, onBatch = null) {
+        if (!Array.isArray(vocabList) || vocabList.length === 0) return;
+        const topicHints = [
+            'everyday conversation', 'a news headline', 'a science textbook',
+            'a travel blog', 'a movie review', 'a recipe blog', 'a sports article',
+            'a history book', 'a tech blog', 'a diary entry', 'a business email',
+            'a children\'s story', 'a weather report', 'a documentary script',
+            'a cooking tutorial', 'a fitness magazine', 'a fashion article',
+            'a social media post', 'a forum discussion', 'a song lyric',
+            'an academic lecture', 'a TED talk transcript', 'a job interview',
+            'a podcast interview', 'a tourist guidebook', 'a bedtime story'
+        ];
+        const tasks = vocabList.map((entry, idx) => async () => {
+            if (!entry || !entry.original) return false;
+            if (entry.example && entry.example.trim()) return false;
+            const topic = topicHints[idx % topicHints.length];
+            try {
+                const ai = await this._generateExampleWithAI(entry.original, topic);
+                if (ai && ai.example && ai.example.trim()) {
+                    entry.example = ai.example.trim();
+                    if (ai.exampleVi && ai.exampleVi.trim()) {
+                        entry.exampleVi = ai.exampleVi.trim();
+                    }
+                    return true;
+                }
+            } catch (_) { /* swallow; popup will show "Chưa có câu ví dụ" */ }
+            return false;
+        });
+        // Run in small parallel batches so we don't hammer the API or block forever.
+        const batchSize = 4;
+        let totalEnriched = 0;
+        for (let i = 0; i < tasks.length; i += batchSize) {
+            const batch = tasks.slice(i, i + batchSize);
+            const results = await Promise.all(batch.map(fn => fn()));
+            totalEnriched += results.filter(Boolean).length;
+            if (typeof onBatch === 'function') {
+                try { onBatch(totalEnriched, vocabList.length); } catch (_) {}
+            }
+        }
     }
 
     async autoScanKeyTermsWithAI(text, progressCallback = null) {
@@ -1740,6 +2090,33 @@ ${chunkText}
                 aiErrors.push('Gemini: status ' + res.status);
             } catch (e) {
                 aiErrors.push('Gemini: ' + e.message);
+            }
+        }
+
+        // Try Groq
+        if ((provider === 'groq' || this.groqApiKey) && (apiKey || this.groqApiKey)) {
+            const useKey = provider === 'groq' ? apiKey : this.groqApiKey;
+            const useModel = provider === 'groq' ? model : this.groqModel;
+            try {
+                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useKey}` },
+                    body: JSON.stringify({
+                        model: useModel,
+                        messages: [{ role: 'user', content: prompt }],
+                        temperature: 0.2
+                    })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    const rawText = data.choices?.[0]?.message?.content || '{}';
+                    const json = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+                    const terms = normalizeTerms(json.keyTerms);
+                    if (terms && terms.length > 0) return terms;
+                }
+                aiErrors.push('Groq: status ' + res.status);
+            } catch (e) {
+                aiErrors.push('Groq: ' + e.message);
             }
         }
 

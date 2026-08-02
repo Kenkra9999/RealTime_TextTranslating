@@ -8,6 +8,12 @@
     <meta name="description"
         content="Ứng dụng dịch văn bản tiếng Anh dài ngữ cảnh cao cấp, tô đậm từ vựng màu sắc, tự động ánh xạ bản dịch tiếng Việt, và xuất bảng từ vựng PDF chuyên nghiệp.">
 
+    <!-- Disable browser caching for index.html so users always get the latest
+         script/css versions (otherwise Ctrl+F5 is required after every change). -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,7 +41,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Stylesheet -->
-    <link rel="stylesheet" href="css/style.css?v=15.0">
+    <link rel="stylesheet" href="css/style.css?v=15.1">
 
     <!-- Favicon -->
     <link rel="icon"
@@ -372,16 +378,51 @@
             <div class="form-group">
                 <label class="form-label">Chọn Nhà Cung Cấp AI (Provider)</label>
                 <select class="form-select" id="selectProvider">
+                    <option value="groq">Groq (Llama 3.x — Miễn phí, Khuyên dùng)</option>
                     <option value="openai">OpenAI ChatGPT (GPT-4o / GPT-4o-mini)</option>
-                    <option value="gemini" selected>Google Gemini (Gemini 2.5 Flash / 2.0 Flash)</option>
+                    <option value="gemini">Google Gemini (Gemini 2.5 Flash / 2.0 Flash)</option>
                 </select>
+            </div>
+
+            <!-- Groq Settings Group (FREE — no credit card needed) -->
+            <div id="groupGroq" style="display: flex; flex-direction: column; gap: 12px;">
+                <div class="form-group">
+                    <label class="form-label">Groq API Key <span style="font-size: 11px; color: #22c55e; font-weight: 700;">✅ Miễn phí — Không giới hạn tháng</span></label>
+                    <div style="display: flex; gap: 8px; align-items: stretch;">
+                        <input type="password" class="form-input" id="inputGroqApiKey" placeholder="gsk_..." style="flex: 1;" />
+                        <button type="button" class="btn btn-test-api" id="btnTestGroq"
+                            title="Kiểm tra API key có hoạt động không">🧪 Test</button>
+                    </div>
+                    <span id="testGroqStatus" class="api-test-status" style="display: none;"></span>
+                    <span style="font-size: 11.5px; color: var(--text-muted);">
+                        Lấy key miễn phí tại <a href="https://console.groq.com/keys" target="_blank" style="color: var(--primary);">console.groq.com/keys</a> — không cần credit card.
+                        Model đề xuất: <strong>llama-3.3-70b-versatile</strong> (miễn phí, nhanh, 70B params).
+                    </span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Mô hình Groq Model</label>
+                    <select class="form-select" id="selectGroqModel">
+                        <option value="llama-3.3-70b-versatile" selected>Llama 3.3 70B Versatile (Nhanh & Miễn phí)</option>
+                        <option value="llama-3.1-70b-versatile">Llama 3.1 70B Versatile</option>
+                        <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (Siêu nhanh, miễn phí)</option>
+                        <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+                        <option value="gemma2-9b-it">Gemma 2 9B</option>
+                    </select>
+                </div>
             </div>
 
             <!-- OpenAI Settings Group -->
             <div id="groupOpenAI" style="display: none; flex-direction: column; gap: 12px;">
                 <div class="form-group">
                     <label class="form-label">OpenAI ChatGPT API Key</label>
-                    <input type="password" class="form-input" id="inputOpenAiApiKey" placeholder="sk-proj-..." />
+                    <div style="display: flex; gap: 8px; align-items: stretch;">
+                        <input type="password" class="form-input" id="inputOpenAiApiKey" placeholder="sk-proj-..." style="flex: 1;" />
+                        <button type="button" class="btn btn-test-api" id="btnTestOpenAI" title="Kiểm tra API key có hoạt động không">
+                            🧪 Test
+                        </button>
+                    </div>
+                    <span id="testOpenAIStatus" class="api-test-status" style="display: none;"></span>
                     <span style="font-size: 11.5px; color: var(--text-muted);">
                         Nhập OpenAI API Key chính chủ của bạn (bắt đầu bằng sk-...).
                     </span>
@@ -401,7 +442,13 @@
             <div id="groupGemini" style="display: flex; flex-direction: column; gap: 12px;">
                 <div class="form-group">
                     <label class="form-label">Google Gemini API Key</label>
-                    <input type="password" class="form-input" id="inputApiKey" placeholder="AIzaSy..." />
+                    <div style="display: flex; gap: 8px; align-items: stretch;">
+                        <input type="password" class="form-input" id="inputApiKey" placeholder="AIzaSy..." style="flex: 1;" />
+                        <button type="button" class="btn btn-test-api" id="btnTestGemini" title="Kiểm tra API key có hoạt động không">
+                            🧪 Test
+                        </button>
+                    </div>
+                    <span id="testGeminiStatus" class="api-test-status" style="display: none;"></span>
                     <span style="font-size: 11.5px; color: var(--text-muted);">
                         Nhập Gemini API Key chính chủ để dịch ngữ cảnh chuẩn xác và tốc độ cao.
                     </span>
@@ -451,17 +498,46 @@
                     <div class="form-group">
                         <label class="form-label">Nhà cung cấp AI cho Quét Từ & Cấu Trúc</label>
                         <select class="form-select" id="selectScanProvider">
+                            <option value="groq">Groq (Miễn phí — Khuyên dùng)</option>
                             <option value="openai">OpenAI ChatGPT (GPT-4o / GPT-4o-mini)</option>
-                            <option value="gemini" selected>Google Gemini (Gemini 2.5 Flash / 2.0 Flash)</option>
+                            <option value="gemini">Google Gemini (Gemini 2.5 Flash / 2.0 Flash)</option>
                         </select>
+                    </div>
+
+                    <!-- Separate Groq Settings -->
+                    <div id="groupScanGroq" style="display: none; flex-direction: column; gap: 12px;">
+                        <div class="form-group">
+                            <label class="form-label">Groq API Key (riêng cho Quét Từ & Cấu Trúc)</label>
+                            <div style="display: flex; gap: 8px; align-items: stretch;">
+                                <input type="password" class="form-input" id="inputScanGroqApiKey"
+                                    placeholder="gsk_..." style="flex: 1;" />
+                                <button type="button" class="btn btn-test-api" id="btnTestScanGroq"
+                                    title="Kiểm tra API key có hoạt động không">🧪 Test</button>
+                            </div>
+                            <span id="testScanGroqStatus" class="api-test-status" style="display: none;"></span>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Mô hình Groq Model</label>
+                            <select class="form-select" id="selectScanGroqModel">
+                                <option value="llama-3.3-70b-versatile" selected>Llama 3.3 70B Versatile (Miễn phí)</option>
+                                <option value="llama-3.1-70b-versatile">Llama 3.1 70B Versatile</option>
+                                <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (Siêu nhanh)</option>
+                                <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+                            </select>
+                        </div>
                     </div>
 
                     <!-- Separate OpenAI Settings -->
                     <div id="groupScanOpenAI" style="display: none; flex-direction: column; gap: 12px;">
                         <div class="form-group">
                             <label class="form-label">OpenAI API Key (riêng cho Quét Từ & Cấu Trúc)</label>
-                            <input type="password" class="form-input" id="inputScanOpenAiApiKey"
-                                placeholder="sk-proj-..." />
+                            <div style="display: flex; gap: 8px; align-items: stretch;">
+                                <input type="password" class="form-input" id="inputScanOpenAiApiKey"
+                                    placeholder="sk-proj-..." style="flex: 1;" />
+                                <button type="button" class="btn btn-test-api" id="btnTestScanOpenAI"
+                                    title="Kiểm tra API key có hoạt động không">🧪 Test</button>
+                            </div>
+                            <span id="testScanOpenAIStatus" class="api-test-status" style="display: none;"></span>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Mô hình ChatGPT Model</label>
@@ -478,7 +554,13 @@
                     <div id="groupScanGemini" style="display: flex; flex-direction: column; gap: 12px;">
                         <div class="form-group">
                             <label class="form-label">Gemini API Key (riêng cho Quét Từ & Cấu Trúc)</label>
-                            <input type="password" class="form-input" id="inputScanApiKey" placeholder="AIzaSy..." />
+                            <div style="display: flex; gap: 8px; align-items: stretch;">
+                                <input type="password" class="form-input" id="inputScanApiKey"
+                                    placeholder="AIzaSy..." style="flex: 1;" />
+                                <button type="button" class="btn btn-test-api" id="btnTestScanGemini"
+                                    title="Kiểm tra API key có hoạt động không">🧪 Test</button>
+                            </div>
+                            <span id="testScanGeminiStatus" class="api-test-status" style="display: none;"></span>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Mô hình Gemini Model</label>
@@ -508,11 +590,11 @@
     </div>
 
     <!-- Scripts -->
-    <script src="js/dictionary-db.js?v=25.0"></script>
-    <script src="js/highlighter.js?v=25.0"></script>
-    <script src="js/translator.js?v=25.0"></script>
-    <script src="js/pdf-exporter.js?v=25.0"></script>
-    <script src="js/app.js?v=25.0"></script>
+    <script src="js/dictionary-db.js?v=26.3"></script>
+    <script src="js/highlighter.js?v=26.3"></script>
+    <script src="js/translator.js?v=26.3"></script>
+    <script src="js/pdf-exporter.js?v=26.3"></script>
+    <script src="js/app.js?v=26.3"></script>
 
 </body>
 

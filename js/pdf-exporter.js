@@ -784,7 +784,7 @@ class PDFExporter {
                 category: matchedVocab?.category || (isPhrase ? 'Cụm từ' : pos),
                 ipa: ipa,
                 contextMeaning: meaning,
-                example: matchedVocab?.example || matchedVocab?.exampleEn || `Context for "${word}".`
+                example: matchedVocab?.example || matchedVocab?.exampleEn || ''
             });
         }
 
@@ -804,7 +804,7 @@ class PDFExporter {
                 category: v.category || (isPhrase ? 'Cụm từ' : pos),
                 ipa: ipa,
                 contextMeaning: meaning,
-                example: v.example || v.exampleEn || `Context for "${word}".`
+                example: v.example || v.exampleEn || ''
             });
         }
 

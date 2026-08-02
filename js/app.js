@@ -1446,6 +1446,7 @@ class LinguaApp {
             this.currentSourceText = text;
 
             const hasApiKey = (this.translator.provider === 'openai' && !!this.translator.openaiApiKey)
+                || (this.translator.provider === 'groq' && !!this.translator.groqApiKey)
                 || !!this.translator.geminiApiKey;
             if (hasApiKey && highlights.length > 0 && result.vocabList.length > 0) {
                 if (this.els.progressText) this.els.progressText.textContent = "Đang đối chiếu từ vựng với bản dịch (pass 2/2)...";
@@ -3142,13 +3143,22 @@ class LinguaApp {
         const normaliseVocab = (v) => {
             const word = (v.original || v.term || v.text || v.word || v.english || '').toString().trim();
             if (!word) return null;
-            // Use the verified source (dict + AI override) when available, with a
-            // rule-based estimate as the visible fallback so the user always
-            // sees *something* plausible. `_accurateIPA` already does this.
-            let ipa = this._accurateIPA(word);
+            // Priority order for IPA:
+            //   1. AI-supplied IPA (v.ipa / v.phonetic / v.pronunciation) — most accurate when present
+            //   2. Curated dictionary IPA — verified offline
+            //   3. Rule-based estimate from dictionary — last resort
+            //   4. Source-word echo in slashes — only when nothing else works
+            const aiIpa = (v.ipa || v.phonetic || v.pronunciation || '').toString().trim();
+            const aiIpaClean = aiIpa ? aiIpa.replace(/^\/+|\/+$/g, '').trim() : '';
+            const isBareEcho = aiIpaClean && aiIpaClean.toLowerCase() === word.toLowerCase()
+                && !/[^a-zA-Z'\-]/.test(aiIpaClean);
+            let ipa = (aiIpa && !isBareEcho) ? aiIpa : this._accurateIPA(word);
             // Kick off an AI fetch in the background to refine the estimate into
-            // a more accurate transcription when AI is configured.
-            this._maybeFetchIpaForWord(word);
+            // a more accurate transcription when AI is configured AND we didn't
+            // already get one from the AI vocab list.
+            if (!aiIpa || isBareEcho) {
+                this._maybeFetchIpaForWord(word);
+            }
             return {
                 word,
                 color: v.color || '#fff3a8',
@@ -3466,13 +3476,6 @@ class LinguaApp {
                 <div class="vocab-detail-meaning-box">
                     <div class="vocab-detail-meaning-label">🇻🇳 Nghĩa ngữ cảnh (Tiếng Việt)</div>
                     <div class="vocab-detail-meaning-text">${this._escapeHTML(item.contextMeaning || '(đang cập nhật nghĩa…)')}</div>
-                </div>
-
-                <div class="vocab-detail-section vocab-detail-explanation">
-                    <div class="vocab-detail-section-label">📘 Giải thích <span class="vocab-detail-section-label-en">(Giải thích ngắn gọn bằng tiếng Việt)</span></div>
-                    <div class="vocab-detail-explanation-text">${explanation
-                        ? this._escapeHTML(explanation)
-                        : '<span class="vocab-detail-empty">Chưa có giải thích chi tiết cho mục này. Hãy bấm "🔄 Cập nhật nghĩa" trên văn bản để AI phân tích sâu hơn.</span>'}</div>
                 </div>
 
                 <div class="vocab-detail-section vocab-detail-example">
