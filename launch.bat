@@ -1,0 +1,6 @@
+@echo off
+title LinguaContext Pro - Starting...
+cd /d "%~dp0"
+echo Starting LinguaContext Pro...
+start "" "http://127.0.0.1:8081"
+npx -y http-server -p 8081

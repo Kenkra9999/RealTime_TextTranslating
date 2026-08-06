@@ -1,4 +1,4 @@
-﻿/**
+/**
  * LinguaContext Pro - Advanced AI Translation & Deep Structure Engine
  * Supports OpenAI ChatGPT, Google Gemini, and Groq (Llama 3.x) APIs.
  * Deep extraction of Nouns, Verbs, Adjectives, Adverbs, Collocations, Phrasal Verbs,
@@ -690,6 +690,111 @@ ${para}
         localStorage.setItem('lingua_scan_groq_model', model);
     }
 
+    /**
+     * Public API test — works for all 3 providers (groq/openai/gemini).
+     * Returns { ok: true, model, message } on success, or { ok: false, error } on failure.
+     * Designed to be called from UI "Test" buttons in Settings.
+     */
+    async testApi(provider, apiKey, model) {
+        const p = (provider || '').toLowerCase();
+        const key = (apiKey || '').trim();
+        const m = (model || '').trim();
+        if (!key) return { ok: false, error: 'Vui lòng nhập API key trước khi Test.' };
+        try {
+            if (p === 'groq') {
+                const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+                    body: JSON.stringify({
+                        model: m || 'llama-3.3-70b-versatile',
+                        messages: [{ role: 'user', content: 'Reply with the single word: OK' }],
+                        max_tokens: 5,
+                        temperature: 0
+                    })
+                });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    const msg = errData.error?.message || `HTTP ${res.status}`;
+                    return { ok: false, error: this._translateApiError(res.status, msg, 'Groq') };
+                }
+                const data = await res.json();
+                if (!data.choices?.[0]?.message?.content) {
+                    return { ok: false, error: 'Groq trả về response rỗng — key có thể sai hoặc đã hết hạn.' };
+                }
+                return { ok: true, model: data.model || m, message: '✅ Kết nối Groq thành công! Key hoạt động tốt.' };
+            }
+            if (p === 'openai') {
+                const res = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+                    body: JSON.stringify({
+                        model: m || 'gpt-4o-mini',
+                        messages: [{ role: 'user', content: 'Reply with: OK' }],
+                        max_tokens: 5,
+                        temperature: 0
+                    })
+                });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    const msg = errData.error?.message || `HTTP ${res.status}`;
+                    return { ok: false, error: this._translateApiError(res.status, msg, 'OpenAI') };
+                }
+                const data = await res.json();
+                if (!data.choices?.[0]?.message?.content) {
+                    return { ok: false, error: 'OpenAI trả về response rỗng — key có thể sai hoặc đã hết hạn.' };
+                }
+                return { ok: true, model: data.model || m, message: '✅ Kết nối OpenAI thành công! Key hoạt động tốt.' };
+            }
+            if (p === 'gemini') {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${m || 'gemini-2.5-flash'}:generateContent?key=${key}`;
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: 'Reply with the single word: OK' }] }],
+                        generationConfig: { maxOutputTokens: 5, temperature: 0 }
+                    })
+                });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    const msg = errData.error?.message || `HTTP ${res.status}`;
+                    return { ok: false, error: this._translateApiError(res.status, msg, 'Gemini') };
+                }
+                const data = await res.json();
+                if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    return { ok: false, error: 'Gemini trả về response rỗng — key có thể sai hoặc đã hết hạn.' };
+                }
+                return { ok: true, model: m, message: '✅ Kết nối Gemini thành công! Key hoạt động tốt.' };
+            }
+            return { ok: false, error: 'Provider không hợp lệ (phải là groq, openai hoặc gemini).' };
+        } catch (err) {
+            return { ok: false, error: this._translateApiError(0, err.message || String(err), provider) };
+        }
+    }
+
+    _translateApiError(status, rawMsg, provider) {
+        const m = (rawMsg || '').toString();
+        if (status === 401 || /api key|invalid|unauthor/i.test(m)) {
+            return `❌ ${provider}: API key không hợp lệ, sai hoặc đã hết hạn. Vui lòng kiểm tra lại.`;
+        }
+        if (status === 403 || /permission|forbidden|not enabled/i.test(m)) {
+            return `❌ ${provider}: API key không có quyền truy cập model này. Có thể model chưa được bật cho key.`;
+        }
+        if (status === 404 || /not found|model not found|does not exist/i.test(m)) {
+            return `❌ ${provider}: Model "${m}" không tồn tại hoặc bạn không có quyền dùng. Kiểm tra lại tên model.`;
+        }
+        if (status === 429 || /quota|rate limit|too many/i.test(m)) {
+            return `❌ ${provider}: Đã vượt quota / rate limit. Vui lòng đợi hoặc nâng cấp gói.`;
+        }
+        if (status === 0 || /network|fetch|failed/i.test(m)) {
+            return `❌ ${provider}: Lỗi mạng — không kết nối được tới server. Kiểm tra mạng hoặc VPN.`;
+        }
+        if (status >= 500) {
+            return `❌ ${provider}: Server đang lỗi (HTTP ${status}). Thử lại sau vài giây.`;
+        }
+        return `❌ ${provider}: ${m || `HTTP ${status}`}`;
+    }
+
     chunkText(text, maxWordsPerChunk = 600) {
         const paragraphs = text.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
         const chunks = [];
@@ -737,6 +842,13 @@ ${para}
                     result = await this._translateWithOpenAI(chunkText, chunkHighlights);
                 } catch (err) {
                     console.warn(`OpenAI API error on chunk ${i + 1}, falling back:`, err);
+                    result = await this._translateWithFallback(chunkText, chunkHighlights);
+                }
+            } else if (this.provider === 'groq' && this.groqApiKey) {
+                try {
+                    result = await this._translateWithGroq(chunkText, chunkHighlights);
+                } catch (err) {
+                    console.warn(`Groq API error on chunk ${i + 1}, falling back:`, err);
                     result = await this._translateWithFallback(chunkText, chunkHighlights);
                 }
             } else if (this.geminiApiKey) {
@@ -808,32 +920,104 @@ ${para}
         const url = "https://api.openai.com/v1/chat/completions";
         const highlightListStr = highlights.map(h => `"${h.text}"`).join(', ');
 
-        const prompt = `
-Bạn là một chuyên gia dịch thuật và nhà ngôn ngữ học Tiếng Anh - Tiếng Việt cao cấp, chuyên biên soạn tài liệu học từ vựng chuyên sâu.
-Nhiệm vụ:
-1. Dịch đoạn văn tiếng Anh bên dưới sang tiếng Việt mượt mà, tự nhiên và CHUẨN XÁC NGHĨA TRONG NGỮ CẢNH.
-   ⚡ QUY TẮC ĐÁNH DẤU TỐI QUAN TRỌNG: Ngay TRONG "translatedText", với MỖI item từ vựng bạn phân tích ở dưới, hãy BỌC chính xác cụm từ tiếng Việt tương ứng bằng cặp thẻ: [[H:ENGLISH_ORIGINAL]]cụm tiếng Việt[[/H]]
-   Trong đó ENGLISH_ORIGINAL là ĐÚNG chuỗi tiếng Anh gốc ở trường "original" của item đó (giữ nguyên chữ thường, không dấu ngoặc).
-   Ví dụ: câu tiếng Anh "humans are walking slowly" → dịch "Những [[H:humans]]con người[[/H]] đang [[H:walking slowly]]đi bộ chậm rãi[[/H]]."
-   BẮT BUỘC: cụm tiếng Việt nằm giữa 2 thẻ phải là NGHĨA ĐÚNG của cụm tiếng Anh đó tại ĐÚNG vị trí nó xuất hiện trong câu. KHÔNG bọc nhầm sang từ khác. Mỗi item chỉ cần bọc 1 lần (ở lần xuất hiện đầu tiên). Nếu một cụm tiếng Anh không thực sự xuất hiện trong đoạn thì không bọc.
-   ‼️ CỰC KỲ QUAN TRỌNG: BẮT BUỘC phải bọc thẻ cho TẤT CẢ MỌI item trong "vocabList" — TUYỆT ĐỐI KHÔNG được bỏ sót bất kỳ item nào. Số cặp thẻ [[H:...]]...[[/H]] trong "translatedText" PHẢI BẰNG ĐÚNG số phần tử trong "vocabList". Sau khi dịch xong, hãy TỰ RÀ SOÁT lại: mỗi item ở vocabList đều phải có đúng 1 cặp thẻ tương ứng trong bản dịch. Nếu thiếu, hãy thêm vào cho đủ trước khi trả kết quả.
-2. Phân tích chi tiết danh sách từ/cụm từ/cấu trúc được yêu cầu: [${highlightListStr}] (Nếu danh sách trống, hãy tự động QUÉT CHI TIẾT VÀ ĐẦY ĐỦ toàn bộ đoạn văn để trích xuất TỐI THIỂU 15-20 mục hay nhất và đa dạng nhất, bao gồm ĐỦ các nhóm: Trạng từ+Động từ, Trạng từ+Tính từ, Trạng từ+Danh từ, Cụm từ kết hợp/Collocations, Cụm động từ/Phrasal Verbs, Thành ngữ/Idioms, TẤT CẢ các Cấu trúc ngữ pháp xuất hiện trong bài dù dễ hay khó, và các Danh từ/Động từ/Tính từ/Trạng từ học thuật hoặc khó khác. Không bỏ sót mục nào đáng học).
-3. Cho mỗi item, phân tích chi tiết:
-   - "original": Từ, Cụm từ hoặc Cấu trúc tiếng Anh
+        const prompt = `Bạn là dịch giả & nhà ngôn ngữ học Anh-Việt cao cấp, chuyên biên dịch văn bản học thuật & đời thường với phong cách TỰ NHIÊN, MƯỢT MÀ như người Việt bản xứ — không máy móc, không Google-Translate.
+
+═══════════════════════════════════════
+PHẦN 1 — DỊCH ĐOẠN VĂN
+═══════════════════════════════════════
+
+Nguyên tắc dịch MƯỢT MÀ & TRUNG THÀNH với ngữ cảnh:
+
+1. ĐỌC KỸ TOÀN BỘ đoạn văn trước khi dịch từng câu — để nắm:
+   * Chủ đề chính, giọng văn (trang trọng / thân mật / học thuật / kể chuyện)
+   * Các nhân vật, sự kiện, bối cảnh đang được nhắc tới
+   * Quan hệ nhân-quả, thời gian, mục đích giữa các câu
+
+2. DỊCH THEO NGHĨA, KHÔNG DỊCH TỪNG TỪ:
+   * "I'm feeling under the weather today" → "Hôm nay tôi thấy không được khỏe" (KHÔNG phải "Tôi đang cảm thấy dưới thời tiết")
+   * "It took us by storm" → "Nó tạo nên cơn sốt" (KHÔNG phải "Nó đã mang chúng ta bằng bão")
+   * "The answer is a resounding no" → "Câu trả lời là một 'không' hoàn toàn dứt khoát" (KHÔNG phải "...là một không vang dội")
+   * Chọn từ Việt tương đương sắc thái — ưu tiên cách diễn đạt mà người Việt thực sự dùng trong cùng ngữ cảnh.
+
+3. GIỮ ĐÚNG:
+   * Sắc thái trang trọng / thân mật của bản gốc (gọi "bạn" trong văn informal, "quý vị/anh chị" trong văn trang trọng — theo văn phong bài).
+   * Mạo từ "the/a" nếu cần dịch sẽ dùng "cái/chiếc/cuốn..." cho rõ nghĩa, hoặc LƯỚT qua nếu tiếng Việt tự nhiên bỏ được.
+   * Thì, thể của động từ — phải khớp nguyên văn cấu trúc ngữ pháp gốc.
+   * Số ít/số nhiều — "books" dịch "những cuốn sách" (có "những") chứ không phải "cuốn sách".
+
+4. XỬ LÝ CỤM TỪ KHÔNG NÊN DỊCH LITERAL:
+   * "look forward to" → "mong đợi / háo hức chờ đợi"
+   * "in spite of" → "bất chấp / mặc dù"
+   * "take advantage of" → "tận dụng / lợi dụng"
+   * "make a difference" → "tạo nên sự khác biệt"
+   * "for the time being" → "tạm thời / trong lúc này"
+   * "on the other hand" → "mặt khác / ngược lại"
+   * "as well as" → "cũng như / không chỉ... mà còn"
+   * "due to" → "vì / do"
+   * "in addition to" → "ngoài ra / bên cạnh"
+   * "a wide range of" → "nhiều loại / đa dạng"
+   * "as a result" → "hệ quả là / kết quả là"
+   * "in fact" → "thực tế / thực ra"
+   * "in order to" → "để / nhằm mục đích"
+   * "such as" → "như / chẳng hạn như"
+   * "in case of" → "trong trường hợp"
+   * "with regard to" → "về / liên quan đến"
+   * "as long as" → "miễn là / chỉ cần"
+   * "even though" → "mặc dù / dù cho"
+   * "rather than" → "thay vì / hơn là"
+   * "the fact that" → "việc / rằng" (thường lược bỏ)
+   * "There is/are" → "Có..." (không dịch literal "Ở đây có")
+   * "It is important to note that" → "Điều đáng chú ý là" (không phải "Nó là quan trọng để chú ý rằng")
+
+5. VỀ VIỆC DÙNG TỪ HÁN-VIỆT:
+   * "important" → "quan trọng" (OK)
+   * "necessary" → "cần thiết" (OK)
+   * "major" → "lớn / chính" (tùy ngữ cảnh)
+   * "implement" → "triển khai / thực hiện" (tùy ngữ cảnh)
+   * "utilize" → "sử dụng / tận dụng" (không cố dịch "sử dụng hóa")
+   * "demonstrate" → "chứng minh / thể hiện"
+   * "subsequent" → "sau đó / tiếp theo"
+
+6. VĂN PHONG & SẮC THÁI:
+   * Văn báo chí: dùng từ trung tính, mạch lạc, truyền tải thông tin rõ ràng
+   * Văn học thuật: dùng từ học thuật chính xác, nhưng vẫn mượt
+   * Văn đời thường/kể chuyện: dùng từ khẩu ngữ tự nhiên
+   * Câu dài phức tạp tiếng Anh → chia thành 2-3 câu tiếng Việt nếu cần để rõ nghĩa
+
+⚡ QUY TẮC ĐÁNH DẤU TỐI QUAN TRỌNG:
+Trong "translatedText", với MỖI item từ vựng bạn phân tích ở dưới, hãy BỌC chính xác cụm từ tiếng Việt tương ứng bằng cặp thẻ: [[H:ENGLISH_ORIGINAL]]cụm tiếng Việt[[/H]]
+Trong đó ENGLISH_ORIGINAL là ĐÚNG chuỗi tiếng Anh gốc ở trường "original".
+Ví dụ: "humans are walking slowly" → "Những [[H:humans]]con người[[/H]] đang [[H:walking slowly]]đi bộ chậm rãi[[/H]]."
+BẮT BUỘC: cụm tiếng Việt nằm giữa 2 thẻ phải là NGHĨA ĐÚNG của cụm tiếng Anh đó tại ĐÚNG vị trí nó xuất hiện. Mỗi item chỉ bọc 1 lần (ở lần xuất hiện đầu tiên). Nếu một cụm tiếng Anh không thực sự xuất hiện trong đoạn thì không bọc.
+‼️ CỰC KỲ QUAN TRỌNG: PHẢI bọc thẻ cho TẤT CẢ MỌI item trong "vocabList" — KHÔNG được bỏ sót. Số cặp thẻ [[H:...]]...[[/H]] trong "translatedText" PHẢI BẰNG ĐÚNG số phần tử trong "vocabList". TỰ RÀ SOÁT lại sau khi dịch xong.
+
+═══════════════════════════════════════
+PHẦN 2 — PHÂN TÍCH TỪ VỰNG
+═══════════════════════════════════════
+
+Danh sách từ/cụm từ/cấu trúc được yêu cầu: [${highlightListStr}]
+
+(Nếu danh sách trống, hãy tự động QUÉT CHI TIẾT VÀ ĐẦY ĐỦ toàn bộ đoạn văn để trích xuất TỐI THIỂU 18-22 mục hay nhất và đa dạng nhất, bao gồm ĐỦ các nhóm: Trạng từ+Động từ, Trạng từ+Tính từ, Trạng từ+Danh từ, Cụm từ kết hợp/Collocations, Cụm động từ/Phrasal Verbs, Thành ngữ/Idioms, TẤT CẢ các Cấu trúc ngữ pháp xuất hiện trong bài dù dễ hay khó, và các Danh từ/Động từ/Tính từ/Trạng từ học thuật hoặc khó khác).
+
+Cho mỗi item, phân tích chi tiết:
+   - "original": Từ, Cụm từ hoặc Cấu trúc tiếng Anh (giữ đúng dạng gốc trong bài)
    - "category": Phân loại chính xác trong các nhãn sau: ["Trạng từ + Động từ (Adv+Verb)", "Trạng từ + Tính từ (Adv+Adj)", "Trạng từ + Danh từ (Adv+Noun)", "Cụm từ kết hợp (Collocation)", "Cấu trúc ngữ pháp (Structure)", "Cụm động từ (Phrasal Verb)", "Thành ngữ (Idiom)", "Danh từ (Noun)", "Động từ (Verb)", "Tính từ (Adj)", "Trạng từ (Adv)", "Giới từ/Liên từ (Prep/Conj)"]
    - "ipa": Phiên âm chuẩn IPA
-   - "contextMeaning": Nghĩa tiếng Việt chuẩn xác nhất theo đúng ngữ cảnh bài viết này
-   - "translatedTermInVN": Phải là CHÍNH XÁC cụm từ tiếng Việt bạn đã BỌC giữa 2 thẻ [[H:...]]...[[/H]] cho item này trong "translatedText" (không kèm thẻ).
-   - "exampleEn": Một câu ví dụ minh họa tiếng Anh (KHÁC câu trong bài) ngắn gọn, tự nhiên
-   - "exampleVi": Bản dịch tiếng Việt của câu ví dụ trên
-   - "explanation": Giải thích NGẮN GỌN bằng TIẾNG VIỆT (1-2 câu, tối đa 60-80 từ) về nghĩa, cách dùng, sắc thái hoặc lưu ý khi dùng từ/cụm từ này. Nếu là collocation/idiom/structure thì giải thích ý nghĩa + cách dùng. Nếu là từ đơn thì giải thích nghĩa chính + cách dùng phổ biến.
-   - "structures": Mảng 2-3 CẤU TRÚC hay và phổ biến có dùng từ/cụm từ này. Mỗi phần tử là 1 OBJECT gồm 3 trường:
-     * "pattern": Tên cấu trúc / công thức (TIẾNG ANH, ngắn gọn, in đậm key word). Ví dụ: "meticulously scrutinize + something" hoặc "trigger a profound paradigm shift in + field"
-     * "exampleEn": Một câu tiếng Anh hoàn chỉnh, tự nhiên, ngắn gọn (10-15 từ) MINH HỌA đúng cấu trúc đó và có chứa từ/cụm từ đang học
+   - "contextMeaning": Nghĩa tiếng Việt CHUẨN XÁC THEO ĐÚNG NGỮ CẢNH bài viết này (không phải nghĩa từ điển chung chung)
+   - "translatedTermInVN": Phải là CHÍNH XÁC cụm từ tiếng Việt bạn đã BỌC giữa 2 thẻ [[H:...]]...[[/H]] cho item này (không kèm thẻ)
+   - "exampleEn": Một câu ví dụ minh họa tiếng Anh (KHÁC câu trong bài) ngắn gọn, tự nhiên, đúng kiểu người bản xứ nói/viết
+   - "exampleVi": Bản dịch tiếng Việt mượt mà của câu ví dụ (KHÔNG dịch máy móc)
+   - "explanation": Giải thích NGẮN GỌN bằng TIẾNG VIỆT (1-2 câu, tối đa 60-80 từ) về nghĩa, cách dùng, sắc thái hoặc lưu ý khi dùng.
+   - "structures": Mảng 2-3 CẤU TRÚC hay và phổ biến có dùng từ/cụm từ này. Mỗi phần tử:
+     * "pattern": Tên cấu trúc (TIẾNG ANH, ngắn gọn, in đậm key word)
+     * "exampleEn": Câu tiếng Anh hoàn chỉnh, tự nhiên (10-15 từ) MINH HỌA cấu trúc
      * "exampleVi": Bản dịch tiếng Việt mượt mà của câu exampleEn
-     Nếu là từ đơn/collocation thì cho các cấu trúc/câu chứa nó. Nếu là grammar structure thì cho 2-3 biến thể/ví dụ chính cấu trúc đó.
 
-Trả về ĐÚNG định dạng JSON sau (không kèm markdown block ngoài):
+═══════════════════════════════════════
+PHẦN 3 — ĐỊNH DẠNG JSON
+═══════════════════════════════════════
+
+Trả về ĐÚNG định dạng JSON (không kèm markdown block):
 {
   "translatedText": "Người kiểm toán đã [[H:meticulously scrutinize]]xem xét tỉ mỉ[[/H]] mọi giao dịch...",
   "vocabList": [
@@ -847,21 +1031,9 @@ Trả về ĐÚNG định dạng JSON sau (không kèm markdown block ngoài):
       "exampleVi": "Người kiểm toán đã xem xét tỉ mỉ từng giao dịch.",
       "explanation": "Dùng khi ai đó xem xét một cái gì cẩn thận và chi tiết đến từng chút, thường để tìm lỗi hay sai sót. Phổ biến trong ngữ cảnh học thuật, pháp lý và kiểm soát chất lượng.",
       "structures": [
-        {
-          "pattern": "meticulously scrutinize + something",
-          "exampleEn": "The auditor meticulously scrutinized every transaction.",
-          "exampleVi": "Người kiểm toán đã xem xét tỉ mỉ từng giao dịch."
-        },
-        {
-          "pattern": "meticulously scrutinize the details/evidence",
-          "exampleEn": "She meticulously scrutinized the evidence before writing her report.",
-          "exampleVi": "Cô ấy đã xem xét tỉ mỉ các bằng chứng trước khi viết báo cáo."
-        },
-        {
-          "pattern": "meticulously scrutinize every aspect of",
-          "exampleEn": "The editor meticulously scrutinized every aspect of the manuscript.",
-          "exampleVi": "Biên tập viên đã xem xét tỉ mỉ mọi khía cạnh của bản thảo."
-        }
+        { "pattern": "meticulously scrutinize + something", "exampleEn": "The auditor meticulously scrutinized every transaction.", "exampleVi": "Người kiểm toán đã xem xét tỉ mỉ từng giao dịch." },
+        { "pattern": "meticulously scrutinize the details/evidence", "exampleEn": "She meticulously scrutinized the evidence before writing her report.", "exampleVi": "Cô ấy đã xem xét tỉ mỉ các bằng chứng trước khi viết báo cáo." },
+        { "pattern": "meticulously scrutinize every aspect of", "exampleEn": "The editor meticulously scrutinized every aspect of the manuscript.", "exampleVi": "Biên tập viên đã xem xét tỉ mỉ mọi khía cạnh của bản thảo." }
       ]
     }
   ]
@@ -883,7 +1055,7 @@ ${textChunk}
                 model: this.openaiModel,
                 messages: [{ role: 'user', content: prompt }],
                 response_format: { type: "json_object" },
-                temperature: 0.2
+                temperature: 0.3
             })
         });
 
@@ -912,32 +1084,74 @@ ${textChunk}
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiApiKey}`;
         const highlightListStr = highlights.map(h => `"${h.text}"`).join(', ');
 
-        const prompt = `
-Bạn là một chuyên gia dịch thuật và nhà ngôn ngữ học Tiếng Anh - Tiếng Việt cao cấp, chuyên biên soạn tài liệu học từ vựng chuyên sâu.
-Nhiệm vụ:
-1. Dịch đoạn văn tiếng Anh bên dưới sang tiếng Việt mượt mà, tự nhiên và CHUẨN XÁC NGHĨA TRONG NGỮ CẢNH.
-   ⚡ QUY TẮC ĐÁNH DẤU TỐI QUAN TRỌNG: Ngay TRONG "translatedText", với MỖI item từ vựng bạn phân tích ở dưới, hãy BỌC chính xác cụm từ tiếng Việt tương ứng bằng cặp thẻ: [[H:ENGLISH_ORIGINAL]]cụm tiếng Việt[[/H]]
-   Trong đó ENGLISH_ORIGINAL là ĐÚNG chuỗi tiếng Anh gốc ở trường "original" của item đó (giữ nguyên chữ thường, không dấu ngoặc).
-   Ví dụ: câu tiếng Anh "humans are walking slowly" → dịch "Những [[H:humans]]con người[[/H]] đang [[H:walking slowly]]đi bộ chậm rãi[[/H]]."
-   BẮT BUỘC: cụm tiếng Việt nằm giữa 2 thẻ phải là NGHĨA ĐÚNG của cụm tiếng Anh đó tại ĐÚNG vị trí nó xuất hiện trong câu. KHÔNG bọc nhầm sang từ khác. Mỗi item chỉ cần bọc 1 lần (ở lần xuất hiện đầu tiên). Nếu một cụm tiếng Anh không thực sự xuất hiện trong đoạn thì không bọc.
-   ‼️ CỰC KỲ QUAN TRỌNG: BẮT BUỘC phải bọc thẻ cho TẤT CẢ MỌI item trong "vocabList" — TUYỆT ĐỐI KHÔNG được bỏ sót bất kỳ item nào. Số cặp thẻ [[H:...]]...[[/H]] trong "translatedText" PHẢI BẰNG ĐÚNG số phần tử trong "vocabList". Sau khi dịch xong, hãy TỰ RÀ SOÁT lại: mỗi item ở vocabList đều phải có đúng 1 cặp thẻ tương ứng trong bản dịch. Nếu thiếu, hãy thêm vào cho đủ trước khi trả kết quả.
-2. Phân tích chi tiết danh sách từ/cụm từ/cấu trúc được yêu cầu: [${highlightListStr}] (Nếu danh sách trống, hãy tự động QUÉT CHI TIẾT VÀ ĐẦY ĐỦ toàn bộ đoạn văn để trích xuất TỐI THIỂU 15-20 mục hay nhất và đa dạng nhất, bao gồm ĐỦ các nhóm: Trạng từ+Động từ, Trạng từ+Tính từ, Trạng từ+Danh từ, Cụm từ kết hợp/Collocations, Cụm động từ/Phrasal Verbs, Thành ngữ/Idioms, TẤT CẢ các Cấu trúc ngữ pháp xuất hiện trong bài dù dễ hay khó, và các Danh từ/Động từ/Tính từ/Trạng từ học thuật hoặc khó khác. Không bỏ sót mục nào đáng học).
-3. Cho mỗi item, phân tích chi tiết:
-   - "original": Từ, Cụm từ hoặc Cấu trúc tiếng Anh
-   - "category": Phân loại chính xác trong các nhãn sau: ["Trạng từ + Động từ (Adv+Verb)", "Trạng từ + Tính từ (Adv+Adj)", "Trạng từ + Danh từ (Adv+Noun)", "Cụm từ kết hợp (Collocation)", "Cấu trúc ngữ pháp (Structure)", "Cụm động từ (Phrasal Verb)", "Thành ngữ (Idiom)", "Danh từ (Noun)", "Động từ (Verb)", "Tính từ (Adj)", "Trạng từ (Adv)", "Giới từ/Liên từ (Prep/Conj)"]
-   - "ipa": Phiên âm chuẩn IPA (nếu là từ/cụm từ)
-   - "contextMeaning": Nghĩa tiếng Việt chuẩn xác nhất theo đúng ngữ cảnh bài viết này
-   - "translatedTermInVN": Phải là CHÍNH XÁC cụm từ tiếng Việt bạn đã BỌC giữa 2 thẻ [[H:...]]...[[/H]] cho item này trong "translatedText" (không kèm thẻ).
-   - "exampleEn": Một câu ví dụ minh họa tiếng Anh (KHÁC câu trong bài) ngắn gọn, tự nhiên
-   - "exampleVi": Bản dịch tiếng Việt của câu ví dụ trên
-   - "explanation": Giải thích NGẮN GỌN bằng TIẾNG VIỆT (1-2 câu, tối đa 60-80 từ) về nghĩa, cách dùng, sắc thái hoặc lưu ý khi dùng từ/cụm từ này. Nếu là collocation/idiom/structure thì giải thích ý nghĩa + cách dùng. Nếu là từ đơn thì giải thích nghĩa chính + cách dùng phổ biến.
-   - "structures": Mảng 2-3 CẤU TRÚC hay và phổ biến có dùng từ/cụm từ này. Mỗi phần tử là 1 OBJECT gồm 3 trường:
-     * "pattern": Tên cấu trúc / công thức (TIẾNG ANH, ngắn gọn, in đậm key word). Ví dụ: "meticulously scrutinize + something" hoặc "trigger a profound paradigm shift in + field"
-     * "exampleEn": Một câu tiếng Anh hoàn chỉnh, tự nhiên, ngắn gọn (10-15 từ) MINH HỌA đúng cấu trúc đó và có chứa từ/cụm từ đang học
-     * "exampleVi": Bản dịch tiếng Việt mượt mà của câu exampleEn
-     Nếu là từ đơn/collocation thì cho các cấu trúc/câu chứa nó. Nếu là grammar structure thì cho 2-3 biến thể/ví dụ chính cấu trúc đó.
+        const prompt = `Bạn là dịch giả & nhà ngôn ngữ học Anh-Việt cao cấp, chuyên biên dịch văn bản học thuật & đời thường với phong cách TỰ NHIÊN, MƯỢT MÀ như người Việt bản xứ.
 
-Trả về ĐÚNG định dạng JSON sau (không kèm markdown block ngoài):
+═══════════════════════════════════════
+PHẦN 1 — DỊCH ĐOẠN VĂN
+═══════════════════════════════════════
+
+Nguyên tắc dịch MƯỢT MÀ & TRUNG THÀNH với ngữ cảnh:
+
+1. ĐỌC KỸ TOÀN BỘ đoạn văn trước khi dịch từng câu — nắm chủ đề, giọng văn, bối cảnh.
+2. DỊCH THEO NGHĨA, KHÔNG DỊCH TỪNG TỪ:
+   * "I'm feeling under the weather today" → "Hôm nay tôi thấy không được khỏe" (KHÔNG "Tôi đang cảm thấy dưới thời tiết")
+   * "It took us by storm" → "Nó tạo nên cơn sốt"
+   * "The answer is a resounding no" → "Câu trả lời là một 'không' hoàn toàn dứt khoát"
+3. GIỮ ĐÚNG sắc thái trang trọng/thân mật, thì, thể động từ, số ít/nhiều.
+4. XỬ LÝ CỤM TỪ KHÔNG NÊN DỊCH LITERAL:
+   * "look forward to" → "mong đợi / háo hức chờ đợi"
+   * "in spite of" → "bất chấp / mặc dù"
+   * "take advantage of" → "tận dụng / lợi dụng"
+   * "make a difference" → "tạo nên sự khác biệt"
+   * "for the time being" → "tạm thời"
+   * "on the other hand" → "mặt khác"
+   * "as well as" → "cũng như / không chỉ... mà còn"
+   * "due to" → "vì / do"
+   * "in addition to" → "ngoài ra"
+   * "a wide range of" → "nhiều loại / đa dạng"
+   * "as a result" → "hệ quả là / kết quả là"
+   * "in fact" → "thực tế / thực ra"
+   * "in order to" → "để / nhằm"
+   * "such as" → "như / chẳng hạn như"
+   * "with regard to" → "về"
+   * "as long as" → "miễn là"
+   * "even though" → "mặc dù"
+   * "rather than" → "thay vì"
+   * "There is/are" → "Có..." (không dịch literal "Ở đây có")
+   * "It is important to note that" → "Điều đáng chú ý là"
+5. Câu dài phức tạp tiếng Anh → chia thành 2-3 câu tiếng Việt nếu cần để rõ nghĩa.
+
+⚡ QUY TẮC ĐÁNH DẤU:
+Trong "translatedText", với MỖI item từ vựng ở dưới, hãy BỌC cụm từ tiếng Việt tương ứng bằng: [[H:ENGLISH_ORIGINAL]]cụm tiếng Việt[[/H]]
+ENGLISH_ORIGINAL là ĐÚNG chuỗi gốc ở trường "original".
+VD: "humans are walking slowly" → "Những [[H:humans]]con người[[/H]] đang [[H:walking slowly]]đi bộ chậm rãi[[/H]]."
+BẮT BUỘC: cụm Việt nằm giữa 2 thẻ phải là NGHĨA ĐÚNG tại ĐÚNG vị trí. Mỗi item chỉ bọc 1 lần (lần xuất hiện đầu tiên).
+‼️ CỰC KỲ QUAN TRỌNG: PHẢI bọc thẻ cho TẤT CẢ item trong "vocabList" — KHÔNG bỏ sót. Số cặp thẻ = số phần tử vocabList. TỰ RÀ SOÁT lại trước khi trả.
+
+═══════════════════════════════════════
+PHẦN 2 — PHÂN TÍCH TỪ VỰNG
+═══════════════════════════════════════
+
+Danh sách từ/cụm từ/cấu trúc được yêu cầu: [${highlightListStr}]
+
+(Nếu danh sách trống, hãy tự động QUÉT CHI TIẾT VÀ ĐẦY ĐỦ toàn bộ đoạn văn để trích xuất TỐI THIỂU 18-22 mục hay nhất và đa dạng nhất, bao gồm ĐỦ các nhóm: Trạng từ+Động từ, Trạng từ+Tính từ, Trạng từ+Danh từ, Cụm từ kết hợp/Collocations, Cụm động từ/Phrasal Verbs, Thành ngữ/Idioms, TẤT CẢ các Cấu trúc ngữ pháp xuất hiện trong bài dù dễ hay khó, và các Danh từ/Động từ/Tính từ/Trạng từ học thuật hoặc khó khác).
+
+Cho mỗi item, phân tích chi tiết:
+   - "original": Từ, Cụm từ hoặc Cấu trúc tiếng Anh (giữ đúng dạng trong bài)
+   - "category": Phân loại chính xác trong các nhãn: ["Trạng từ + Động từ (Adv+Verb)", "Trạng từ + Tính từ (Adv+Adj)", "Trạng từ + Danh từ (Adv+Noun)", "Cụm từ kết hợp (Collocation)", "Cấu trúc ngữ pháp (Structure)", "Cụm động từ (Phrasal Verb)", "Thành ngữ (Idiom)", "Danh từ (Noun)", "Động từ (Verb)", "Tính từ (Adj)", "Trạng từ (Adv)", "Giới từ/Liên từ (Prep/Conj)"]
+   - "ipa": Phiên âm chuẩn IPA
+   - "contextMeaning": Nghĩa tiếng Việt CHUẨN XÁC THEO ĐÚNG NGỮ CẢNH bài viết này
+   - "translatedTermInVN": CHÍNH XÁC cụm từ tiếng Việt đã bọc giữa 2 thẻ [[H:...]]...[[/H]]
+   - "exampleEn": Câu ví dụ tiếng Anh (KHÁC câu trong bài) ngắn gọn, tự nhiên
+   - "exampleVi": Bản dịch tiếng Việt mượt mà của câu ví dụ
+   - "explanation": Giải thích NGẮN GỌN bằng tiếng Việt (1-2 câu, 60-80 từ)
+   - "structures": Mảng 2-3 cấu trúc hay. Mỗi phần tử: "pattern", "exampleEn", "exampleVi"
+
+═══════════════════════════════════════
+PHẦN 3 — JSON
+═══════════════════════════════════════
+
+Trả về ĐÚNG JSON (không kèm markdown):
 {
   "translatedText": "Internet đã gây ra một sự [[H:profound paradigm shift]]chuyển đổi tư duy sâu sắc[[/H]]...",
   "vocabList": [
@@ -951,21 +1165,9 @@ Trả về ĐÚNG định dạng JSON sau (không kèm markdown block ngoài):
       "exampleVi": "Internet đã gây ra một sự chuyển đổi tư duy sâu sắc trong giao tiếp.",
       "explanation": "Chỉ sự thay đổi sâu sắc và mang tính nền tảng trong cách mọi người nghĩ hay tiếp cận một lĩnh vực. 'Profound' nhấn mạnh chiều sâu; 'paradigm shift' xuất phát từ thuyết cách mạng khoa học của Thomas Kuhn.",
       "structures": [
-        {
-          "pattern": "trigger/cause a profound paradigm shift",
-          "exampleEn": "The internet triggered a profound paradigm shift in communication.",
-          "exampleVi": "Internet đã gây ra một sự chuyển đổi tư duy sâu sắc trong giao tiếp."
-        },
-        {
-          "pattern": "a profound paradigm shift in + field",
-          "exampleEn": "AI brought a profound paradigm shift in modern healthcare.",
-          "exampleVi": "AI đã mang đến một sự chuyển đổi tư duy sâu sắc trong y tế hiện đại."
-        },
-        {
-          "pattern": "mark/represent a profound paradigm shift",
-          "exampleEn": "This discovery marks a profound paradigm shift in biology.",
-          "exampleVi": "Khám phá này đánh dấu một sự chuyển đổi tư duy sâu sắc trong sinh học."
-        }
+        { "pattern": "trigger/cause a profound paradigm shift", "exampleEn": "The internet triggered a profound paradigm shift in communication.", "exampleVi": "Internet đã gây ra một sự chuyển đổi tư duy sâu sắc trong giao tiếp." },
+        { "pattern": "a profound paradigm shift in + field", "exampleEn": "AI brought a profound paradigm shift in modern healthcare.", "exampleVi": "AI đã mang đến một sự chuyển đổi tư duy sâu sắc trong y tế hiện đại." },
+        { "pattern": "mark/represent a profound paradigm shift", "exampleEn": "This discovery marks a profound paradigm shift in biology.", "exampleVi": "Khám phá này đánh dấu một sự chuyển đổi tư duy sâu sắc trong sinh học." }
       ]
     }
   ]
@@ -983,7 +1185,7 @@ ${textChunk}
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                    temperature: 0.2,
+                    temperature: 0.3,
                     responseMimeType: "application/json"
                 }
             })
@@ -1012,6 +1214,157 @@ ${textChunk}
                 color: this._resolveVocabColor(v.original, highlights)
             }))
         };
+    }
+
+    /**
+    /**
+     * Call Groq API (OpenAI-compatible endpoint, Llama 3.3 70B & 3.1 models — Ultra Fast)
+     */
+    async _translateWithGroq(textChunk, highlights = []) {
+        const highlightListStr = highlights.map(h => `"${h.text}"`).join(', ');
+
+        const prompt = `Bạn là dịch giả & nhà ngôn ngữ học Anh-Việt cao cấp, chuyên biên dịch văn bản học thuật & đời thường với phong cách TỰ NHIÊN, MƯỢT MÀ, THOÁT Ý như người Việt bản xứ.
+
+═══════════════════════════════════════
+PHẦN 1 — DỊCH ĐOẠN VĂN
+═══════════════════════════════════════
+
+Nguyên tắc dịch MƯỢT MÀ & TRUNG THÀNH với ngữ cảnh:
+
+1. ĐỌC KỸ TOÀN BỘ đoạn văn trước khi dịch từng câu — nắm chủ đề, giọng văn, bối cảnh.
+2. DỊCH THEO NGHĨA, KHÔNG DỊCH TỪNG TỪ:
+   * "I'm feeling under the weather today" → "Hôm nay tôi thấy không được khỏe" (KHÔNG "Tôi đang cảm thấy dưới thời tiết")
+   * "It took us by storm" → "Nó tạo nên cơn sốt"
+   * "The answer is a resounding no" → "Câu trả lời là một 'không' hoàn toàn dứt khoát"
+3. GIỮ ĐÚNG sắc thái trang trọng/thân mật, thì, thể động từ, số ít/nhiều.
+4. XỬ LÝ CỤM TỪ KHÔNG NÊN DỊCH LITERAL:
+   * "look forward to" → "mong đợi / háo hức chờ đợi"
+   * "in spite of" → "bất chấp / mặc dù"
+   * "take advantage of" → "tận dụng / lợi dụng"
+   * "make a difference" → "tạo nên sự khác biệt"
+   * "for the time being" → "tạm thời"
+   * "on the other hand" → "mặt khác"
+   * "as well as" → "cũng như / không chỉ... mà còn"
+   * "due to" → "vì / do"
+   * "in addition to" → "ngoài ra"
+   * "a wide range of" → "nhiều loại / đa dạng"
+   * "as a result" → "hệ quả là / kết quả là"
+   * "in fact" → "thực tế / thực ra"
+   * "in order to" → "để / nhằm"
+   * "such as" → "như / chẳng hạn như"
+   * "with regard to" → "về"
+   * "as long as" → "miễn là"
+   * "even though" → "mặc dù"
+   * "rather than" → "thay vì"
+   * "There is/are" → "Có..." (không dịch literal "Ở đây có")
+   * "It is important to note that" → "Điều đáng chú ý là"
+5. Câu dài phức tạp tiếng Anh → chia thành 2-3 câu tiếng Việt nếu cần để rõ nghĩa.
+
+⚡ QUY TẮC ĐÁNH DẤU:
+Trong "translatedText", với MỖI item từ vựng ở dưới, hãy BỌC cụm từ tiếng Việt tương ứng bằng: [[H:ENGLISH_ORIGINAL]]cụm tiếng Việt[[/H]]
+ENGLISH_ORIGINAL là ĐÚNG chuỗi gốc ở trường "original".
+VD: "humans are walking slowly" → "Những [[H:humans]]con người[[/H]] đang [[H:walking slowly]]đi bộ chậm rãi[[/H]]."
+BẮT BUỘC: cụm Việt nằm giữa 2 thẻ phải là NGHĨA ĐÚNG tại ĐÚNG vị trí. Mỗi item chỉ bọc 1 lần (lần xuất hiện đầu tiên).
+‼️ CỰC KỲ QUAN TRỌNG: PHẢI bọc thẻ cho TẤT CẢ item trong "vocabList" — KHÔNG bỏ sót. Số cặp thẻ = số phần tử vocabList. TỰ RÀ SOÁT lại trước khi trả.
+
+═══════════════════════════════════════
+PHẦN 2 — PHÂN TÍCH TỪ VỰNG
+═══════════════════════════════════════
+
+Danh sách từ/cụm từ/cấu trúc được yêu cầu: [${highlightListStr}]
+
+(Nếu danh sách trống, hãy tự động QUÉT CHI TIẾT VÀ ĐẦY ĐỦ toàn bộ đoạn văn để trích xuất TỐI THIỂU 25-35 mục hay nhất và đa dạng nhất, bao gồm ĐỦ các nhóm: Trạng từ+Động từ, Trạng từ+Tính từ, Trạng từ+Danh từ, Cụm từ kết hợp/Collocations, Cụm động từ/Phrasal Verbs, Thành ngữ/Idioms, TẤT CẢ các Cấu trúc ngữ pháp xuất hiện trong bài dù dễ hay khó, và các Danh từ/Động từ/Tính từ/Trạng từ học thuật hoặc khó khác).
+
+Cho mỗi item, phân tích chi tiết:
+   - "original": Từ, Cụm từ hoặc Cấu trúc tiếng Anh (giữ đúng dạng trong bài)
+   - "category": Phân loại chính xác trong các nhãn: ["Trạng từ + Động từ (Adv+Verb)", "Trạng từ + Tính từ (Adv+Adj)", "Trạng từ + Danh từ (Adv+Noun)", "Cụm từ kết hợp (Collocation)", "Cấu trúc ngữ pháp (Structure)", "Cụm động từ (Phrasal Verb)", "Thành ngữ (Idiom)", "Danh từ (Noun)", "Động từ (Verb)", "Tính từ (Adj)", "Trạng từ (Adv)", "Giới từ/Liên từ (Prep/Conj)"]
+   - "ipa": Phiên âm chuẩn IPA
+   - "contextMeaning": Nghĩa tiếng Việt CHUẨN XÁC THEO ĐÚNG NGỮ CẢNH bài viết này
+   - "translatedTermInVN": CHÍNH XÁC cụm từ tiếng Việt đã bọc giữa 2 thẻ [[H:...]]...[[/H]]
+   - "exampleEn": Câu ví dụ tiếng Anh (KHÁC câu trong bài) ngắn gọn, tự nhiên
+   - "exampleVi": Bản dịch tiếng Việt mượt mà của câu ví dụ
+   - "explanation": Giải thích NGẮN GỌN bằng tiếng Việt (1-2 câu, 60-80 từ)
+   - "structures": Mảng 2-3 cấu trúc hay. Mỗi phần tử: "pattern", "exampleEn", "exampleVi"
+
+═══════════════════════════════════════
+PHẦN 3 — JSON
+═══════════════════════════════════════
+
+Trả về ĐÚNG JSON (không kèm markdown):
+{
+  "translatedText": "Người kiểm toán đã [[H:meticulously scrutinize]]xem xét tỉ mỉ[[/H]] mọi giao dịch...",
+  "vocabList": [
+    {
+      "original": "meticulously scrutinize",
+      "category": "Trạng từ + Động từ (Adv+Verb)",
+      "ipa": "/məˈtɪk.jə.ləs.li ˈskruː.tɪ.naɪz/",
+      "contextMeaning": "xem xét và soi kỹ một cách tỉ mỉ",
+      "translatedTermInVN": "xem xét tỉ mỉ",
+      "exampleEn": "The auditor meticulously scrutinized every transaction.",
+      "exampleVi": "Người kiểm toán đã xem xét tỉ mỉ từng giao dịch.",
+      "explanation": "Dùng khi ai đó xem xét một cái gì cẩn thận và chi tiết đến từng chút, thường để tìm lỗi hay sai sót.",
+      "structures": [
+        { "pattern": "meticulously scrutinize + something", "exampleEn": "The auditor meticulously scrutinized every transaction.", "exampleVi": "Người kiểm toán đã xem xét tỉ mỉ từng giao dịch." },
+        { "pattern": "meticulously scrutinize the details/evidence", "exampleEn": "She meticulously scrutinized the evidence before writing her report.", "exampleVi": "Cô ấy đã xem xét tỉ mỉ các bằng chứng trước khi viết báo cáo." }
+      ]
+    }
+  ]
+}
+
+Đoạn văn tiếng Anh:
+"""
+${textChunk}
+"""
+`;
+
+        const modelsToTry = [this.groqModel, 'llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
+        const uniqueModels = Array.from(new Set(modelsToTry.filter(Boolean)));
+        let lastError = null;
+
+        for (const groqModelCandidate of uniqueModels) {
+            try {
+                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${this.groqApiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: groqModelCandidate,
+                        messages: [{ role: 'user', content: prompt }],
+                        response_format: { type: "json_object" },
+                        temperature: 0.3,
+                        max_tokens: 8192
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const rawText = data.choices?.[0]?.message?.content || '';
+                    let jsonResult;
+                    try {
+                        jsonResult = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+                    } catch (e) {
+                        console.error("Failed to parse Groq JSON:", rawText);
+                        throw new Error("Không thể phân tích dữ liệu phản hồi từ Groq.");
+                    }
+
+                    return {
+                        translatedText: jsonResult.translatedText || "",
+                        vocabList: (jsonResult.vocabList || []).map(v => ({
+                            ...v,
+                            color: this._resolveVocabColor(v.original, highlights)
+                        }))
+                    };
+                }
+                const errData = await response.json().catch(() => ({}));
+                lastError = new Error(errData.error?.message || `Groq API (${groqModelCandidate}) status: ${response.status}`);
+            } catch (err) {
+                lastError = err;
+            }
+        }
+
+        throw lastError || new Error("Không thể gọi Groq API với các mô hình khả dụng.");
     }
 
     /**
@@ -1621,18 +1974,63 @@ Trả về ĐÚNG JSON dạng: {"word1":"/ipa1/","word2":"/ipa2/"} (key là từ
         const hasGroq = this.groqApiKey && (this.provider === 'groq' || (!hasOpenAI && !hasGemini));
         if (!hasOpenAI && !hasGemini && !hasGroq) return null;
 
-        // PER USER REQUEST (Aug 1 2026): tra từ theo kiểu từ điển THẬT — không phụ thuộc
-        // câu đang đọc. Trả nghĩa PHỔ BIẾN, ví dụ là câu tiếng Anh TỰ NHIÊN (như từ
-        // điển Oxford/Cambridge, hoặc từ sách/báo thực tế) — KHÔNG phải "Example with X"
-        // hay câu AI tự bịa vô nghĩa.
+        // Per user request: tra từ theo kiểu từ điển THẬT (Oxford/Cambridge). Trả nghĩa phổ biến,
+        // ví dụ là câu tiếng Anh TỰ NHIÊN — không phải câu máy móc "The word X..." hay "She used X to...".
         const prompt = `Bạn là từ điển Anh-Việt Oxford/Cambridge. Tra cứu từ/cụm từ cho người học tiếng Anh.
 
 Từ/cụm từ cần tra: "WORD_PLACEHOLDER"
 
-YÊU CẦU BẮT BUỘC:
-1. "ipa": IPA CHUẨN của từ (đơn) hoặc CỦA CẢ CỤM (cụm từ có ' /' giữa các từ, vd: /ˌtɛkˈnɒlədʒɪkəl ɪnəˈveɪʃən/). Cho cụm: trả IPA đầy đủ cả cụm (có 'ˌ' và 'ˈ' rõ ràng).
+═══════════════════════════════════════
+HƯỚNG DẪN TRA TỪ CHI TIẾT — ÁP DỤNG LINH HOẠT
+═══════════════════════════════════════
+
+Bạn PHẢI phân tích từ/cụm từ đầu vào rồi quyết định cách trình bày tối ưu:
+
+🅰️ TỪ ĐƠN (1 từ như "eat", "however", "innovation"):
+   - "meaning": NGẮN GỌN tiếng Việt (≤8 từ) theo NGHĨA PHỔ BIẾN NHẤT của từ.
+   - "breakdown": 1 phần tử (cho chính từ đó).
+   - "structures": 2-3 cụm từ collocation phổ biến (vd "innovation in + field", "drive innovation", "technological innovation").
+
+🅱️ CỤM TỪ 2 TỪ (như "take off", "break down", "in spite of"):
+   - Đây có thể là:
+     * PHRASAL VERB ("take off", "break down") → CỰC KỲ quan trọng nhận diện đúng.
+     * COLLOCATION đơn giản ("deeply concerned", "strong influence").
+     * IDIOM ("spill the beans", "kick the bucket").
+   - "meaning": NGHĨA CẢ CỤM (≤12 từ).
+   - "breakdown": PHÂN TÍCH TỪNG TỪ (2 phần tử) — nhưng lưu ý: nếu là phrasal verb/idiom, breakdown chỉ giải thích nghĩa từng từ chứa trong cụm ĐỂ GIÚP NHỚ, không cộng nghĩa lại.
+   - "structures": 2-3 câu/cấu trúc phổ biến có chứa cụm này.
+
+🅲️ CỤM TỪ 3+ TỪ hoặc IDIOM DÀI (như "take advantage of", "on the other hand", "spill the beans"):
+   - "meaning": NGHĨA CẢ CỤM dạng "sự/việc/... + ..." (≤12 từ).
+   - "breakdown": TỪNG TỪ trong cụm (nếu là cụm rời rạc) HOẶC gộp cả cụm thành 1 dòng phân tích (nếu là idiom cố định).
+   - "structures": 2-3 câu/cấu trúc PHỔ BIẾN.
+
+🅳️ CỤM TỪ CÓ "THE/OVER/OF" — KHÔNG DỊCH LITERAL:
+   - "in spite of" ≠ "trong sự bướng bỉnh của" → "bất chấp / mặc dù"
+   - "on the other hand" ≠ "trên bàn tay khác" → "mặt khác"
+   - "with regard to" ≠ "với sự liên quan đến" → "về / liên quan đến"
+   - "in addition to" → "ngoài ra / bên cạnh"
+   - "as a result of" → "do / vì / là hệ quả của"
+   - "in front of" → "trước / đằng trước"
+   - "because of" → "vì / bởi vì"
+   - Luôn dịch NGHĨA CHỨC NĂNG, KHÔNG dịch từng từ.
+
+🅴️ CỤM TỪ CÓ TỪ HÁN-VIỆT PHỔ BIẾN — CẨN THẬN:
+   - "make a decision" → "đưa ra quyết định" (KHÔNG "làm một quyết định")
+   - "take a look" → "xem qua / nhìn qua"
+   - "have a conversation" → "trò chuyện / nói chuyện"
+   - "make a difference" → "tạo nên sự khác biệt"
+   - "take into account" → "tính đến / xem xét"
+   - "pay attention to" → "chú ý đến"
+   - "take into consideration" → "cân nhắc"
+
+═══════════════════════════════════════
+YÊU CẦU BẮT BUỘC VỀ ĐỊNH DẠNG
+═══════════════════════════════════════
+
+1. "ipa": IPA CHUẨN của từ/cả cụm (cụm có ' /' giữa các từ, vd: /ˌtɛkˈnɒlədʒɪkəl ɪnəˈveɪʃən/). Cho cụm 2+ từ: trả IPA đầy đủ cả cụm (có 'ˌ' và 'ˈ' rõ ràng).
 2. "pos": TỪ ĐƠN: "n." / "v." / "adj." / "adv." / "prep." / "conj." / "pron." / "interj." / "det." / "aux." CỤM TỪ (2+ từ): "phr." hoặc cụ thể ("n. phr." / "v. phr." / "adj. phr." / "idiom").
-3. "meaning": TỪ ĐƠN: NGẮN GỌN tiếng Việt (≤8 từ) theo NGHĨA PHỔ BIẾN NHẤT. CỤM TỪ (2+ từ): dịch NGHĨA CẢ CỤM (full phrase), dạng "sự/việc/... + ..." (≤12 từ). KHÔNG dựa vào câu nào — chỉ nghĩa chuẩn từ điển.
+3. "meaning": như trên (≤8 từ cho đơn, ≤12 từ cho cụm).
 4. "breakdown": MẢNG phân tích từng từ (BẮT BUỘC đầy đủ với cụm 2+ từ; từ đơn vẫn trả 1 phần tử). Mỗi phần tử:
    - "word": từ tiếng Anh (chữ thường, đúng dạng gốc)
    - "ipa": IPA chính xác RIÊNG từ đó (vd "profound" → "/prəˈfaʊnd/")
@@ -1663,7 +2061,8 @@ YÊU CẦU BẮT BUỘC:
    - "however" → "She was tired; however, she kept on working."
    - "institutions" → "The charity works with local institutions to provide food and shelter."
    - "profound transformation" → "Technology has brought about a profound transformation in modern society."
-6. "exampleVi": bản dịch tiếng Việt TỰ NHIÊN của đúng câu example ở trên.
+   - "take advantage of" → "She took advantage of the sale to buy new clothes."
+6. "exampleVi": bản dịch tiếng Việt TỰ NHIÊN, MƯỢT MÀ của đúng câu example ở trên (KHÔNG dịch máy móc từng từ).
    MẪU: "I eat breakfast every morning." → "Tôi ăn sáng mỗi buổi sáng."
 7. "structures": 2-3 cấu trúc / cụm từ / thành ngữ PHỔ BIẾN có chứa hoặc liên quan đến từ. Mỗi cấu trúc: "name", "note" (1 dòng), "example" (câu TỰ NHIÊN), "exampleVi".
 
@@ -1674,7 +2073,7 @@ Trả về ĐÚNG JSON (không kèm markdown):
   "meaning": "nghĩa tiếng Việt ngắn gọn (≤8 từ cho đơn, ≤12 từ cho cụm)",
   "breakdown": [{"word": "từ 1", "ipa": "...", "pos": "...", "meaning": "..."}],
   "example": "câu tiếng Anh TỰ NHIÊN chứa từ",
-  "exampleVi": "bản dịch tiếng Việt của câu example",
+  "exampleVi": "bản dịch tiếng Việt MƯỢT MÀ của câu example",
   "structures": [{"name": "tên cấu trúc", "note": "giải thích 1 dòng", "example": "câu tiếng Anh TỰ NHIÊN", "exampleVi": "bản dịch tiếng Việt"}]
 }` .replace(/WORD_PLACEHOLDER/g, word);
 
@@ -1965,19 +2364,17 @@ Trả về ĐÚNG JSON (không kèm markdown):
         if (!chunkText || !chunkText.trim()) return [];
 
         const wordCount = chunkText.trim().split(/\s+/).length;
-        // Deep-scan mode: cast a much wider net so nothing worth learning slips through.
-        // The user (Aug 1 2026) explicitly asked for MORE collocations, phrasal verbs,
-        // adv+adj / adv+v combos, V+N / Adj+N / N+N collocations, idioms, AND standout
-        // single-word academic vocabulary — even for short chunks we want at LEAST 25
-        // items and for medium chunks 50+, capped by the chunk's natural content.
-        const minTerms = Math.max(25, Math.min(60, Math.round(wordCount / 5)));
-        const maxTerms = Math.max(45, Math.min(110, Math.round(wordCount / 3)));
+        // Deep-scan mode: cast a comprehensive net so no valuable vocabulary slips through.
+        // Extracts ALL collocations, phrasal verbs, adv+adj / adv+v combos, V+N / Adj+N / N+N, idioms,
+        // grammar structures, AND standout single-word academic C1/C2 vocabulary regardless of text length.
+        const minTerms = Math.max(35, Math.min(90, Math.round(wordCount / 3.5)));
+        const maxTerms = Math.max(70, Math.min(160, Math.round(wordCount / 2)));
 
         const prompt = `
-Bạn là nhà ngôn ngữ học và giáo viên tiếng Anh chuyên sâu (C2/CEFR), biên soạn tài liệu học từ vựng cực kỳ kỹ lưỡng, KHÔNG BỎ SÓT bất kỳ từ/cụm từ hay nào.
-Nhiệm vụ: Quét THẬT KỸ, THẬT CHI TIẾT văn bản tiếng Anh dưới đây và trích xuất TỐI THIỂU ${minTerms} và TỐI ĐA ${maxTerms} từ/cụm từ/cấu trúc QUAN TRỌNG VÀ HAY để học. Hãy quét toàn diện, đừng bỏ lọt các từ vựng học thuật/nâng cao đơn lẻ dù chúng không nằm liền kề nhau trong câu. Mục tiêu là NGƯỜI HỌC có thể đọc văn bản bất kì và highlight được toàn bộ các cụm/từ đáng học — không bỏ sót một thứ nào.
+Bạn là nhà ngôn ngữ học và giáo viên tiếng Anh chuyên sâu (C2/CEFR), biên soạn tài liệu học từ vựng CỰC KỲ CHI TIẾT & TOÀN DIỆN, KHÔNG BỎ SÓT bất kỳ từ/cụm từ hay nào trong bài.
+Nhiệm vụ: Quét THẬT KỸ, THẬT CHI TIẾT văn bản tiếng Anh dưới đây và trích xuất TỐI THIỂU ${minTerms} và TỐI ĐA ${maxTerms} từ/cụm từ/cấu trúc QUAN TRỌNG VÀ HAY để học. Hãy quét toàn diện, không bỏ lọt các từ vựng học thuật/nâng cao đơn lẻ dù chúng không nằm liền kề nhau trong câu. Mục tiêu là NGƯỜI HỌC có thể đọc văn bản bất kì và được highlight toàn bộ các cụm/từ đáng học — ĐẦY ĐỦ VÀ CHI TIẾT NHẤT.
 
-NHÓM CẦN TRÍCH XUẤT (lấy ĐẦY ĐỦ CẢ 8 NHÓM, không chỉ tập trung 1-2 nhóm):
+NHÓM CẦN TRÍCH XUẤT (lấy ĐẦY ĐỦ CẢ 9 NHÓM, không bỏ sót nhóm nào):
 1. collocation_adj_noun  — Adj + N: tính từ + danh từ (profound impact, paradigm shift, unprecedented challenges, cutting-edge technology, rigorous methodology, sustainable development, empirical evidence, groundbreaking research)
 2. collocation_verb_noun — V + N: động từ + danh từ (carry out research, draw conclusions, shed light on, exert influence, raise awareness, achieve breakthrough, hold significance, play a role)
 3. collocation_noun_noun — N + N: danh từ ghép danh từ (carbon emissions, paradigm shift, climate change, energy consumption, knowledge gap, brain drain, feedback loop, life cycle)
@@ -1985,32 +2382,23 @@ NHÓM CẦN TRÍCH XUẤT (lấy ĐẦY ĐỦ CẢ 8 NHÓM, không chỉ tập t
 5. collocation_adv_verb  — Adv + V: trạng từ + động từ (gradually reduce, rapidly expand, substantially improve, fundamentally alter, thoroughly examine, consistently demonstrate, dramatically transform)
 6. phrasal_verb          — Cụm động từ V + particle/prep (carry out, break down, figure out, give rise to, bring about, come up with, result in, lead to, account for, take into account, set apart, rule out, draw upon)
 7. idiom                 — Thành ngữ & cụm giới từ cố định (a drop in the ocean, in light of, on the other hand, by virtue of, with respect to, in the long run, at the expense of, for the sake of)
-8. grammar               — Cấu trúc ngữ pháp ĐẶC BIỆT (inverted conditional, cleft sentence, no sooner...than, so...that, such...that, the more...the more, not only...but also, despite/in spite of + N/V-ing, as...as, whereas/while contrastive); KHÔNG lấy passive voice hay relative clause đơn giản
-9. vocabulary            — TỪ ĐƠN học thuật/khó/nâng cao (tính từ, động từ, danh từ, trạng từ): LẤY TẤT CẢ các từ học thuật/C1-C2/IELTS nổi bật xuất hiện trong bài, KỂ CẢ khi chúng đứng riêng lẻ, không ghép với từ khác (ví dụ: "pivotal", "sustainable", "resilient", "profound", "meticulous", "ubiquitous", "paradigm", "leverage" khi dùng làm động từ, "underpin", "underscore", "elucidate", "constitute"...). KHÔNG giới hạn số lượng ở nhóm này chỉ 3-5 từ — hãy lấy HẾT các từ đáng học, có thể 15-30+ từ nếu bài dài.
+8. grammar               — Cấu trúc ngữ pháp ĐẶC BIỆT (inverted conditional, cleft sentence, no sooner...than, so...that, such...that, the more...the more, not only...but also, despite/in spite of + N/V-ing, as...as, whereas/while contrastive)
+9. vocabulary            — TỪ ĐƠN học thuật/khó/nâng cao C1-C2 (tính từ, động từ, danh từ, trạng từ): LẤY TẤT CẢ các từ học thuật nổi bật xuất hiện trong bài, KỂ CẢ khi chúng đứng riêng lẻ (ví dụ: "pivotal", "sustainable", "resilient", "profound", "meticulous", "ubiquitous", "leverage", "underpin", "underscore", "elucidate", "constitute", "scrutinize", "catalyst"...). Trích xuất DỒN DẬP TẤT CẢ từ học thuật đáng nhớ.
 
 QUY TẮC BẮT BUỘC:
-- Tổng cộng ${minTerms}-${maxTerms} mục — PHẢI đạt tối thiểu ${minTerms}, đừng trả ít hơn
-- Cân bằng giữa cụm từ (nhóm 1-7) và từ vựng đơn lẻ nổi bật (nhóm 9) — KHÔNG bỏ qua từ đơn chỉ vì ưu tiên cụm từ. Ưu tiên cụm từ 60% / từ đơn 40% nếu bài có đủ cả hai.
-- Mỗi mục PHẢI xuất hiện NGUYÊN VĂN trong văn bản (trừ grammar structures — đó là cấu trúc mẫu, không cần có nguyên văn)
-- KHÔNG lặp lại, KHÔNG lấy từ quá phổ thông/cơ bản (the, is, very, good, big, make, do, have, get, take khi đứng 1 mình)
-- Với cụm từ: ưu tiên cụm 2-3 từ; chỉ lấy cụm 4+ từ khi nó thật sự là idiom/cấu trúc cố định nổi tiếng
-- Với từ đơn: chỉ lấy từ C1 trở lên hoặc từ chuyên ngành/thuật ngữ học thuật
+- Tổng cộng ${minTerms}-${maxTerms} mục — PHẢI đạt tối thiểu ${minTerms}, lấy đầy đủ nhất có thể.
+- Mỗi mục PHẢI xuất hiện NGUYÊN VĂN trong văn bản (trừ grammar structures).
+- KHÔNG lặp lại, KHÔNG lấy từ quá phổ thông/cơ bản (the, is, very, good, big, make, do, have, get, take khi đứng 1 mình).
+- Với cụm từ: ưu tiên cụm 2-3 từ; chỉ lấy cụm 4+ từ khi nó thật sự là idiom/cấu trúc cố định.
 
-Trả về JSON (không kèm markdown), mỗi mục có "text" và "category":
+Trả về JSON (không kèm markdown block), mỗi mục có "text" và "category":
 {
   "keyTerms": [
     {"text": "fundamentally altered", "category": "collocation_adv_verb"},
     {"text": "profound impact", "category": "collocation_adj_noun"},
     {"text": "carry out", "category": "phrasal_verb"},
-    {"text": "in light of", "category": "idiom"},
-    {"text": "not only... but also", "category": "grammar"},
     {"text": "ubiquitous", "category": "vocabulary"},
-    {"text": "pivotal", "category": "vocabulary"},
-    {"text": "sustainable", "category": "vocabulary"},
-    {"text": "paradigm shift", "category": "collocation_noun_noun"},
-    {"text": "deeply rooted", "category": "collocation_adv_adj"},
-    {"text": "draw conclusions", "category": "collocation_verb_noun"},
-    {"text": "shed light on", "category": "phrasal_verb"}
+    {"text": "pivotal", "category": "vocabulary"}
   ]
 }
 
@@ -2021,11 +2409,8 @@ ${chunkText}
 `;
 
         const { provider, apiKey, model } = this._getScanCredentials();
-
-        // Try AI APIs first, then auto-fallback to offline NLP engine
         const aiErrors = [];
 
-        // Helper to normalize AI response: handles both string[] and {text,category}[]
         const normalizeTerms = (raw) => {
             if (!Array.isArray(raw) || raw.length === 0) return null;
             return raw.map(item => {
@@ -2039,6 +2424,40 @@ ${chunkText}
             }).filter(Boolean);
         };
 
+        // Try Groq first if Groq API key is present or Groq is selected provider
+        if ((provider === 'groq' || this.groqApiKey) && (apiKey || this.groqApiKey)) {
+            const useKey = provider === 'groq' ? apiKey : this.groqApiKey;
+            const primaryModel = provider === 'groq' ? model : this.groqModel;
+            const modelsToTry = [primaryModel, 'llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
+            const uniqueModels = Array.from(new Set(modelsToTry.filter(Boolean)));
+
+            for (const groqModelCandidate of uniqueModels) {
+                try {
+                    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useKey}` },
+                        body: JSON.stringify({
+                            model: groqModelCandidate,
+                            messages: [{ role: 'user', content: prompt }],
+                            response_format: { type: "json_object" },
+                            temperature: 0.2,
+                            max_tokens: 4096
+                        })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        const rawText = data.choices?.[0]?.message?.content || '{}';
+                        const json = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+                        const terms = normalizeTerms(json.keyTerms);
+                        if (terms && terms.length > 0) return terms;
+                    }
+                    aiErrors.push(`Groq (${groqModelCandidate}): status ${res.status}`);
+                } catch (e) {
+                    aiErrors.push(`Groq (${groqModelCandidate}): ${e.message}`);
+                }
+            }
+        }
+
         // Try OpenAI
         if ((provider === 'openai' || this.openaiApiKey) && (apiKey || this.openaiApiKey)) {
             const useKey = provider === 'openai' ? apiKey : this.openaiApiKey;
@@ -2051,7 +2470,8 @@ ${chunkText}
                         model: useModel,
                         messages: [{ role: 'user', content: prompt }],
                         response_format: { type: "json_object" },
-                        temperature: 0.2
+                        temperature: 0.2,
+                        max_tokens: 4096
                     })
                 });
                 if (res.ok) {
@@ -2077,7 +2497,7 @@ ${chunkText}
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: { temperature: 0.2, responseMimeType: "application/json" }
+                        generationConfig: { temperature: 0.2, responseMimeType: "application/json", maxOutputTokens: 4096 }
                     })
                 });
                 if (res.ok) {
@@ -2093,38 +2513,11 @@ ${chunkText}
             }
         }
 
-        // Try Groq
-        if ((provider === 'groq' || this.groqApiKey) && (apiKey || this.groqApiKey)) {
-            const useKey = provider === 'groq' ? apiKey : this.groqApiKey;
-            const useModel = provider === 'groq' ? model : this.groqModel;
-            try {
-                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useKey}` },
-                    body: JSON.stringify({
-                        model: useModel,
-                        messages: [{ role: 'user', content: prompt }],
-                        temperature: 0.2
-                    })
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    const rawText = data.choices?.[0]?.message?.content || '{}';
-                    const json = JSON.parse(rawText.replace(/```json|```/g, '').trim());
-                    const terms = normalizeTerms(json.keyTerms);
-                    if (terms && terms.length > 0) return terms;
-                }
-                aiErrors.push('Groq: status ' + res.status);
-            } catch (e) {
-                aiErrors.push('Groq: ' + e.message);
-            }
-        }
-
         // ALL API SOURCES FAILED → Auto-fallback to offline NLP engine
         console.warn('All AI APIs failed for this chunk, using offline NLP engine. Errors:', aiErrors);
         const offlineTerms = this._extractKeywordsFromChunk(chunkText);
         if (offlineTerms.length > 0) {
-            return offlineTerms; // Returns [{text, category}] objects with semantic category keys
+            return offlineTerms;
         }
 
         throw new Error(aiErrors[0] || "Tất cả API đều lỗi và không thể quét offline.");

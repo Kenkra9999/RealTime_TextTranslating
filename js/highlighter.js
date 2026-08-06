@@ -7,17 +7,17 @@ class TextHighlighter {
     constructor(options = {}) {
         this.container = options.container || null;
         this.onHighlightsChange = options.onHighlightsChange || null;
-        this.currentColor = options.defaultColor || 'rgba(250, 204, 21, 0.35)'; // Soft translucent yellow
+        this.currentColor = options.defaultColor || 'rgba(253, 224, 71, 0.65)'; // Vivid translucent yellow
         this.mode = 'select'; // 'select' (Mouse selection + popup) vs 'brush' (Instant Pen Highlight)
         this.highlights = new Map(); // id -> { id, text, color, paragraphIdx }
         this.nextId = 1;
 
         this.colorPalette = [
-            { id: 'yellow', hex: 'rgba(250, 204, 21, 0.35)', textHex: '#854d0e', label: 'Vàng' },
-            { id: 'green', hex: 'rgba(74, 222, 128, 0.35)', textHex: '#166534', label: 'Xanh lá' },
-            { id: 'blue', hex: 'rgba(56, 189, 248, 0.35)', textHex: '#075985', label: 'Xanh dương' },
-            { id: 'purple', hex: 'rgba(192, 132, 252, 0.35)', textHex: '#6b21a8', label: 'Tím' },
-            { id: 'pink', hex: 'rgba(251, 113, 133, 0.35)', textHex: '#9f1239', label: 'Hồng' }
+            { id: 'yellow', hex: 'rgba(253, 224, 71, 0.65)', textHex: '#713f12', label: 'Vàng' },
+            { id: 'green', hex: 'rgba(74, 222, 128, 0.65)', textHex: '#14532d', label: 'Xanh lá' },
+            { id: 'blue', hex: 'rgba(56, 189, 248, 0.65)', textHex: '#0c4a6e', label: 'Xanh dương' },
+            { id: 'purple', hex: 'rgba(192, 132, 252, 0.65)', textHex: '#581c87', label: 'Tím' },
+            { id: 'pink', hex: 'rgba(251, 113, 133, 0.65)', textHex: '#881337', label: 'Hồng' }
         ];
 
         this._initTooltip();
@@ -432,7 +432,7 @@ class TextHighlighter {
                             textHex: color.textHex,
                             addedAt: Date.now()
                         });
-                        return `<mark class="highlight-mark" data-highlight-id="${markId}" data-color="${color.hex}" data-text="${this._escapeHTMLAttr(match)}" style="background-color: ${color.hex};">${match}</mark>`;
+                        return `<mark class="highlight-mark" data-highlight-id="${markId}" data-color="${color.hex}" data-text="${this._escapeHTMLAttr(match)}" style="background-color: ${this._getTranslucentColor(color.hex)};">${match}</mark>`;
                     });
                 });
 
@@ -577,7 +577,7 @@ class TextHighlighter {
                             addedAt: Date.now()
                         });
                         const transColor = this._getTranslucentColor(colorHex);
-                        return `<mark class="highlight-mark" data-highlight-id="${markId}" data-color="${colorHex}" data-text="${this._escapeHTMLAttr(match)}" style="background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important;">${match}</mark>`;
+                        return `<mark class="highlight-mark" data-highlight-id="${markId}" data-color="${colorHex}" data-text="${this._escapeHTMLAttr(match)}" style="background-color: ${transColor};">${match}</mark>`;
                     });
                 });
 
@@ -600,28 +600,33 @@ class TextHighlighter {
     }
 
     _getTranslucentColor(hex) {
-        // Bumped from 0.45 → 0.62 so the rendered highlight keeps its semantic colour
-        // (yellow / green / blue / purple / pink) instead of washing out into "almost-white"
-        // on the light backgrounds of the reading & translation panels. This is the fix
-        // for the "sai màu / màu quá nhạt" symptom the user reported.
-        const ALPHA = 0.62;
+        // Single source of truth for highlight colour. Every mark — AI-
+        // detected, brush-painted, user-verified — flows through here so
+        // they all share a high-visibility neon alpha (0.85) that pops
+        // brightly on both light and dark backgrounds.
+        const ALPHA = 0.85;
         if (!hex || hex === 'transparent') return `rgba(250, 204, 21, ${ALPHA})`;
         const h = String(hex).toLowerCase().trim();
-        if (h.startsWith('rgba')) {
+        // Already rgba()/rgb()
+        if (h.startsWith('rgba') || h.startsWith('rgb')) {
             return h.replace(/rgba?\(([^)]+)\)/, (m, contents) => {
                 const parts = contents.split(',').map(s => s.trim());
                 if (parts.length >= 3) {
                     return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${ALPHA})`;
                 }
-                return h;
+                return `rgba(250, 204, 21, ${ALPHA})`;
             });
         }
-        if (h.includes('fef08a') || h.includes('fff3a8') || h.includes('fef9c3') || h.includes('yellow')) return `rgba(250, 204, 21, ${ALPHA})`;
-        if (h.includes('bbf7d0') || h.includes('86efac') || h.includes('dcfce7') || h.includes('green')) return `rgba(74, 222, 128, ${ALPHA})`;
-        if (h.includes('bae6fd') || h.includes('7dd3fc') || h.includes('e0f2fe') || h.includes('blue')) return `rgba(56, 189, 248, ${ALPHA})`;
-        if (h.includes('e9d5ff') || h.includes('c084fc') || h.includes('f3e8ff') || h.includes('purple')) return `rgba(192, 132, 252, ${ALPHA})`;
-        if (h.includes('fecdd3') || h.includes('fda4af') || h.includes('ffe4e6') || h.includes('pink')) return `rgba(251, 113, 133, ${ALPHA})`;
-        return `rgba(250, 204, 21, ${ALPHA})`;
+        // hex / named → rgb → rgba
+        let cleanHex = h.replace('#', '');
+        if (cleanHex.length === 3) {
+            cleanHex = cleanHex.split('').map(c => c + c).join('');
+        }
+        if (!/^[0-9a-f]{6}$/.test(cleanHex)) return `rgba(250, 204, 21, ${ALPHA})`;
+        const r = parseInt(cleanHex.slice(0, 2), 16);
+        const g = parseInt(cleanHex.slice(2, 4), 16);
+        const b = parseInt(cleanHex.slice(4, 6), 16);
+        return `rgba(${r}, ${g}, ${b}, ${ALPHA})`;
     }
 
     /**

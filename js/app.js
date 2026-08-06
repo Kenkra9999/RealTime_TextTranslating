@@ -45,7 +45,13 @@ class LinguaApp {
         this.activeSessionId = null;
         this.isTranslating = false;
         this.fontSize = 16; // Default font size in px
-        this.fontWeight = parseInt(localStorage.getItem('lingua_font_weight') || '600', 10);
+        // Read fontWeight from localStorage. Migration: legacy users had 600/700
+        // saved — bump anything < 800 up to 800 to match the global readability
+        // boost in style.css. Users who actively chose 900 keep their pick.
+        const _storedWeight = localStorage.getItem('lingua_font_weight');
+        let _initial = _storedWeight !== null ? parseInt(_storedWeight, 10) : 800;
+        if (_storedWeight !== null && _initial < 800) _initial = 800;
+        this.fontWeight = _initial;
         this.fontFamily = localStorage.getItem('lingua_font_family') || "'Lora', 'Merriweather', Georgia, serif";
 
         // Dictionary Lookup Mode state
@@ -678,6 +684,10 @@ class LinguaApp {
             resizer: document.getElementById('paneResizer'),
             paneBodyLeft: document.getElementById('paneBodyLeft'),
             paneBodyRight: document.getElementById('paneBodyRight'),
+
+            // EN pane collapse / expand (split-screen "read-translation-only" mode)
+            btnToggleEnPane: document.getElementById('btnToggleEnPane'),
+            btnExpandEnPane: document.getElementById('btnExpandEnPane'),
             
             // Text controls
             inputText: document.getElementById('inputText'),
@@ -701,8 +711,11 @@ class LinguaApp {
             // Settings modal
             settingsModal: document.getElementById('settingsModal'),
             selectProvider: document.getElementById('selectProvider'),
+            groupGroq: document.getElementById('groupGroq'),
             groupOpenAI: document.getElementById('groupOpenAI'),
             groupGemini: document.getElementById('groupGemini'),
+            inputGroqApiKey: document.getElementById('inputGroqApiKey'),
+            selectGroqModel: document.getElementById('selectGroqModel'),
             inputOpenAiApiKey: document.getElementById('inputOpenAiApiKey'),
             selectOpenAiModel: document.getElementById('selectOpenAiModel'),
             inputApiKey: document.getElementById('inputApiKey'),
@@ -711,12 +724,29 @@ class LinguaApp {
             btnCancelSettings: document.getElementById('btnCancelSettings'),
             btnSaveSettings: document.getElementById('btnSaveSettings'),
 
+            // API Test buttons (main + dedicated-scan variants)
+            btnTestGroq: document.getElementById('btnTestGroq'),
+            btnTestOpenAI: document.getElementById('btnTestOpenAI'),
+            btnTestGemini: document.getElementById('btnTestGemini'),
+            btnTestScanGroq: document.getElementById('btnTestScanGroq'),
+            btnTestScanOpenAI: document.getElementById('btnTestScanOpenAI'),
+            btnTestScanGemini: document.getElementById('btnTestScanGemini'),
+            testGroqStatus: document.getElementById('testGroqStatus'),
+            testOpenAIStatus: document.getElementById('testOpenAIStatus'),
+            testGeminiStatus: document.getElementById('testGeminiStatus'),
+            testScanGroqStatus: document.getElementById('testScanGroqStatus'),
+            testScanOpenAIStatus: document.getElementById('testScanOpenAIStatus'),
+            testScanGeminiStatus: document.getElementById('testScanGeminiStatus'),
+
             // Dedicated Scan API settings (separate from main translation API)
             chkUseSeparateScanApi: document.getElementById('chkUseSeparateScanApi'),
             groupSeparateScanApi: document.getElementById('groupSeparateScanApi'),
             selectScanProvider: document.getElementById('selectScanProvider'),
+            groupScanGroq: document.getElementById('groupScanGroq'),
             groupScanOpenAI: document.getElementById('groupScanOpenAI'),
             groupScanGemini: document.getElementById('groupScanGemini'),
+            inputScanGroqApiKey: document.getElementById('inputScanGroqApiKey'),
+            selectScanGroqModel: document.getElementById('selectScanGroqModel'),
             inputScanOpenAiApiKey: document.getElementById('inputScanOpenAiApiKey'),
             selectScanOpenAiModel: document.getElementById('selectScanOpenAiModel'),
             inputScanApiKey: document.getElementById('inputScanApiKey'),
@@ -729,6 +759,37 @@ class LinguaApp {
     _bindEvents() {
         // Toggle input vs reading canvas mode
         this.els.btnToggleMode.addEventListener('click', () => this.toggleMode());
+
+        // EN pane collapse / expand — "read translation only" mode
+        const setEnPaneCollapsed = (collapsed) => {
+            const container = this.els.splitContainer;
+            if (!container) return;
+            container.classList.toggle('en-pane-collapsed', collapsed);
+            if (this.els.btnExpandEnPane) this.els.btnExpandEnPane.style.display = collapsed ? '' : 'none';
+            if (this.els.btnToggleEnPane) {
+                this.els.btnToggleEnPane.textContent = collapsed ? '⮞ Mở EN' : '⮜ Thu gọn EN';
+                this.els.btnToggleEnPane.title = collapsed
+                    ? 'Mở lại khung văn bản tiếng Anh (50/50)'
+                    : 'Thu gọn khung EN để bản dịch rộng hơn';
+            }
+            localStorage.setItem('lingua_en_pane_collapsed', collapsed ? '1' : '0');
+        };
+        if (this.els.btnToggleEnPane) {
+            this.els.btnToggleEnPane.addEventListener('click', () => {
+                const container = this.els.splitContainer;
+                if (!container) return;
+                const collapsed = !container.classList.contains('en-pane-collapsed');
+                setEnPaneCollapsed(collapsed);
+            });
+        }
+        if (this.els.btnExpandEnPane) {
+            this.els.btnExpandEnPane.addEventListener('click', () => setEnPaneCollapsed(false));
+        }
+        // Restore last state
+        if (this.els.splitContainer) {
+            const wasCollapsed = localStorage.getItem('lingua_en_pane_collapsed') === '1';
+            setEnPaneCollapsed(wasCollapsed);
+        }
 
         // Paste text button
         const btnPaste = document.getElementById('btnPasteText');
@@ -846,14 +907,72 @@ class LinguaApp {
         // Provider change for the dedicated Scan API
         this.els.selectScanProvider.addEventListener('change', (e) => {
             const provider = e.target.value;
-            if (provider === 'openai') {
-                this.els.groupScanOpenAI.style.display = 'flex';
-                this.els.groupScanGemini.style.display = 'none';
-            } else {
-                this.els.groupScanOpenAI.style.display = 'none';
-                this.els.groupScanGemini.style.display = 'flex';
-            }
+            this.els.groupScanGroq.style.display = 'none';
+            this.els.groupScanOpenAI.style.display = 'none';
+            this.els.groupScanGemini.style.display = 'none';
+            if (provider === 'openai') this.els.groupScanOpenAI.style.display = 'flex';
+            else if (provider === 'gemini') this.els.groupScanGemini.style.display = 'flex';
+            else this.els.groupScanGroq.style.display = 'flex';
         });
+
+        // Main provider change — show the matching API key group
+        this.els.selectProvider.addEventListener('change', (e) => {
+            const provider = e.target.value;
+            this.els.groupGroq.style.display = 'none';
+            this.els.groupOpenAI.style.display = 'none';
+            this.els.groupGemini.style.display = 'none';
+            if (provider === 'openai') this.els.groupOpenAI.style.display = 'flex';
+            else if (provider === 'gemini') this.els.groupGemini.style.display = 'flex';
+            else this.els.groupGroq.style.display = 'flex';
+        });
+
+        // === API Test buttons (main + dedicated-scan) ===
+        const wireTestBtn = (btn, statusEl, provider, keyInput, modelSelect) => {
+            if (!btn) return;
+            btn.addEventListener('click', async () => {
+                const key = keyInput ? keyInput.value.trim() : '';
+                const model = modelSelect ? modelSelect.value : '';
+                if (!statusEl) return;
+                if (!key) {
+                    this._showTestStatus(statusEl, 'failed', '⚠️ Vui lòng nhập API key trước.');
+                    return;
+                }
+                btn.disabled = true;
+                btn.className = 'btn btn-test-api testing';
+                btn.textContent = '⏳ Đang test...';
+                this._showTestStatus(statusEl, 'testing', '⏳ Đang kết nối tới ' + provider + '...');
+                try {
+                    const result = await this.translator.testApi(provider, key, model);
+                    if (result.ok) {
+                        this._showTestStatus(statusEl, 'success', result.message + (result.model ? ` (model: ${result.model})` : ''));
+                        btn.className = 'btn btn-test-api success';
+                        btn.textContent = '✓ OK';
+                    } else {
+                        this._showTestStatus(statusEl, 'failed', result.error || 'Test thất bại.');
+                        btn.className = 'btn btn-test-api failed';
+                        btn.textContent = '✗ Lỗi';
+                    }
+                } catch (err) {
+                    this._showTestStatus(statusEl, 'failed', 'Lỗi bất ngờ: ' + err.message);
+                    btn.className = 'btn btn-test-api failed';
+                    btn.textContent = '✗ Lỗi';
+                } finally {
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        if (btn.classList.contains('success')) btn.textContent = '🔁 Test lại';
+                        else if (btn.classList.contains('failed')) btn.textContent = '🔁 Test lại';
+                        else btn.textContent = '🧪 Test';
+                        btn.className = 'btn btn-test-api';
+                    }, 1800);
+                }
+            });
+        };
+        wireTestBtn(this.els.btnTestGroq, this.els.testGroqStatus, 'groq', this.els.inputGroqApiKey, this.els.selectGroqModel);
+        wireTestBtn(this.els.btnTestOpenAI, this.els.testOpenAIStatus, 'openai', this.els.inputOpenAiApiKey, this.els.selectOpenAiModel);
+        wireTestBtn(this.els.btnTestGemini, this.els.testGeminiStatus, 'gemini', this.els.inputApiKey, this.els.selectModel);
+        wireTestBtn(this.els.btnTestScanGroq, this.els.testScanGroqStatus, 'groq', this.els.inputScanGroqApiKey, this.els.selectScanGroqModel);
+        wireTestBtn(this.els.btnTestScanOpenAI, this.els.testScanOpenAIStatus, 'openai', this.els.inputScanOpenAiApiKey, this.els.selectScanOpenAiModel);
+        wireTestBtn(this.els.btnTestScanGemini, this.els.testScanGeminiStatus, 'gemini', this.els.inputScanApiKey, this.els.selectScanModel);
 
         // Settings Modal events
         this.els.btnOpenSettings.addEventListener('click', () => this.openSettings());
@@ -1100,6 +1219,26 @@ class LinguaApp {
     }
 
     /**
+     * Apply the current font-weight (from this.fontWeight) to every reading-
+     * related element via inline style. Inline style beats any CSS rule,
+     * including !important blocks, so the slider reliably wins.
+     */
+    _applyFontWeightToReading() {
+        const w = String(this.fontWeight);
+        const targets = [
+            '.text-display-content',
+            '.translation-canvas',
+            '.editor-input',
+            '.reading-canvas',
+            '.text-display-content p',
+            '.translation-canvas p'
+        ];
+        document.querySelectorAll(targets.join(',')).forEach(el => {
+            el.style.fontWeight = w;
+        });
+    }
+
+    /**
      * Typography Controls: Font Weight slider (thickness) & Font Family selector.
      * Applies to both the editable textarea and the reading/translation canvases,
      * and persists the chosen values to localStorage.
@@ -1123,12 +1262,19 @@ class LinguaApp {
                 const pct = ((this.fontWeight - min) / (max - min)) * 100;
                 e.target.style.setProperty('--slider-progress', pct + '%');
                 localStorage.setItem('lingua_font_weight', this.fontWeight);
+                // Inline font-weight on the reading mirrors guarantees the
+                // slider truly wins over any CSS rule (incl. !important
+                // blocks). Inline style beats external CSS unless !important.
+                this._applyFontWeightToReading();
             });
             // Initial gradient fill
             const initMin = parseInt(this.els.fontWeightSlider.min, 10) || 0;
             const initMax = parseInt(this.els.fontWeightSlider.max, 10) || 100;
             const initPct = ((this.fontWeight - initMin) / (initMax - initMin)) * 100;
             this.els.fontWeightSlider.style.setProperty('--slider-progress', initPct + '%');
+            // Apply inline font-weight on initial load so the UI matches
+            // the saved value immediately (before any user interaction).
+            this._applyFontWeightToReading();
         }
 
         if (this.els.fontFamilySelect) {
@@ -2165,7 +2311,7 @@ class LinguaApp {
         // test assertions) but has NO visual effect — the user wants VN-side highlights to look
         // IDENTICAL to EN-side ones (just background color, no dashed border, no ⚠️ / ✓ badge).
         const renderMark = (color, inner, enKey = '', occIdx = 0, source = 'fallback') => {
-            const transColor = this.highlighter ? this.highlighter._getTranslucentColor(color) : 'rgba(250, 204, 21, 0.62)';
+            const transColor = this.highlighter ? this.highlighter._getTranslucentColor(color) : 'rgba(250, 204, 21, 0.42)';
             const enAttr = enKey ? ` data-en="${this._escapeHTML(enKey)}"` : '';
             const occAttr = ` data-occ="${parseInt(occIdx, 10) || 0}"`;
             const sourceAttr = ` data-source="${this._escapeHTML(source)}"`;
@@ -2951,7 +3097,8 @@ class LinguaApp {
         sorted.forEach(h => {
             if (!h.text) return;
             const regex = new RegExp(`(${this._escapeRegExp(h.text)})`, 'gi');
-            html = html.replace(regex, `<mark class="highlight-mark" style="background-color: ${h.color};">$1</mark>`);
+            const bg = this.highlighter ? this.highlighter._getTranslucentColor(h.color) : `rgba(254, 240, 138, 0.42)`;
+            html = html.replace(regex, `<mark class="highlight-mark" style="background-color: ${bg};">$1</mark>`);
         });
         return html;
     }
@@ -4229,13 +4376,17 @@ Ultimately, the ubiquity of cutting-edge technology acts as a catalyst for innov
 
     openSettings() {
         this.els.selectProvider.value = this.translator.provider;
-        if (this.translator.provider === 'openai') {
-            this.els.groupOpenAI.style.display = 'flex';
-            this.els.groupGemini.style.display = 'none';
-        } else {
-            this.els.groupOpenAI.style.display = 'none';
-            this.els.groupGemini.style.display = 'flex';
-        }
+        const provider = this.translator.provider;
+        // Hide all groups, then show the one matching the current provider
+        this.els.groupGroq.style.display = 'none';
+        this.els.groupOpenAI.style.display = 'none';
+        this.els.groupGemini.style.display = 'none';
+        if (provider === 'openai') this.els.groupOpenAI.style.display = 'flex';
+        else if (provider === 'gemini') this.els.groupGemini.style.display = 'flex';
+        else this.els.groupGroq.style.display = 'flex';
+
+        this.els.inputGroqApiKey.value = this.translator.groqApiKey;
+        this.els.selectGroqModel.value = this.translator.groqModel;
 
         this.els.inputOpenAiApiKey.value = this.translator.openaiApiKey;
         this.els.selectOpenAiModel.value = this.translator.openaiModel;
@@ -4250,13 +4401,16 @@ Ultimately, the ubiquity of cutting-edge technology acts as a catalyst for innov
         this.els.chkUseSeparateScanApi.checked = this.translator.useSeparateScanApi;
         this.els.groupSeparateScanApi.style.display = this.translator.useSeparateScanApi ? 'flex' : 'none';
         this.els.selectScanProvider.value = this.translator.scanProvider;
-        if (this.translator.scanProvider === 'openai') {
-            this.els.groupScanOpenAI.style.display = 'flex';
-            this.els.groupScanGemini.style.display = 'none';
-        } else {
-            this.els.groupScanOpenAI.style.display = 'none';
-            this.els.groupScanGemini.style.display = 'flex';
-        }
+        const scanProvider = this.translator.scanProvider;
+        this.els.groupScanGroq.style.display = 'none';
+        this.els.groupScanOpenAI.style.display = 'none';
+        this.els.groupScanGemini.style.display = 'none';
+        if (scanProvider === 'openai') this.els.groupScanOpenAI.style.display = 'flex';
+        else if (scanProvider === 'gemini') this.els.groupScanGemini.style.display = 'flex';
+        else this.els.groupScanGroq.style.display = 'flex';
+
+        this.els.inputScanGroqApiKey.value = this.translator.scanGroqApiKey;
+        this.els.selectScanGroqModel.value = this.translator.scanGroqModel;
         this.els.inputScanOpenAiApiKey.value = this.translator.scanOpenaiApiKey;
         this.els.selectScanOpenAiModel.value = this.translator.scanOpenaiModel;
         this.els.inputScanApiKey.value = this.translator.scanGeminiApiKey;
@@ -4300,6 +4454,8 @@ Ultimately, the ubiquity of cutting-edge technology acts as a catalyst for innov
 
     _loadSavedSettings() {
         this.els.selectProvider.value = this.translator.provider;
+        this.els.inputGroqApiKey.value = this.translator.groqApiKey;
+        this.els.selectGroqModel.value = this.translator.groqModel;
         this.els.inputOpenAiApiKey.value = this.translator.openaiApiKey;
         this.els.selectOpenAiModel.value = this.translator.openaiModel;
         this.els.inputApiKey.value = this.translator.geminiApiKey;
@@ -4310,10 +4466,19 @@ Ultimately, the ubiquity of cutting-edge technology acts as a catalyst for innov
 
         this.els.chkUseSeparateScanApi.checked = this.translator.useSeparateScanApi;
         this.els.selectScanProvider.value = this.translator.scanProvider;
+        this.els.inputScanGroqApiKey.value = this.translator.scanGroqApiKey;
+        this.els.selectScanGroqModel.value = this.translator.scanGroqModel;
         this.els.inputScanOpenAiApiKey.value = this.translator.scanOpenaiApiKey;
         this.els.selectScanOpenAiModel.value = this.translator.scanOpenaiModel;
         this.els.inputScanApiKey.value = this.translator.scanGeminiApiKey;
         this.els.selectScanModel.value = this.translator.scanGeminiModel;
+    }
+
+    _showTestStatus(el, kind, message) {
+        if (!el) return;
+        el.className = 'api-test-status ' + (kind || '');
+        el.textContent = message;
+        el.style.display = 'inline-block';
     }
 
     _escapeHTML(str) {
