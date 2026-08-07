@@ -117,10 +117,10 @@ class LinguaApp {
      */
     _initTheme() {
         const THEMES = [
-            { id: 'classic',  icon: '☀️', label: 'Sáng' },
-            { id: 'dark',     icon: '🌙', label: 'Tối' },
-            { id: 'cosmos',   icon: '🌌', label: 'Vũ trụ' },
-            { id: 'sepia',    icon: '📜', label: 'Sepia' },
+            { id: 'classic', icon: '☀️', label: 'Sáng' },
+            { id: 'dark', icon: '🌙', label: 'Tối' },
+            { id: 'cosmos', icon: '🌌', label: 'Vũ trụ' },
+            { id: 'sepia', icon: '📜', label: 'Sepia' },
             { id: 'midnight', icon: '🌑', label: 'Đêm tối' }
         ];
         const applyToggleUI = (themeId) => {
@@ -251,15 +251,126 @@ class LinguaApp {
     }
 
     /**
-     * Match Tracking Mode ("Dò từ khớp") — REMOVED per user request (Aug 1 2026).
-     * The user removed the "Dò khớp" mode entirely. The methods below are kept as
-     * no-ops so existing call sites (`_setMatchModeActive(false)` on every mode-switch
-     * button handler) still execute without error. The hover/click listeners that
-     * would have driven match-pinning are NOT installed anymore — see `_initMatchMode`.
+    /**
+     * Match Tracking Mode ("Dò từ khớp"): rê chuột vào từ tô màu bên Tiếng Anh thì từ Tiếng Việt tương ứng
+     * phát sáng viền xanh nổi bật và ngược lại. Click chuột để ghim vị trí sáng.
      */
-    _initMatchMode() { /* match-mode removed: no-op */ }
-    _setMatchModeActive(_active) { /* match-mode removed: no-op */ }
-    _applyMatchHighlight(_key) { /* match-mode removed: no-op */ }
+    _initMatchMode() {
+        const norm = (s) => (s || '').toString().toLowerCase().trim();
+        this._matchNorm = norm;
+
+        const handleHover = (mark, container) => {
+            if (!this.matchModeActive || this._matchPinnedKey) return;
+            if (!mark) {
+                this._matchWantOcc = null;
+                this._applyMatchHighlight(null);
+                return;
+            }
+            const rawKey = mark.getAttribute('data-en') || mark.getAttribute('data-text') || mark.textContent;
+            const key = norm(rawKey);
+            const occ = mark.getAttribute('data-occ');
+            this._matchWantOcc = (occ != null && occ !== '') ? occ : null;
+            this._applyMatchHighlight(key);
+        };
+
+        const handleClick = (mark, container, e) => {
+            if (!this.matchModeActive) return;
+            e.stopPropagation();
+            if (!mark) {
+                this._matchPinnedKey = null;
+                this._matchPinnedOcc = null;
+                this._matchWantOcc = null;
+                this._applyMatchHighlight(null);
+                return;
+            }
+            const rawKey = mark.getAttribute('data-en') || mark.getAttribute('data-text') || mark.textContent;
+            const key = norm(rawKey);
+            const occ = mark.getAttribute('data-occ');
+            if (this._matchPinnedKey === key && this._matchPinnedOcc === occ) {
+                this._matchPinnedKey = null;
+                this._matchPinnedOcc = null;
+                this._matchWantOcc = null;
+                this._applyMatchHighlight(null);
+            } else {
+                this._matchPinnedKey = key;
+                this._matchPinnedOcc = occ;
+                this._matchWantOcc = occ;
+                this._applyMatchHighlight(key);
+            }
+        };
+
+        [this.els.readingCanvas, this.els.translationCanvas].filter(Boolean).forEach(container => {
+            container.addEventListener('mouseover', (e) => {
+                const mark = e.target.closest('mark.highlight-mark');
+                handleHover(mark, container);
+            });
+
+            container.addEventListener('mouseout', (e) => {
+                if (this._matchPinnedKey) return;
+                const related = e.relatedTarget;
+                if (!related || !container.contains(related)) {
+                    this._matchWantOcc = null;
+                    this._applyMatchHighlight(null);
+                }
+            });
+
+            container.addEventListener('click', (e) => {
+                const mark = e.target.closest('mark.highlight-mark');
+                if (mark) {
+                    handleClick(mark, container, e);
+                } else {
+                    this._matchPinnedKey = null;
+                    this._matchPinnedOcc = null;
+                    this._matchWantOcc = null;
+                    this._applyMatchHighlight(null);
+                }
+            });
+        });
+
+        document.addEventListener('click', () => {
+            if (this.matchModeActive && this._matchPinnedKey) {
+                this._matchPinnedKey = null;
+                this._matchPinnedOcc = null;
+                this._matchWantOcc = null;
+                this._applyMatchHighlight(null);
+            }
+        });
+    }
+
+    _setMatchModeActive(active) {
+        this.matchModeActive = active;
+        [this.els.readingCanvas, this.els.translationCanvas].filter(Boolean).forEach(el => {
+            el.classList.toggle('match-mode-active', active);
+        });
+        if (!active) {
+            this._matchPinnedKey = null;
+            this._matchPinnedOcc = null;
+            this._matchWantOcc = null;
+            this._applyMatchHighlight(null);
+        }
+    }
+
+    _applyMatchHighlight(key) {
+        const norm = this._matchNorm || ((s) => (s || '').toString().toLowerCase().trim());
+        const want = norm(key);
+        const wantOcc = this._matchWantOcc;
+        const targets = [this.els.readingCanvas, this.els.translationCanvas].filter(Boolean);
+        targets.forEach(target => {
+            target.classList.toggle('has-match', !!want);
+            target.querySelectorAll('mark.highlight-mark').forEach(mark => {
+                if (!want) { mark.classList.remove('match-active'); return; }
+                const rawKey = mark.getAttribute('data-en') || mark.getAttribute('data-text') || mark.textContent;
+                const mk = norm(rawKey);
+                if (mk !== want) { mark.classList.remove('match-active'); return; }
+                if (wantOcc == null) {
+                    mark.classList.add('match-active');
+                } else {
+                    const markOcc = mark.getAttribute('data-occ');
+                    mark.classList.toggle('match-active', markOcc != null && markOcc === String(wantOcc));
+                }
+            });
+        });
+    }
 
     _scheduleHideLookupPopup() {
         if (this._lookupPinned) return; // Pinned (clicked) popups only close via an outside click
@@ -659,7 +770,7 @@ class LinguaApp {
             btnModeSelect: document.getElementById('btnModeSelect'),
             btnModeBrush: document.getElementById('btnModeBrush'),
             btnModeLookup: document.getElementById('btnModeLookup'),
-            // btnModeMatch: removed per user request (Aug 1 2026 — "Dò khớp" mode disabled).
+            btnModeMatch: document.getElementById('btnModeMatch'),
 
             // Font Scaler Buttons
             btnFontDec: document.getElementById('btnFontDec'),
@@ -688,7 +799,7 @@ class LinguaApp {
             // EN pane collapse / expand (split-screen "read-translation-only" mode)
             btnToggleEnPane: document.getElementById('btnToggleEnPane'),
             btnExpandEnPane: document.getElementById('btnExpandEnPane'),
-            
+
             // Text controls
             inputText: document.getElementById('inputText'),
             readingCanvas: document.getElementById('readingCanvas'),
@@ -802,7 +913,7 @@ class LinguaApp {
                         this.els.inputText.value = text;
                         this.updateWordCount();
                     }
-                } catch (e) {}
+                } catch (e) { }
                 this.els.inputText.focus();
             });
         }
@@ -820,11 +931,12 @@ class LinguaApp {
             });
         });
 
-        // Mode switch: Select vs Brush Pen vs Dictionary Lookup (Match Tracking removed)
+        // Mode switch: Select vs Brush Pen vs Dictionary Lookup vs Match Tracking
         const clearModeButtons = () => {
             this.els.btnModeSelect.classList.remove('active');
             this.els.btnModeBrush.classList.remove('active');
             this.els.btnModeLookup.classList.remove('active');
+            if (this.els.btnModeMatch) this.els.btnModeMatch.classList.remove('active');
         };
 
         this.els.btnModeSelect.addEventListener('click', () => {
@@ -857,6 +969,20 @@ class LinguaApp {
                 this.switchToReadingMode();
             }
         });
+
+        // Match Tracking Mode: hover a colored English term → its Vietnamese counterpart lights up
+        if (this.els.btnModeMatch) {
+            this.els.btnModeMatch.addEventListener('click', () => {
+                clearModeButtons();
+                this.els.btnModeMatch.classList.add('active');
+                this.highlighter.setMode('select');
+                this._setLookupModeActive(false);
+                this._setMatchModeActive(true);
+                if (this.currentMode === 'edit') {
+                    this.switchToReadingMode();
+                }
+            });
+        }
 
         // Match Tracking Mode removed per user request (Aug 1 2026 — "Dò khớp" disabled)
 
@@ -1096,8 +1222,8 @@ class LinguaApp {
         // Default vocab table height = 460px (sensible starting point).
         const savedVocabH = parseInt(localStorage.getItem('lingua_vocab_height') || '460', 10);
         const savedSplitH = parseInt(localStorage.getItem('lingua_split_height') || '520', 10);
-        if (savedVocabH >= 80)  section.style.height = savedVocabH + 'px';
-        if (savedSplitH >= 120) split.style.height   = savedSplitH + 'px';
+        if (savedVocabH >= 80) section.style.height = savedVocabH + 'px';
+        if (savedSplitH >= 120) split.style.height = savedSplitH + 'px';
 
         const startDrag = (e) => {
             e.preventDefault();
@@ -1106,7 +1232,7 @@ class LinguaApp {
             resizer.classList.add('dragging');
             document.body.classList.add('vocab-resize-dragging');
 
-            const startY      = e.clientY || (e.touches && e.touches[0].clientY);
+            const startY = e.clientY || (e.touches && e.touches[0].clientY);
             const startSplitH = split.getBoundingClientRect().height;
             const startVocabH = section.getBoundingClientRect().height;
 
@@ -1116,10 +1242,10 @@ class LinguaApp {
 
                 // Kéo XUỐNG → split container dài ra (không giới hạn)
                 // Kéo LÊN → vocab table phóng to
-                const newSplitH  = Math.max(120, startSplitH + dy);
-                const newVocabH  = Math.max(80, startVocabH - dy);
+                const newSplitH = Math.max(120, startSplitH + dy);
+                const newVocabH = Math.max(80, startVocabH - dy);
 
-                split.style.height   = newSplitH + 'px';
+                split.style.height = newSplitH + 'px';
                 section.style.height = newVocabH + 'px';
             };
 
@@ -1150,7 +1276,7 @@ class LinguaApp {
         // Double-click → reset to a comfortable default
         resizer.addEventListener('dblclick', () => {
             section.style.height = '460px';
-            split.style.height   = '520px';
+            split.style.height = '520px';
             localStorage.setItem('lingua_vocab_height', '460');
             localStorage.setItem('lingua_split_height', '520');
         });
@@ -1403,7 +1529,7 @@ class LinguaApp {
                 if (!isDragging) return;
                 const containerRect = this.els.container.getBoundingClientRect();
                 let mouseX = clientX - containerRect.left;
-                
+
                 let minX = containerRect.width * 0.2;
                 let maxX = containerRect.width * 0.8;
                 mouseX = Math.max(minX, Math.min(maxX, mouseX));
@@ -2244,14 +2370,14 @@ class LinguaApp {
             .replace(/\s+/g, ' ')
             .normalize('NFC');
 
-// Resolve the authoritative color for an English term. Matching order:
-//   1) exact (normalized) highlight.text  — the strongest, colour set on the English side
-//   2) exact (normalized) vocab.original   — the AI's own color for that row
-//   3) loose stem match against highlights — handles inflection like "witnessed" vs
-//      "witness"/"witnessing" where the AI returned a slightly different form than the
-//      highlighted word. We only accept it when one side clearly starts with the other
-//      (min length 4) so short words don't collide.
-//   4) yellow fallback.
+        // Resolve the authoritative color for an English term. Matching order:
+        //   1) exact (normalized) highlight.text  — the strongest, colour set on the English side
+        //   2) exact (normalized) vocab.original   — the AI's own color for that row
+        //   3) loose stem match against highlights — handles inflection like "witnessed" vs
+        //      "witness"/"witnessing" where the AI returned a slightly different form than the
+        //      highlighted word. We only accept it when one side clearly starts with the other
+        //      (min length 4) so short words don't collide.
+        //   4) yellow fallback.
         const colorForEnglishTerm = (original) => {
             const o = norm(original);
             if (!o) return '#fef08a';
@@ -2286,7 +2412,7 @@ class LinguaApp {
             const stem = (a, b) => {
                 if (a.length < 4 || b.length < 4) return false;
                 const shorter = a.length <= b.length ? a : b;
-                const longer  = a.length <= b.length ? b : a;
+                const longer = a.length <= b.length ? b : a;
                 return longer.startsWith(shorter);
             };
             const loose = (highlights || []).find(h => stem(norm(h.text || h.word), o));
@@ -2436,7 +2562,7 @@ class LinguaApp {
 
         // Vietnamese "function words" that are meaningless to highlight on their own. Used to
         // reject single-word fallback matches so we don't paint stray "của", "và", "một"...
-        const STOP_WORDS = new Set(['và','của','là','một','các','những','được','có','cho','với','đã','sẽ','đang','này','đó','khi','thì','mà','ở','trong','ra','vào','lên','xuống','rằng','nên','vì','do','bởi','để','từ','đến','sự','như','nếu','hay','bằng','nhưng','thế','vậy','cũng','chỉ','rồi','vẫn','lại','the','a','an']);
+        const STOP_WORDS = new Set(['và', 'của', 'là', 'một', 'các', 'những', 'được', 'có', 'cho', 'với', 'đã', 'sẽ', 'đang', 'này', 'đó', 'khi', 'thì', 'mà', 'ở', 'trong', 'ra', 'vào', 'lên', 'xuống', 'rằng', 'nên', 'vì', 'do', 'bởi', 'để', 'từ', 'đến', 'sự', 'như', 'nếu', 'hay', 'bằng', 'nhưng', 'thế', 'vậy', 'cũng', 'chỉ', 'rồi', 'vẫn', 'lại', 'the', 'a', 'an']);
 
         // Build a SMALL set of candidate phrases for a fill term (longest first). We ONLY try:
         //   1) the full phrase, then
@@ -2835,7 +2961,7 @@ class LinguaApp {
                 return words.every(w => STOP_WORDS.has(w.toLowerCase()));
             };
             let guard = 0;
-            for (;;) {
+            for (; ;) {
                 if (++guard > 500) break; // safety valve
                 let merged = false;
                 // CHAIN-MERGE: from each token, walk forward and fuse every consecutive same-
@@ -2854,7 +2980,7 @@ class LinguaApp {
                     // Try to extend the chain by absorbing every NEXT same-enKey token whose
                     // gap is mergeable. Stop on the first non-mergeable next token OR a token
                     // with a different occIdx (different occurrence, keep separate).
-                    for (;;) {
+                    for (; ;) {
                         const re2 = new RegExp(MERGE_TOKEN.source, 'g');
                         re2.lastIndex = curEnd;
                         const m2 = re2.exec(working);
@@ -3272,7 +3398,7 @@ class LinguaApp {
                 sampleVocab: (vocabList && vocabList[0]) || null,
                 sampleHl: uniqueHighlights[0] || null
             });
-        } catch (e) {}
+        } catch (e) { }
 
         const safePOS = (w) => {
             try { return (window.dictionaryDB && window.dictionaryDB.getPOS) ? window.dictionaryDB.getPOS(w) : ''; }
@@ -3361,7 +3487,7 @@ class LinguaApp {
 
             try {
                 console.log('[DEBUG _computeDisplayItems] RETURN from vocabList path, out.length=', out.length, 'first=', out[0] || null);
-            } catch (e) {}
+            } catch (e) { }
             return out;
         }
 
@@ -3391,7 +3517,7 @@ class LinguaApp {
         });
         try {
             console.log('[DEBUG _computeDisplayItems] RETURN from highlights path, fallbackOut.length=', fallbackOut.length, 'first=', fallbackOut[0] || null);
-        } catch (e) {}
+        } catch (e) { }
         return fallbackOut;
     }
 
@@ -3414,7 +3540,7 @@ class LinguaApp {
                 vocabListLen: (vocabList || []).length,
                 firstVocab: (vocabList && vocabList[0]) || null
             });
-        } catch (e) {}
+        } catch (e) { }
 
         if (session) {
             session.highlights = highlights;
@@ -3449,7 +3575,7 @@ class LinguaApp {
 
         // Fetch ACCURATE IPA from AI for any words not in the curated dictionary so
         // the table never shows a wrong estimated pronunciation.
-        this._correctIpaForSession(session).catch(() => {});
+        this._correctIpaForSession(session).catch(() => { });
     }
 
     toggleVocabSession(sessionId) {
@@ -3505,7 +3631,7 @@ class LinguaApp {
 
         // Always correct IPA for any non-dictionary words (covers terms that already
         // had a meaning and thus skipped _autoFillMeaningsForSession).
-        this._correctIpaForSession(session).catch(() => {});
+        this._correctIpaForSession(session).catch(() => { });
     }
 
     async _autoFillMeaningsForSession(session, newKeys) {
@@ -3556,7 +3682,7 @@ class LinguaApp {
         }
 
         // Fetch ACCURATE IPA from AI for every word not in the curated dictionary.
-        this._correctIpaForSession(session).catch(() => {});
+        this._correctIpaForSession(session).catch(() => { });
     }
 
     /**
@@ -3628,15 +3754,15 @@ class LinguaApp {
                 <div class="vocab-detail-section vocab-detail-example">
                     <div class="vocab-detail-section-label">💬 Câu ví dụ <span class="vocab-detail-section-label-en">(English example + Vietnamese translation)</span></div>
                     ${exampleEn
-                        ? `<div class="vocab-detail-example-en">"${this._escapeHTML(exampleEn)}"</div>
+                ? `<div class="vocab-detail-example-en">"${this._escapeHTML(exampleEn)}"</div>
                            ${exampleVi ? `<div class="vocab-detail-example-vi">→ ${this._escapeHTML(exampleVi)}</div>` : ''}`
-                        : '<div class="vocab-detail-empty">Chưa có câu ví dụ cho mục này.</div>'}
+                : '<div class="vocab-detail-empty">Chưa có câu ví dụ cho mục này.</div>'}
                 </div>
 
                 <div class="vocab-detail-section vocab-detail-structures">
                     <div class="vocab-detail-section-label">🧩 Cấu trúc / Câu mẫu phổ biến có liên quan <span class="vocab-detail-section-label-en">(Common structures + English example + Vietnamese translation)</span></div>
                     ${structures.length > 0
-                        ? `<div class="vocab-detail-structures-list">
+                ? `<div class="vocab-detail-structures-list">
                             ${structures.map(s => `
                                 <div class="vocab-detail-structure-item">
                                     <div class="vocab-detail-structure-pattern"><span class="vocab-detail-structure-pattern-tag">PATTERN</span> ${this._escapeHTML(s.pattern)}</div>
@@ -3645,7 +3771,7 @@ class LinguaApp {
                                 </div>
                             `).join('')}
                            </div>`
-                        : '<div class="vocab-detail-empty">Chưa có cấu trúc mẫu cho mục này.</div>'}
+                : '<div class="vocab-detail-empty">Chưa có cấu trúc mẫu cho mục này.</div>'}
                 </div>
             </div>
         `;
@@ -4254,7 +4380,7 @@ class LinguaApp {
         try {
             const userInput = prompt("Nhập tiêu đề tài liệu PDF:", title);
             if (userInput !== null && userInput.trim() !== '') title = userInput.trim();
-        } catch (e) {}
+        } catch (e) { }
 
         const btnInline = document.getElementById('btnExportPDFInline');
         const btnHeader = document.getElementById('btnExportPDFHeader');
@@ -4323,7 +4449,7 @@ class LinguaApp {
         try {
             const userInput = prompt(`Nhập tiêu đề file PDF cho ${docName}:`, defaultTitle);
             if (userInput !== null && userInput.trim() !== '') title = userInput.trim();
-        } catch (e) {}
+        } catch (e) { }
 
         const btn = this.els.vocabAccordionContainer ? this.els.vocabAccordionContainer.querySelector(`[data-action="export-pdf"][data-session-id="${sessionId}"]`) : null;
         const origHTML = btn ? btn.innerHTML : '';
@@ -4483,7 +4609,7 @@ Ultimately, the ubiquity of cutting-edge technology acts as a catalyst for innov
 
     _escapeHTML(str) {
         if (!str) return '';
-        return str.replace(/[&<>'"]/g, 
+        return str.replace(/[&<>'"]/g,
             tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
         );
     }

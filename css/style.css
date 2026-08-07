@@ -10,13 +10,19 @@
 :root,
 html[data-theme="classic"] {
     /* ---- CLASSIC LIGHT (default) — Vintage warm cream, dịu mắt ---- */
-    --primary: #a8704a;             /* Soft terracotta — less harsh than #8c5e3c */
+    --primary: #a8704a;
+    /* Soft terracotta — less harsh than #8c5e3c */
     --primary-hover: #925d3c;
-    --primary-light: #f6ead7;       /* Tinted background */
-    --primary-dark: #6b4226;        /* Main label colour */
-    --accent: #4a6b8a;              /* Dusty slate-blue */
-    --accent-2: #c08552;            /* Warm amber/rust */
-    --accent-3: #5d8a78;            /* Sage teal */
+    --primary-light: #f6ead7;
+    /* Tinted background */
+    --primary-dark: #6b4226;
+    /* Main label colour */
+    --accent: #4a6b8a;
+    /* Dusty slate-blue */
+    --accent-2: #c08552;
+    /* Warm amber/rust */
+    --accent-3: #5d8a78;
+    /* Sage teal */
 
     /* Backgrounds — warm cream parchment, NOT bright white */
     --bg-main: #faf3e4;
@@ -87,9 +93,9 @@ html[data-theme="dark"] {
 
     --bg-main: #2a241d;
     --bg-body-decor:
-        radial-gradient(circle at 6% 8%,  rgba(227,168,122,0.06), transparent 45%),
-        radial-gradient(circle at 95% 6%, rgba(130,184,232,0.05), transparent 40%),
-        radial-gradient(circle at 60% 100%, rgba(111,200,184,0.04), transparent 48%);
+        radial-gradient(circle at 6% 8%, rgba(227, 168, 122, 0.06), transparent 45%),
+        radial-gradient(circle at 95% 6%, rgba(130, 184, 232, 0.05), transparent 40%),
+        radial-gradient(circle at 60% 100%, rgba(111, 200, 184, 0.04), transparent 48%);
     --bg-card: rgba(48, 41, 32, 0.92);
     --bg-card-solid: #332b22;
     --bg-header: rgba(36, 30, 22, 0.94);
@@ -127,13 +133,17 @@ html[data-theme="dark"] {
 
 /* ---- COSMOS THEME — Deep space: đen + ngôi sao + nebula + galaxy ---- */
 html[data-theme="cosmos"] {
-    --primary: #8b9fef;             /* Cosmic periwinkle (instead of yellow) */
+    --primary: #8b9fef;
+    /* Cosmic periwinkle (instead of yellow) */
     --primary-hover: #a4b4ff;
     --primary-light: rgba(139, 159, 239, 0.18);
     --primary-dark: #c9d3ff;
-    --accent: #5fd1c5;              /* Nebula teal */
-    --accent-2: #e8a5d8;            /* Nebula pink */
-    --accent-3: #ffd28c;            /* Star gold */
+    --accent: #5fd1c5;
+    /* Nebula teal */
+    --accent-2: #e8a5d8;
+    /* Nebula pink */
+    --accent-3: #ffd28c;
+    /* Star gold */
 
     /* Background — deep cosmic navy, not pure black (eases eye strain) */
     --bg-main: #0a0e1f;
@@ -148,8 +158,10 @@ html[data-theme="cosmos"] {
     --border-color: #2a3458;
     --border-color-hover: #4a568a;
 
-    --text-main: #ffffff;           /* Bright starlight white */
-    --text-muted: #c6d4f8;           /* Muted nebula */
+    --text-main: #ffffff;
+    /* Bright starlight white */
+    --text-muted: #c6d4f8;
+    /* Muted nebula */
     --text-light: #909fc6;
 
     /* Highlight colours — neon-bright on deep space bg */
@@ -170,7 +182,8 @@ html[data-theme="cosmos"] {
     --shadow-lg: 0 16px 36px rgba(0, 0, 0, 0.65);
 
     --doodle-opacity: 0.30;
-    --grid-dot-color: rgba(232, 238, 247, 0.05); /* tiny star dots */
+    --grid-dot-color: rgba(232, 238, 247, 0.05);
+    /* tiny star dots */
     /* The starfield is layered behind everything via a separate <body>::before */
     --bg-scene: stars;
 
@@ -179,13 +192,17 @@ html[data-theme="cosmos"] {
 
 /* ---- SEPIA THEME — Antique paper: vintage giấy cũ, dịu mắt nhất ---- */
 html[data-theme="sepia"] {
-    --primary: #8b5a2b;             /* Antique brown */
+    --primary: #8b5a2b;
+    /* Antique brown */
     --primary-hover: #724621;
     --primary-light: #ecdcbe;
     --primary-dark: #4d2e12;
-    --accent: #6b4524;              /* Dark sepia */
-    --accent-2: #b07d3e;            /* Aged gold */
-    --accent-3: #6f5a3a;            /* Olive brown */
+    --accent: #6b4524;
+    /* Dark sepia */
+    --accent-2: #b07d3e;
+    /* Aged gold */
+    --accent-3: #6f5a3a;
+    /* Olive brown */
 
     /* Background — warm parchment, slightly darker than classic */
     --bg-main: #f0e2c0;
@@ -230,13 +247,17 @@ html[data-theme="sepia"] {
 
 /* ---- MIDNIGHT BLACK THEME — Minimalist OLED Pitch Black for Night Reading ---- */
 html[data-theme="midnight"] {
-    --primary: #38bdf8;             /* Gentle electric cyan / sky blue */
+    --primary: #38bdf8;
+    /* Gentle electric cyan / sky blue */
     --primary-hover: #7dd3fc;
     --primary-light: rgba(56, 189, 248, 0.14);
     --primary-dark: #bae6fd;
-    --accent: #34d399;              /* Soothing emerald green */
-    --accent-2: #fbbf24;            /* Soft amber gold */
-    --accent-3: #c084fc;            /* Soft lavender */
+    --accent: #34d399;
+    /* Soothing emerald green */
+    --accent-2: #fbbf24;
+    /* Soft amber gold */
+    --accent-3: #c084fc;
+    /* Soft lavender */
 
     /* Backgrounds — True pitch black (#060709 & #111319) for OLED & zero eye strain in dark rooms */
     --bg-main: #060709;
@@ -297,15 +318,13 @@ html[data-theme="midnight"] {
    Works across ALL themes (light + dark) without changing mark size.
    ========================================================================== */
 mark.highlight-mark {
-    /* Force dark text inside highlight for universal contrast */
-    color: var(--hl-text-color, #1a1205) !important;
-    /* Slightly boost weight inside highlights for crispness */
-    font-weight: inherit;
+    /* Force dark text inside highlight for maximum contrast */
+    color: #0f172a !important;
+    font-weight: 800 !important;
     /* Smooth rounded highlighter-pen look */
-    border-radius: 3px;
-    padding: 1px 0;
-    /* Remove any box-shadow that might mess up sizing */
-    box-shadow: none;
+    border-radius: 4px;
+    padding: 1px 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     /* Smooth colour transitions when theme changes */
     transition: background-color 0.3s ease, color 0.3s ease;
     /* Ensure highlight text is never blurry */
@@ -313,6 +332,13 @@ mark.highlight-mark {
     text-rendering: optimizeLegibility;
     /* Remove inherited text-shadow so highlight text stays crisp */
     text-shadow: none;
+}
+
+html[data-theme="dark"] mark.highlight-mark,
+html[data-theme="cosmos"] mark.highlight-mark,
+html[data-theme="midnight"] mark.highlight-mark {
+    color: #000000 !important;
+    font-weight: 800 !important;
 }
 
 * {
@@ -353,20 +379,20 @@ html[data-theme="cosmos"] body::before {
     z-index: -1;
     pointer-events: none;
     background-image:
-        radial-gradient(1px 1px at 12% 18%,  rgba(232, 238, 247, 0.85), transparent 50%),
-        radial-gradient(1px 1px at 27% 73%,  rgba(232, 238, 247, 0.55), transparent 50%),
-        radial-gradient(1px 1px at 48% 38%,  rgba(232, 238, 247, 0.80), transparent 50%),
-        radial-gradient(1px 1px at 66% 12%,  rgba(232, 238, 247, 0.65), transparent 50%),
-        radial-gradient(1px 1px at 78% 56%,  rgba(232, 238, 247, 0.90), transparent 50%),
-        radial-gradient(1px 1px at 90% 28%,  rgba(232, 238, 247, 0.70), transparent 50%),
+        radial-gradient(1px 1px at 12% 18%, rgba(232, 238, 247, 0.85), transparent 50%),
+        radial-gradient(1px 1px at 27% 73%, rgba(232, 238, 247, 0.55), transparent 50%),
+        radial-gradient(1px 1px at 48% 38%, rgba(232, 238, 247, 0.80), transparent 50%),
+        radial-gradient(1px 1px at 66% 12%, rgba(232, 238, 247, 0.65), transparent 50%),
+        radial-gradient(1px 1px at 78% 56%, rgba(232, 238, 247, 0.90), transparent 50%),
+        radial-gradient(1px 1px at 90% 28%, rgba(232, 238, 247, 0.70), transparent 50%),
         radial-gradient(1.5px 1.5px at 8% 88%, rgba(255, 210, 140, 0.95), transparent 50%),
-        radial-gradient(1.5px 1.5px at 35% 8%,  rgba(139, 159, 239, 0.95), transparent 50%),
+        radial-gradient(1.5px 1.5px at 35% 8%, rgba(139, 159, 239, 0.95), transparent 50%),
         radial-gradient(1.5px 1.5px at 58% 92%, rgba(95, 209, 197, 0.90), transparent 50%),
-        radial-gradient(2px 2px at 22% 50%,   rgba(232, 165, 216, 0.95), transparent 50%),
-        radial-gradient(2px 2px at 82% 78%,   rgba(232, 238, 247, 0.95), transparent 50%),
+        radial-gradient(2px 2px at 22% 50%, rgba(232, 165, 216, 0.95), transparent 50%),
+        radial-gradient(2px 2px at 82% 78%, rgba(232, 238, 247, 0.95), transparent 50%),
         radial-gradient(2.5px 2.5px at 50% 50%, rgba(255, 255, 255, 0.98), transparent 50%),
-        radial-gradient(1px 1px at 4% 35%,   rgba(232, 238, 247, 0.60), transparent 50%),
-        radial-gradient(1px 1px at 96% 65%,  rgba(232, 238, 247, 0.60), transparent 50%);
+        radial-gradient(1px 1px at 4% 35%, rgba(232, 238, 247, 0.60), transparent 50%),
+        radial-gradient(1px 1px at 96% 65%, rgba(232, 238, 247, 0.60), transparent 50%);
     background-size:
         380px 380px,
         420px 420px,
@@ -384,10 +410,19 @@ html[data-theme="cosmos"] body::before {
         550px 550px;
     animation: starfieldTwinkle 8s ease-in-out infinite alternate;
 }
+
 @keyframes starfieldTwinkle {
-    0%   { opacity: 0.85; }
-    50%  { opacity: 1; }
-    100% { opacity: 0.92; }
+    0% {
+        opacity: 0.85;
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0.92;
+    }
 }
 
 /* Reading font polish: better spacing for long reading in every theme.
@@ -404,10 +439,26 @@ html[data-theme="cosmos"] body::before {
 }
 
 /* Every card / bordered surface eases into the new palette instead of snapping */
-.app-header, .glass-card, .pane, .pane-header, .pane-body, .btn, .vocab-doc-item,
-.vocab-doc-header, .modal-card, .form-input, .form-select, .typography-controls-bar,
-.font-size-controls, .font-weight-controls, .font-family-controls, .palette-selector,
-.vocab-table th, .vocab-table td, .category-tag, .theme-toggle {
+.app-header,
+.glass-card,
+.pane,
+.pane-header,
+.pane-body,
+.btn,
+.vocab-doc-item,
+.vocab-doc-header,
+.modal-card,
+.form-input,
+.form-select,
+.typography-controls-bar,
+.font-size-controls,
+.font-weight-controls,
+.font-family-controls,
+.palette-selector,
+.vocab-table th,
+.vocab-table td,
+.category-tag,
+.theme-toggle {
     transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
 }
 
@@ -417,14 +468,42 @@ html[data-theme="cosmos"] body::before {
 /* Scoped to .pdf-export-container so we never affect the live app UI.
    Forces the table layout to be deterministic and prevents the row/avoid-break
    rules used by html2pdf's page break engine from collapsing. */
-.pdf-export-container { display: block; }
-.pdf-export-container .pdf-avoid-break { break-inside: avoid; page-break-inside: avoid; }
-.pdf-export-container table { border-collapse: collapse; }
-.pdf-export-container h1, .pdf-export-container h2 { break-after: avoid; page-break-after: avoid; }
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-color-hover); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-light); }
+.pdf-export-container {
+    display: block;
+}
+
+.pdf-export-container .pdf-avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.pdf-export-container table {
+    border-collapse: collapse;
+}
+
+.pdf-export-container h1,
+.pdf-export-container h2 {
+    break-after: avoid;
+    page-break-after: avoid;
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color-hover);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-light);
+}
 
 /* Glassmorphism Card */
 .glass-card {
@@ -450,25 +529,35 @@ html[data-theme="cosmos"] body::before {
     position: sticky;
     top: 0;
     z-index: 100;
-    box-shadow: 0 2px 12px rgba(60,45,35,0.07);
+    box-shadow: 0 2px 12px rgba(60, 45, 35, 0.07);
     transition: padding 0.25s ease;
 }
+
 /* Compact mode: shrinks the toolbar down so the table/text below gets more vertical space */
 .app-header.header-collapsed {
     padding: 6px 16px;
     gap: 8px;
 }
+
 /* Keep the logo visible in collapsed mode (user expects it next to the toggle);
    only hide the brand text & subtitle so the bar shrinks to a single compact row. */
 .app-header.header-collapsed .brand-title,
 .app-header.header-collapsed .brand-subtitle {
     display: none;
 }
+
 .app-header.header-collapsed .brand-badge,
-.app-header.header-collapsed .header-toolbar > *:not(.header-collapse-btn):not(.theme-toggle):not(.quick-translate-wrap) {
+.app-header.header-collapsed .header-toolbar>*:not(.header-collapse-btn):not(.theme-toggle):not(.quick-translate-wrap) {
     display: none !important;
 }
-.app-header.header-collapsed .brand-logo { width: 32px; height: 32px; font-size: 16px; border-radius: 9px; }
+
+.app-header.header-collapsed .brand-logo {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+    border-radius: 9px;
+}
+
 .app-header.header-collapsed .header-toolbar {
     gap: 6px;
     flex-wrap: nowrap;
@@ -477,39 +566,77 @@ html[data-theme="cosmos"] body::before {
 /* Toggle which control is visible in the brand-actions slot.
    - Expanded (default): show the burger (≡) to collapse
    - Collapsed: hide the burger, show the X to re-expand                      */
-.app-header:not(.header-collapsed) .header-collapse-btn { display: inline-flex; }
-.app-header:not(.header-collapsed) .header-expand-btn { display: none; }
-.app-header.header-collapsed .header-collapse-btn { display: none; }
-.app-header.header-collapsed .header-expand-btn { display: inline-flex; }
+.app-header:not(.header-collapsed) .header-collapse-btn {
+    display: inline-flex;
+}
+
+.app-header:not(.header-collapsed) .header-expand-btn {
+    display: none;
+}
+
+.app-header.header-collapsed .header-collapse-btn {
+    display: none;
+}
+
+.app-header.header-collapsed .header-expand-btn {
+    display: inline-flex;
+}
 
 .header-collapse-btn {
     background: var(--bg-card-solid);
     border: 1px solid var(--border-color);
     color: var(--primary-dark);
-    width: 32px; height: 32px;
+    width: 32px;
+    height: 32px;
     border-radius: var(--radius-sm);
     cursor: pointer;
-    display: inline-flex; align-items: center; justify-content: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 0;
     transition: background 0.15s ease, border-color 0.15s ease;
 }
-.header-collapse-btn:hover { background: var(--primary-light); border-color: var(--border-color-hover); }
-.header-collapse-icon {
-    display: inline-flex; flex-direction: column; justify-content: space-between;
-    width: 16px; height: 12px;
+
+.header-collapse-btn:hover {
+    background: var(--primary-light);
+    border-color: var(--border-color-hover);
 }
+
+.header-collapse-icon {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 16px;
+    height: 12px;
+}
+
 .header-collapse-icon span {
-    display: block; height: 2px; width: 100%;
-    background: currentColor; border-radius: 2px;
+    display: block;
+    height: 2px;
+    width: 100%;
+    background: currentColor;
+    border-radius: 2px;
     transition: transform 0.2s ease, opacity 0.2s ease;
 }
+
 /* When collapsed, the 3 bars turn into an X to indicate "click to expand" */
-.app-header.header-collapsed .header-collapse-icon span:nth-child(1) { transform: translateY(5px) rotate(45deg); }
-.app-header.header-collapsed .header-collapse-icon span:nth-child(2) { opacity: 0; }
-.app-header.header-collapsed .header-collapse-icon span:nth-child(3) { transform: translateY(-5px) rotate(-45deg); }
+.app-header.header-collapsed .header-collapse-icon span:nth-child(1) {
+    transform: translateY(5px) rotate(45deg);
+}
+
+.app-header.header-collapsed .header-collapse-icon span:nth-child(2) {
+    opacity: 0;
+}
+
+.app-header.header-collapsed .header-collapse-icon span:nth-child(3) {
+    transform: translateY(-5px) rotate(-45deg);
+}
 
 /* Compact "Translate" button that stays visible in collapsed mode (for quick access) */
-.quick-translate-wrap { display: inline-flex; align-items: center; }
+.quick-translate-wrap {
+    display: inline-flex;
+    align-items: center;
+}
 
 .brand-container {
     display: flex;
@@ -526,13 +653,18 @@ html[data-theme="cosmos"] body::before {
 
 /* Collapse / expand buttons live in the brand area, right next to the logo & title */
 .brand-actions {
-    display: inline-flex; align-items: center; gap: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     margin-left: 2px;
     padding-left: 8px;
     border-left: 1px solid var(--border-color);
     transition: border-color 0.25s ease;
 }
-.brand-actions:hover { border-left-color: var(--border-color-hover); }
+
+.brand-actions:hover {
+    border-left-color: var(--border-color-hover);
+}
 
 /* The "X" expand button shares the same look as the collapse button but with a
    hover accent (red) so it reads as a destructive/close action */
@@ -540,20 +672,28 @@ html[data-theme="cosmos"] body::before {
     background: var(--bg-card-solid);
     border: 1px solid var(--border-color);
     color: var(--primary-dark);
-    width: 32px; height: 32px;
+    width: 32px;
+    height: 32px;
     border-radius: var(--radius-sm);
     cursor: pointer;
-    display: inline-flex; align-items: center; justify-content: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 0;
     transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
 }
+
 .header-expand-btn:hover {
     background: #fee2e2;
     border-color: #f87171;
     color: #b91c1c;
     transform: scale(1.05);
 }
-.header-expand-btn:active { transform: scale(0.92); }
+
+.header-expand-btn:active {
+    transform: scale(0.92);
+}
+
 html[data-theme="dark"] .header-expand-btn:hover,
 html[data-theme="cosmos"] .header-expand-btn:hover {
     background: rgba(248, 113, 113, 0.18);
@@ -562,21 +702,27 @@ html[data-theme="cosmos"] .header-expand-btn:hover {
 }
 
 .brand-logo {
-    width: 38px; height: 38px;
+    width: 38px;
+    height: 38px;
     background: linear-gradient(135deg, var(--primary), var(--primary-dark));
     color: #fff;
     border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 19px;
-    box-shadow: 0 4px 14px rgba(140,94,60,0.35);
+    box-shadow: 0 4px 14px rgba(140, 94, 60, 0.35);
     flex-shrink: 0;
 }
 
 .brand-title {
     font-family: var(--font-heading);
-    font-size: 19px; font-weight: 900;
+    font-size: 19px;
+    font-weight: 900;
     color: var(--primary-dark);
-    display: flex; align-items: center; gap: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     letter-spacing: -0.3px;
     line-height: 1.2;
     white-space: nowrap;
@@ -591,8 +737,10 @@ html[data-theme="cosmos"] .header-expand-btn:hover {
 }
 
 .header-toolbar {
-    display: flex; align-items: center;
-    gap: 8px; flex-wrap: wrap;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
     /* Toolbar can wrap to multiple rows on narrow viewports. Capped max-height
        keeps the header compact (still ~2 rows). The font-family dropdown is
        absolutely positioned, so overflow MUST stay visible (handled by the
@@ -603,59 +751,107 @@ html[data-theme="cosmos"] .header-expand-btn:hover {
     align-content: flex-start;
     overflow: visible;
 }
-.header-toolbar.dropdown-open { overflow: visible !important; }
+
+.header-toolbar.dropdown-open {
+    overflow: visible !important;
+}
 
 /* When the header is collapsed, hide the typography controls - the X button
    will reveal them again when the user re-expands. */
-.app-header.header-collapsed .typography-controls-bar { display: none !important; }
+.app-header.header-collapsed .typography-controls-bar {
+    display: none !important;
+}
 
 /* ========== THEME TOGGLE (Light / Dark switch) ========== */
 .theme-toggle {
-    display: flex; align-items: center; gap: 7px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
     background: var(--bg-card-solid);
     border: 1px solid var(--border-color);
     border-radius: 30px;
     padding: 5px 12px 5px 6px;
-    cursor: pointer; user-select: none;
-    font-size: 13px; font-weight: 900;
+    cursor: pointer;
+    user-select: none;
+    font-size: 13px;
+    font-weight: 900;
     color: var(--text-main);
     box-shadow: var(--shadow-sm);
 }
-.theme-toggle:hover { border-color: var(--border-color-hover); background: var(--primary-light); }
+
+.theme-toggle:hover {
+    border-color: var(--border-color-hover);
+    background: var(--primary-light);
+}
 
 .theme-toggle-track {
     position: relative;
-    width: 34px; height: 18px;
+    width: 34px;
+    height: 18px;
     background: var(--border-color-hover);
     border-radius: 9px;
     transition: background 0.3s ease;
     flex-shrink: 0;
 }
+
 .theme-toggle-track::after {
     content: '';
     position: absolute;
-    top: 2px; left: 2px;
-    width: 14px; height: 14px;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     background: var(--bg-card-solid);
-    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-    transition: transform 0.3s cubic-bezier(.34,1.56,.64,1), background 0.3s ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s cubic-bezier(.34, 1.56, .64, 1), background 0.3s ease;
 }
-html[data-theme="dark"] .theme-toggle-track { background: var(--primary); }
-html[data-theme="dark"] .theme-toggle-track::after { transform: translateX(16px); }
-html[data-theme="cosmos"] .theme-toggle-track { background: var(--primary); }
-html[data-theme="cosmos"] .theme-toggle-track::after { transform: translateX(16px); }
-html[data-theme="sepia"] .theme-toggle-track { background: var(--primary); }
-html[data-theme="sepia"] .theme-toggle-track::after { transform: translateX(16px); }
-html[data-theme="midnight"] .theme-toggle-track { background: var(--primary); }
-html[data-theme="midnight"] .theme-toggle-track::after { transform: translateX(16px); }
-.theme-toggle-icon { font-size: 14px; line-height: 1; }
+
+html[data-theme="dark"] .theme-toggle-track {
+    background: var(--primary);
+}
+
+html[data-theme="dark"] .theme-toggle-track::after {
+    transform: translateX(16px);
+}
+
+html[data-theme="cosmos"] .theme-toggle-track {
+    background: var(--primary);
+}
+
+html[data-theme="cosmos"] .theme-toggle-track::after {
+    transform: translateX(16px);
+}
+
+html[data-theme="sepia"] .theme-toggle-track {
+    background: var(--primary);
+}
+
+html[data-theme="sepia"] .theme-toggle-track::after {
+    transform: translateX(16px);
+}
+
+html[data-theme="midnight"] .theme-toggle-track {
+    background: var(--primary);
+}
+
+html[data-theme="midnight"] .theme-toggle-track::after {
+    transform: translateX(16px);
+}
+
+.theme-toggle-icon {
+    font-size: 14px;
+    line-height: 1;
+}
 
 /* ========== BUTTONS ========== */
 .btn {
-    display: inline-flex; align-items: center; gap: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     padding: 9px 17px;
-    font-size: 14px; font-weight: 800;
+    font-size: 14px;
+    font-weight: 800;
     border-radius: var(--radius-sm);
     border: 1px solid transparent;
     cursor: pointer;
@@ -664,27 +860,57 @@ html[data-theme="midnight"] .theme-toggle-track::after { transform: translateX(1
     font-family: var(--font-sans);
     letter-spacing: 0.1px;
 }
+
 .btn-primary {
     background: linear-gradient(135deg, var(--primary), var(--primary-hover));
     color: #fff;
-    box-shadow: 0 2px 8px rgba(140,94,60,0.28);
+    box-shadow: 0 2px 8px rgba(140, 94, 60, 0.28);
 }
+
 .btn-primary:hover {
     filter: brightness(1.08);
-    box-shadow: 0 4px 14px rgba(140,94,60,0.38);
+    box-shadow: 0 4px 14px rgba(140, 94, 60, 0.38);
     transform: translateY(-1px);
 }
+
 .btn-secondary {
-    background: var(--bg-card-solid); border-color: var(--border-color); color: var(--text-main);
+    background: var(--bg-card-solid);
+    border-color: var(--border-color);
+    color: var(--text-main);
 }
-.btn-secondary:hover { background: var(--primary-light); border-color: var(--border-color-hover); }
+
+.btn-secondary:hover {
+    background: var(--primary-light);
+    border-color: var(--border-color-hover);
+}
+
 .btn-toggle {
-    background: var(--bg-card-solid); border: 1px solid var(--border-color); color: var(--text-muted);
+    background: var(--bg-card-solid);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
 }
-.btn-toggle.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-.btn-accent { background: linear-gradient(135deg,#2563eb,#1d4ed8); color: #fff; }
-.btn-accent:hover { filter: brightness(1.1); transform: translateY(-1px); }
-.btn-sm { padding: 6px 12px; font-size: 13px; font-weight: 800; }
+
+.btn-toggle.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+
+.btn-accent {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #fff;
+}
+
+.btn-accent:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 800;
+}
 
 /* Test API button (compact, lives next to API key input in Settings) */
 .btn-test-api {
@@ -700,30 +926,36 @@ html[data-theme="midnight"] .theme-toggle-track::after { transform: translateX(1
     white-space: nowrap;
     flex-shrink: 0;
 }
+
 .btn-test-api:hover:not(:disabled) {
     background: var(--primary-light);
     border-color: var(--primary);
     color: var(--primary-dark);
 }
+
 .btn-test-api:disabled {
     opacity: 0.55;
     cursor: not-allowed;
 }
+
 .btn-test-api.testing {
     background: rgba(59, 130, 246, 0.1);
     border-color: #3b82f6;
     color: #1d4ed8;
 }
+
 .btn-test-api.success {
     background: rgba(34, 197, 94, 0.12);
     border-color: #22c55e;
     color: #15803d;
 }
+
 .btn-test-api.failed {
     background: rgba(239, 68, 68, 0.12);
     border-color: #ef4444;
     color: #b91c1c;
 }
+
 .api-test-status {
     display: inline-block;
     margin-top: 6px;
@@ -733,16 +965,19 @@ html[data-theme="midnight"] .theme-toggle-track::after { transform: translateX(1
     font-weight: 600;
     line-height: 1.4;
 }
+
 .api-test-status.success {
     background: rgba(34, 197, 94, 0.12);
     color: #15803d;
     border: 1px solid rgba(34, 197, 94, 0.4);
 }
+
 .api-test-status.failed {
     background: rgba(239, 68, 68, 0.10);
     color: #b91c1c;
     border: 1px solid rgba(239, 68, 68, 0.4);
 }
+
 .api-test-status.testing {
     background: rgba(59, 130, 246, 0.08);
     color: #1d4ed8;
@@ -751,23 +986,40 @@ html[data-theme="midnight"] .theme-toggle-track::after { transform: translateX(1
 
 /* ========== PALETTE SELECTOR ========== */
 .palette-selector {
-    display: flex; align-items: center; gap: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     background: var(--bg-card-solid);
     padding: 4px 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-color);
 }
+
 .color-dot {
-    width: 20px; height: 20px; border-radius: 50%; cursor: pointer;
-    border: 2px solid transparent; transition: transform 0.15s ease;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.15s ease;
 }
-.color-dot:hover, .color-dot.active { transform: scale(1.28); border-color: var(--text-main); }
+
+.color-dot:hover,
+.color-dot.active {
+    transform: scale(1.28);
+    border-color: var(--text-main);
+}
 
 /* ========== MAIN WRAPPER ========== */
 .main-wrapper {
-    flex: 1; display: flex; flex-direction: column;
-    padding: 16px 24px; gap: 16px;
-    max-width: 1800px; margin: 0 auto; width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 24px;
+    gap: 16px;
+    max-width: 1800px;
+    margin: 0 auto;
+    width: 100%;
 }
 
 /* Vertical resizer between the split-screen and the vocab table.
@@ -784,9 +1036,12 @@ html[data-theme="midnight"] .theme-toggle-track::after { transform: translateX(1
     padding: 8px 0;
     box-sizing: border-box;
     cursor: row-resize;
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     position: relative;
-    z-index: 10;               /* above glass cards, modal backgrounds */
+    z-index: 10;
+    /* above glass cards, modal backgrounds */
     flex-shrink: 0;
     /* Keep the resizer interactive even if a parent has overflow: hidden */
     isolation: isolate;
@@ -794,76 +1049,113 @@ html[data-theme="midnight"] .theme-toggle-track::after { transform: translateX(1
        accidentally start a text selection gesture. */
     user-select: none;
     -webkit-user-select: none;
-    touch-action: none;        /* prevent scroll-on-touch-drag on mobile */
+    touch-action: none;
+    /* prevent scroll-on-touch-drag on mobile */
 }
+
 .vocab-resizer::before {
     content: '';
     display: block;
-    width: 80px; height: 4px;
+    width: 80px;
+    height: 4px;
     border-radius: 2px;
     background: var(--border-color);
     transition: background 0.15s ease, width 0.2s ease, height 0.2s ease, box-shadow 0.2s ease;
 }
+
 /* Show a subtle wider band on hover so the user knows it's grabbable.
    The slight background tint on the whole handle (not just the grip) also
    makes the invisible padding hit-area discoverable on hover. */
 .vocab-resizer:hover {
     background: linear-gradient(180deg, transparent, var(--bg-strip) 40%, var(--bg-strip) 60%, transparent);
 }
+
 .vocab-resizer:hover::before {
     background: var(--primary);
     width: 110px;
     height: 5px;
     box-shadow: 0 0 0 1px var(--border-color);
 }
+
 .vocab-resizer.dragging {
     background: linear-gradient(180deg, transparent, var(--primary-light) 40%, var(--primary-light) 60%, transparent);
     cursor: row-resize;
 }
+
 .vocab-resizer.dragging::before {
     background: var(--primary);
     width: 130px;
     height: 6px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
-body.vocab-resize-dragging { user-select: none; cursor: row-resize !important; }
+
+body.vocab-resize-dragging {
+    user-select: none;
+    cursor: row-resize !important;
+}
 
 /* The .vocab-resizer-grip <div> is unused but kept for HTML stability */
-.vocab-resizer-grip { display: none; }
+.vocab-resizer-grip {
+    display: none;
+}
 
 /* The split-screen container is now flex-sized, NOT viewport-locked, so it shrinks to make room for the (resizable) vocab table below */
 .split-screen-container {
-    display: flex; flex-direction: row;
-    min-height: 220px; height: 520px; width: 100%;
-    position: relative; user-select: text;
+    display: flex;
+    flex-direction: row;
+    min-height: 220px;
+    height: 520px;
+    width: 100%;
+    position: relative;
+    user-select: text;
     border-radius: var(--radius-md);
     overflow: hidden;
     flex: 0 0 auto;
 }
 
 /* ========== PANES ========== */
-.pane { display: flex; flex-direction: column; height: 100%; overflow: hidden; min-width: 240px; }
-.pane-left  { flex: 0 0 50%; }
-.pane-right { flex: 1 1 50%; }
+.pane {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    min-width: 240px;
+}
+
+.pane-left {
+    flex: 0 0 50%;
+}
+
+.pane-right {
+    flex: 1 1 50%;
+}
 
 .pane-header {
     padding: 10px 16px;
     background: var(--bg-strip);
     border-bottom: 1px solid var(--border-color);
-    display: flex; justify-content: space-between; align-items: center;
-    font-size: 14px; font-weight: 900; color: var(--primary-dark);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--primary-dark);
     letter-spacing: 0.4px;
 }
 
 .pane-body {
-    flex: 1; padding: 20px;
+    flex: 1;
+    padding: 20px;
     overflow-y: auto;
     background: var(--bg-card-solid);
     font-size: var(--reading-font-size);
-    line-height: 1.82; position: relative;
+    line-height: 1.82;
+    position: relative;
 }
 
-.pane-body.mode-brush-active { cursor: crosshair; }
+.pane-body.mode-brush-active {
+    cursor: crosshair;
+}
 
 /* ========== LỚP 2 — VERIFICATION BANNER (DISABLED per user request) ========== */
 /* The user asked for the markers on the Vietnamese side to look IDENTICAL to the English
@@ -871,7 +1163,9 @@ body.vocab-resize-dragging { user-select: none; cursor: row-resize !important; }
    (so `_updateVerificationBanner()` can still run without errors) but is hidden via CSS
    with `display: none !important`. Internal counting still happens (used by tests), but
    the user-facing UI is back to the original clean highlight look. */
-.verification-banner { display: none !important; }
+.verification-banner {
+    display: none !important;
+}
 
 /* ========== LỚP 2 — VERIFICATION POPUP + RESELECT FLOW ========== */
 /* Popup that appears when user clicks a dashed-border / ⚠️ mark. Small floating card with
@@ -887,17 +1181,19 @@ body.vocab-resize-dragging { user-select: none; cursor: row-resize !important; }
     z-index: 9999;
     background: var(--bg-card);
     border: 1px solid rgba(234, 88, 12, 0.45);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
     display: flex;
     flex-direction: column;
     gap: 6px;
 }
+
 .verification-popup__row {
     display: flex;
     gap: 6px;
     align-items: baseline;
     flex-wrap: wrap;
 }
+
 .verification-popup__label {
     color: var(--text-muted);
     font-size: 11px;
@@ -905,19 +1201,23 @@ body.vocab-resize-dragging { user-select: none; cursor: row-resize !important; }
     letter-spacing: 0.4px;
     flex-shrink: 0;
 }
+
 .verification-popup__en {
     color: var(--text-main);
     font-weight: 600;
 }
+
 .verification-popup__vn {
     color: var(--primary-dark);
     font-style: italic;
 }
+
 .verification-popup__actions {
     display: flex;
     gap: 6px;
     margin-top: 4px;
 }
+
 .verification-popup__actions .btn {
     flex: 1;
     font-size: 11.5px;
@@ -926,20 +1226,34 @@ body.vocab-resize-dragging { user-select: none; cursor: row-resize !important; }
     cursor: pointer;
     border: 1px solid transparent;
 }
+
 .verification-popup__actions .btn-success {
     background: rgba(34, 197, 94, 0.18);
     color: #166534;
     border-color: rgba(34, 197, 94, 0.6);
 }
-.verification-popup__actions .btn-success:hover { background: rgba(34, 197, 94, 0.32); }
+
+.verification-popup__actions .btn-success:hover {
+    background: rgba(34, 197, 94, 0.32);
+}
+
 .verification-popup__actions .btn-warning {
     background: rgba(234, 88, 12, 0.16);
     color: #9a3412;
     border-color: rgba(234, 88, 12, 0.55);
 }
-.verification-popup__actions .btn-warning:hover { background: rgba(234, 88, 12, 0.28); }
-[data-theme="dark"] .verification-popup__actions .btn-success { color: #bbf7d0; }
-[data-theme="dark"] .verification-popup__actions .btn-warning { color: #fed7aa; }
+
+.verification-popup__actions .btn-warning:hover {
+    background: rgba(234, 88, 12, 0.28);
+}
+
+[data-theme="dark"] .verification-popup__actions .btn-success {
+    color: #bbf7d0;
+}
+
+[data-theme="dark"] .verification-popup__actions .btn-warning {
+    color: #fed7aa;
+}
 
 /* Awaiting-reselect state: visual cue that the next selection will REPLACE an existing mark.
    Used after user clicks "Sai, để tôi chọn lại" — the canvas border pulses orange. */
@@ -950,9 +1264,17 @@ body.vocab-resize-dragging { user-select: none; cursor: row-resize !important; }
     cursor: text !important;
     animation: awaitingReselectPulse 1.4s ease-in-out infinite;
 }
+
 @keyframes awaitingReselectPulse {
-    0%, 100% { outline-color: rgba(234, 88, 12, 0.55); }
-    50%      { outline-color: rgba(234, 88, 12, 1.0); }
+
+    0%,
+    100% {
+        outline-color: rgba(234, 88, 12, 0.55);
+    }
+
+    50% {
+        outline-color: rgba(234, 88, 12, 1.0);
+    }
 }
 
 /* ========== LỚP 2 — DISABLED MARK STYLES (per user request) ==========
@@ -963,22 +1285,34 @@ body.vocab-resize-dragging { user-select: none; cursor: row-resize !important; }
    (banner counting, popup logic, test assertions) but has no visual effect. */
 mark.highlight-mark[data-source="ai-retried"],
 mark.highlight-mark[data-source="fallback"],
-mark.highlight-mark[data-source="user-verified"] { /* no extra style — looks like EN side */ }
+mark.highlight-mark[data-source="user-verified"] {
+    /* no extra style — looks like EN side */
+}
 
 /* ========== DICTIONARY LOOKUP MODE ========== */
-.lookup-mode-active { cursor: help; }
-.lookup-mode-active mark.highlight-mark { cursor: help; }
+.lookup-mode-active {
+    cursor: help;
+}
+
+.lookup-mode-active mark.highlight-mark {
+    cursor: help;
+}
 
 /* ========== MATCH TRACKING MODE ("Dò từ khớp") ========== */
-.match-mode-active { cursor: pointer; }
+.match-mode-active {
+    cursor: pointer;
+}
+
 .match-mode-active mark.highlight-mark {
     cursor: pointer;
     transition: box-shadow .15s ease, outline-color .15s ease, transform .12s ease, filter .15s ease;
 }
+
 /* While match mode is on, dim non-selected highlights slightly so the matched pair pops. */
 .match-mode-active.has-match mark.highlight-mark:not(.match-active) {
     filter: saturate(.55) opacity(.55);
 }
+
 /* The matched pair on BOTH sides: strong ring + lift + glow so it stands out clearly. */
 mark.highlight-mark.match-active {
     outline: 2.5px solid var(--primary, #b45309);
@@ -991,6 +1325,7 @@ mark.highlight-mark.match-active {
     box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.18), 0 4px 14px rgba(0, 0, 0, 0.18) !important;
     font-weight: 700 !important;
 }
+
 html[data-theme="dark"] mark.highlight-mark.match-active,
 html[data-theme="cosmos"] mark.highlight-mark.match-active,
 html[data-theme="midnight"] mark.highlight-mark.match-active {
@@ -999,9 +1334,12 @@ html[data-theme="midnight"] mark.highlight-mark.match-active {
 }
 
 .lookup-popup {
-    position: absolute; z-index: 1200;
-    width: 340px; max-width: 92vw;
-    max-height: 75vh; overflow-y: auto;
+    position: absolute;
+    z-index: 1200;
+    width: 340px;
+    max-width: 92vw;
+    max-height: 75vh;
+    overflow-y: auto;
     padding: 12px 14px;
     background: var(--bg-card-solid);
     border: 1px solid var(--border-color);
@@ -1012,58 +1350,97 @@ html[data-theme="midnight"] mark.highlight-mark.match-active {
     font-size: 13px;
     line-height: 1.5;
 }
+
 .lookup-popup-header {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 8px; margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
 }
+
 .lookup-popup-word {
     font-family: var(--font-heading);
-    font-size: 18px; font-weight: 800;
+    font-size: 18px;
+    font-weight: 800;
     color: var(--primary-dark);
     text-transform: lowercase;
     letter-spacing: -0.2px;
 }
+
 .lookup-popup-audio-btn {
-    background: var(--primary-light); border: 1px solid var(--border-color);
-    color: var(--primary); border-radius: 50%;
-    width: 28px; height: 28px; flex-shrink: 0;
-    display: inline-flex; align-items: center; justify-content: center;
-    cursor: pointer; font-size: 13px; transition: transform 0.15s ease, background 0.15s ease;
+    background: var(--primary-light);
+    border: 1px solid var(--border-color);
+    color: var(--primary);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 13px;
+    transition: transform 0.15s ease, background 0.15s ease;
 }
-.lookup-popup-audio-btn:hover { transform: scale(1.12); background: var(--primary); color: #fff; }
+
+.lookup-popup-audio-btn:hover {
+    transform: scale(1.12);
+    background: var(--primary);
+    color: #fff;
+}
+
 .lookup-popup-row {
-    display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 6px;
     flex-wrap: wrap;
 }
+
 .lookup-popup-ipa {
-    font-family: 'Lora', Georgia, serif; font-style: italic;
-    font-size: 15px; font-weight: 600; color: var(--accent);
+    font-family: 'Lora', Georgia, serif;
+    font-style: italic;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent);
     letter-spacing: 0.2px;
 }
+
 .lookup-popup-pos {
-    font-size: 13.5px; font-weight: 800; color: #fff;
+    font-size: 13.5px;
+    font-weight: 800;
+    color: #fff;
     background: linear-gradient(135deg, var(--primary), var(--primary-dark));
     border: 1px solid var(--primary-dark);
-    border-radius: 6px; padding: 3px 11px;
+    border-radius: 6px;
+    padding: 3px 11px;
     letter-spacing: 0.3px;
     text-transform: lowercase;
     white-space: nowrap;
 }
+
 .lookup-popup-meaning {
-    font-size: 14.5px; font-weight: 700; color: var(--text-main);
-    line-height: 1.45; margin-bottom: 6px;
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1.45;
+    margin-bottom: 6px;
 }
 
 /* Per-word breakdown — shown when the lookup is a multi-word phrase (or even
    single word, as a single row showing the IPA + POS + meaning of the word). */
 .lookup-popup-breakdown {
-    display: flex; flex-direction: column; gap: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     margin: 6px 0;
     padding: 8px 10px;
     background: var(--bg-strip);
     border: 1px solid var(--border-color);
     border-radius: 8px;
 }
+
 .lookup-popup-breakdown-row {
     display: flex;
     flex-wrap: wrap;
@@ -1074,21 +1451,28 @@ html[data-theme="midnight"] mark.highlight-mark.match-active {
     padding: 3px 0;
     border-bottom: 1px dotted var(--border-color);
 }
-.lookup-popup-breakdown-row:last-child { border-bottom: none; }
+
+.lookup-popup-breakdown-row:last-child {
+    border-bottom: none;
+}
+
 .lookup-popup-bd-word {
     font-weight: 800;
     font-family: 'Lora', Georgia, serif;
     color: var(--primary-dark);
     font-size: 13.5px;
 }
+
 .lookup-popup-bd-ipa {
     font-family: 'Lora', Georgia, serif;
     font-style: italic;
     color: var(--accent);
     font-size: 12.5px;
 }
+
 .lookup-popup-bd-pos {
-    font-size: 11px; font-weight: 800;
+    font-size: 11px;
+    font-weight: 800;
     color: var(--primary-dark);
     background: var(--primary-light);
     border: 1px solid var(--primary);
@@ -1096,6 +1480,7 @@ html[data-theme="midnight"] mark.highlight-mark.match-active {
     padding: 1px 6px;
     white-space: nowrap;
 }
+
 .lookup-popup-bd-meaning {
     color: var(--text-main);
     font-weight: 600;
@@ -1109,18 +1494,30 @@ html[data-theme="midnight"] mark.highlight-mark.match-active {
     padding-top: 6px;
     border-top: 1px dashed var(--border-color);
 }
+
 .lookup-popup-example-label {
-    font-size: 10.5px; font-weight: 800; letter-spacing: 0.4px;
-    color: var(--text-muted); text-transform: uppercase;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    color: var(--text-muted);
+    text-transform: uppercase;
     margin-bottom: 3px;
 }
+
 .lookup-popup-example {
-    font-size: 12.5px; color: var(--text-main); font-style: italic;
+    font-size: 12.5px;
+    color: var(--text-main);
+    font-style: italic;
     line-height: 1.5;
 }
+
 .lookup-popup-example-vi {
-    font-size: 12.5px; color: var(--accent-3); line-height: 1.5; margin-top: 2px;
+    font-size: 12.5px;
+    color: var(--accent-3);
+    line-height: 1.5;
+    margin-top: 2px;
 }
+
 .lookup-popup-example-hint {
     display: inline-block;
     font-size: 12px;
@@ -1132,105 +1529,171 @@ html[data-theme="midnight"] mark.highlight-mark.match-active {
     border-radius: 6px;
     margin-top: 2px;
 }
+
 .lookup-popup-example-unavailable .lookup-popup-example-label {
     opacity: 0.85;
 }
+
 .lookup-popup-hl {
     /* No background, no underline — just bold + accent color so the term
        stands out as a natural callout instead of a "highlighted word".
        Per user request: highlight style was too noisy on the example line. */
     background: transparent;
-    font-weight: 800; font-style: normal;
+    font-weight: 800;
+    font-style: normal;
     color: var(--primary-dark);
-    padding: 0; border-radius: 0;
+    padding: 0;
+    border-radius: 0;
     text-decoration: none;
 }
+
 .lookup-popup-structures {
     margin-top: 8px;
     padding-top: 8px;
     border-top: 1px solid var(--border-color);
 }
+
 .lookup-popup-structures-label {
-    font-size: 10.5px; font-weight: 800; letter-spacing: 0.4px;
-    color: var(--text-muted); text-transform: uppercase;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    color: var(--text-muted);
+    text-transform: uppercase;
     margin-bottom: 5px;
 }
+
 .lookup-popup-structures-list {
-    display: flex; flex-direction: column; gap: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
+
 .lookup-popup-structure-item {
     background: var(--bg-strip);
     border: 1px solid var(--border-color);
     border-radius: 7px;
     padding: 6px 9px;
 }
+
 .lookup-popup-structure-name {
     font-family: 'Lora', Georgia, serif;
-    font-size: 12.5px; font-weight: 800; color: var(--primary-dark);
+    font-size: 12.5px;
+    font-weight: 800;
+    color: var(--primary-dark);
     margin-bottom: 2px;
 }
+
 .lookup-popup-structure-note {
-    font-size: 11.5px; color: var(--text-muted);
-    font-style: italic; line-height: 1.4; margin-bottom: 3px;
+    font-size: 11.5px;
+    color: var(--text-muted);
+    font-style: italic;
+    line-height: 1.4;
+    margin-bottom: 3px;
 }
+
 .lookup-popup-structure-example {
-    font-size: 12px; color: var(--text-main);
-    font-style: italic; line-height: 1.45;
+    font-size: 12px;
+    color: var(--text-main);
+    font-style: italic;
+    line-height: 1.45;
 }
+
 .lookup-popup-structure-example-vi {
-    font-size: 12px; color: var(--accent-3);
-    line-height: 1.45; margin-top: 1px;
+    font-size: 12px;
+    color: var(--accent-3);
+    line-height: 1.45;
+    margin-top: 1px;
 }
+
 .lookup-popup-spinner {
-    display: inline-block; width: 11px; height: 11px;
-    border: 2px solid var(--border-color); border-top-color: var(--primary);
-    border-radius: 50%; vertical-align: -1px;
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    vertical-align: -1px;
     animation: lookupSpin 0.7s linear infinite;
 }
-@keyframes lookupSpin { to { transform: rotate(360deg); } }
+
+@keyframes lookupSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
 
 /* ========== EDITOR ========== */
 .editor-input {
-    width: 100%; height: 100%;
-    border: none; outline: none; resize: none;
+    width: 100%;
+    height: 100%;
+    border: none;
+    outline: none;
+    resize: none;
     font-family: var(--reading-font-family);
     font-size: var(--reading-font-size);
     font-weight: var(--reading-font-weight);
-    line-height: 1.85; color: var(--text-main);
+    line-height: 1.85;
+    color: var(--text-main);
     background: transparent;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     text-shadow: var(--reading-text-shadow, none);
 }
-.editor-input::placeholder { color: var(--text-light); font-weight: 600; }
 
-.text-display-content { white-space: pre-wrap; word-break: break-word;
-    font-size: var(--reading-font-size); font-weight: var(--reading-font-weight); line-height: 1.85;
+.editor-input::placeholder {
+    color: var(--text-light);
+    font-weight: 600;
+}
+
+.text-display-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: var(--reading-font-size);
+    font-weight: var(--reading-font-weight);
+    line-height: 1.85;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     text-shadow: var(--reading-text-shadow, none);
 }
-.text-display-content p { margin-bottom: 18px; }
+
+.text-display-content p {
+    margin-bottom: 18px;
+}
 
 /* ========== RESIZER ========== */
 .pane-resizer {
-    width: 12px; background: var(--bg-main);
+    width: 12px;
+    background: var(--bg-main);
     border-left: 1px solid var(--border-color);
     border-right: 1px solid var(--border-color);
     cursor: col-resize;
-    display: flex; align-items: center; justify-content: center;
-    position: relative; z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 10;
     transition: background 0.2s ease;
 }
-.pane-resizer:hover, .pane-resizer.dragging { background: var(--primary-light); }
-.resizer-handle {
-    width: 4px; height: 32px;
-    background: var(--border-color-hover);
-    border-radius: 2px; transition: background 0.2s ease;
+
+.pane-resizer:hover,
+.pane-resizer.dragging {
+    background: var(--primary-light);
 }
-.pane-resizer:hover .resizer-handle, .pane-resizer.dragging .resizer-handle { background: var(--primary); }
+
+.resizer-handle {
+    width: 4px;
+    height: 32px;
+    background: var(--border-color-hover);
+    border-radius: 2px;
+    transition: background 0.2s ease;
+}
+
+.pane-resizer:hover .resizer-handle,
+.pane-resizer.dragging .resizer-handle {
+    background: var(--primary);
+}
 
 /* ========== HIGHLIGHTS ========== */
 /* Highlights: JS now renders every <mark> with a uniform rgba(R,G,B, 0.42)
@@ -1260,32 +1723,72 @@ html[data-theme="midnight"] mark.highlight-mark {
 
 /* Floating Selection Tooltip */
 .highlight-selection-tooltip {
-    position: absolute; z-index: 1000;
-    display: flex; align-items: center; gap: 8px;
+    position: absolute;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     padding: 6px 12px;
     background: var(--bg-card-solid);
     border: 1px solid var(--border-color);
-    border-radius: 30px; box-shadow: var(--shadow-lg);
+    border-radius: 30px;
+    box-shadow: var(--shadow-lg);
     animation: fadeIn 0.15s ease-out;
 }
+
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
-.tooltip-palette { display: flex; gap: 6px; }
+
+.tooltip-palette {
+    display: flex;
+    gap: 6px;
+}
+
 .color-btn {
-    width: 20px; height: 20px; border-radius: 50%;
-    border: 2px solid transparent; cursor: pointer; transition: transform 0.15s ease;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s ease;
 }
-.color-btn:hover { transform: scale(1.28); }
-.tooltip-divider { width: 1px; height: 18px; background: var(--border-color); }
+
+.color-btn:hover {
+    transform: scale(1.28);
+}
+
+.tooltip-divider {
+    width: 1px;
+    height: 18px;
+    background: var(--border-color);
+}
+
 .tooltip-act-btn {
-    background: none; border: none; font-size: 12px; font-weight: 600;
-    color: var(--text-main); cursor: pointer;
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 2px 6px; border-radius: var(--radius-sm);
+    background: none;
+    border: none;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-main);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
 }
-.tooltip-act-btn:hover { background: var(--primary-light); }
+
+.tooltip-act-btn:hover {
+    background: var(--primary-light);
+}
 
 /* ========== VOCAB SECTION ========== */
 .vocab-section {
@@ -1302,8 +1805,15 @@ html[data-theme="midnight"] mark.highlight-mark {
     position: relative;
     overflow: visible;
 }
-.vocab-section > .section-header { margin-bottom: 10px; }
-.vocab-section > .vocab-export-bar { margin-bottom: 10px; }
+
+.vocab-section>.section-header {
+    margin-bottom: 10px;
+}
+
+.vocab-section>.vocab-export-bar {
+    margin-bottom: 10px;
+}
+
 .vocab-section .vocab-accordion {
     /* UNLIMITED HEIGHT: the accordion grows to fit ALL vocabulary items,
        no matter how many (10 or 10 million). We previously tried capping with
@@ -1315,26 +1825,34 @@ html[data-theme="midnight"] mark.highlight-mark {
        layout doesn't break on tiny screens. */
     max-height: none;
     min-height: 0;
-    overflow: visible;        /* no scrollbar; let page scroll instead */
+    overflow: visible;
+    /* no scrollbar; let page scroll instead */
     padding-right: 0;
 }
-.vocab-section .vocab-accordion::-webkit-scrollbar { width: 12px; }
+
+.vocab-section .vocab-accordion::-webkit-scrollbar {
+    width: 12px;
+}
+
 .vocab-section .vocab-accordion::-webkit-scrollbar-track {
     background: rgba(99, 102, 241, 0.08);
     border-radius: 6px;
     margin: 4px;
 }
+
 .vocab-section .vocab-accordion::-webkit-scrollbar-thumb {
     background: var(--primary);
     border-radius: 6px;
     border: 2px solid transparent;
     background-clip: padding-box;
 }
+
 .vocab-section .vocab-accordion::-webkit-scrollbar-thumb:hover {
     background: var(--primary-dark);
     background-clip: padding-box;
     border: 2px solid transparent;
 }
+
 .vocab-section .vocab-doc-body {
     /* Collapsed: hidden. Expanded: render normally — the parent accordion
        provides the scroll container. */
@@ -1342,23 +1860,37 @@ html[data-theme="midnight"] mark.highlight-mark {
     overflow: hidden;
     transition: max-height 0.32s ease;
 }
+
 .vocab-section .vocab-doc-item.expanded .vocab-doc-body {
     max-height: none;
     overflow: visible;
 }
-.section-header { display: flex; justify-content: space-between; align-items: center; }
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
 .section-title {
     font-family: var(--font-heading);
-    font-size: 19px; font-weight: 900;
+    font-size: 19px;
+    font-weight: 900;
     color: var(--primary-dark);
-    display: flex; align-items: center; gap: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     letter-spacing: -0.2px;
 }
+
 .section-title::before {
     content: '';
-    display: inline-block; width: 5px; height: 22px;
+    display: inline-block;
+    width: 5px;
+    height: 22px;
     background: var(--primary);
-    border-radius: 2px; flex-shrink: 0;
+    border-radius: 2px;
+    flex-shrink: 0;
 }
 
 .table-wrapper {
@@ -1367,22 +1899,48 @@ html[data-theme="midnight"] mark.highlight-mark {
     border-radius: var(--radius-md);
     background: var(--bg-card-solid);
 }
-.vocab-table { width: 100%; border-collapse: collapse; font-size: 14.5px; text-align: left; }
+
+.vocab-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14.5px;
+    text-align: left;
+}
+
 .vocab-table th {
     background: var(--bg-strip);
-    color: var(--primary-dark); font-weight: 900;
-    padding: 12px 16px; border-bottom: 1px solid var(--border-color);
+    color: var(--primary-dark);
+    font-weight: 900;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
     letter-spacing: 0.3px;
     font-size: 14px;
 }
+
 .vocab-table td {
-    padding: 12px 16px; border-bottom: 1px solid var(--border-color); vertical-align: middle;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
     font-size: 14px;
     font-weight: 600;
 }
-.vocab-table tbody tr:last-child td { border-bottom: none; }
-.vocab-table tbody tr:hover { background: var(--primary-light); }
-.word-badge { display: inline-flex; align-items: center; gap: 8px; font-weight: 900; color: var(--text-main); font-size: 15.5px; }
+
+.vocab-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.vocab-table tbody tr:hover {
+    background: var(--primary-light);
+}
+
+.word-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 900;
+    color: var(--text-main);
+    font-size: 15.5px;
+}
 
 /* "MỚI" badge — marks freshly painted (post-AI) vocabulary rows so the user
    immediately sees what they just added at the top of the table. */
@@ -1398,14 +1956,24 @@ html[data-theme="midnight"] mark.highlight-mark {
     box-shadow: 0 1px 3px rgba(239, 68, 68, 0.35);
     animation: vocab-new-badge-pulse 2s ease-in-out infinite;
 }
+
 @keyframes vocab-new-badge-pulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.08); }
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.08);
+    }
 }
+
 /* Subtle row background tint while a fresh row is waiting for its meaning. */
 .vocab-table tbody tr.vocab-row-is-new td {
     background: linear-gradient(90deg, rgba(245, 158, 11, 0.06), transparent 60%);
 }
+
 .vocab-table tbody tr.vocab-row-is-new:hover td {
     background: linear-gradient(90deg, rgba(245, 158, 11, 0.12), var(--primary-light) 60%);
 }
@@ -1413,19 +1981,28 @@ html[data-theme="midnight"] mark.highlight-mark {
 /* Inline spinner shown in the "Nghĩa ngữ cảnh" cell while free translation API is in-flight. */
 .vocab-pending-spinner {
     display: inline-block;
-    width: 11px; height: 11px;
+    width: 11px;
+    height: 11px;
     border: 2px solid var(--border-color);
     border-top-color: var(--primary-color, #6366f1);
     border-radius: 50%;
     animation: vocab-pending-spin 0.8s linear infinite;
     vertical-align: -2px;
 }
-@keyframes vocab-pending-spin { to { transform: rotate(360deg); } }
+
+@keyframes vocab-pending-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
 
 /* Category tags ? colour-coded to match highlight palette */
 .category-tag {
-    display: inline-block; padding: 2px 9px;
-    border-radius: 12px; font-size: 11px; font-weight: 700;
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
     white-space: nowrap;
     background: var(--bg-strip);
     color: var(--primary-dark);
@@ -1433,14 +2010,21 @@ html[data-theme="midnight"] mark.highlight-mark {
 }
 
 /* ========== VOCAB ACCORDION ========== */
-.vocab-accordion { display: flex; flex-direction: column; gap: 10px; }
+.vocab-accordion {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
 .vocab-empty-state {
-    text-align: center; padding: 28px 24px;
+    text-align: center;
+    padding: 28px 24px;
     color: var(--text-light);
     border: 1.5px dashed var(--border-color);
     border-radius: var(--radius-md);
     background: var(--bg-card-solid);
-    font-size: 13px; line-height: 1.7;
+    font-size: 13px;
+    line-height: 1.7;
 }
 
 .vocab-doc-item {
@@ -1451,64 +2035,154 @@ html[data-theme="midnight"] mark.highlight-mark {
     box-shadow: var(--shadow-sm);
     transition: box-shadow 0.2s ease;
 }
-.vocab-doc-item.expanded { box-shadow: var(--shadow-md); }
-.vocab-doc-item.expanded .vocab-doc-chevron { transform: rotate(90deg); }
+
+.vocab-doc-item.expanded {
+    box-shadow: var(--shadow-md);
+}
+
+.vocab-doc-item.expanded .vocab-doc-chevron {
+    transform: rotate(90deg);
+}
 
 .vocab-doc-header {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 11px 16px; cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 16px;
+    cursor: pointer;
     background: var(--bg-strip);
     user-select: none;
     border-bottom: 1px solid transparent;
     transition: background 0.18s ease, border-color 0.18s ease;
 }
-.vocab-doc-header:hover { background: var(--primary-light); }
-.vocab-doc-item.expanded .vocab-doc-header { border-bottom-color: var(--border-color); }
 
-.vocab-doc-title-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.vocab-doc-header:hover {
+    background: var(--primary-light);
+}
+
+.vocab-doc-item.expanded .vocab-doc-header {
+    border-bottom-color: var(--border-color);
+}
+
+.vocab-doc-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+}
+
 .vocab-doc-chevron {
-    flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
-    width: 20px; height: 20px; color: var(--primary-dark); transition: transform 0.25s ease;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: var(--primary-dark);
+    transition: transform 0.25s ease;
 }
+
 .vocab-doc-title {
-    font-family: var(--font-heading); font-weight: 900; font-size: 15.5px;
-    color: var(--primary-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-family: var(--font-heading);
+    font-weight: 900;
+    font-size: 15.5px;
+    color: var(--primary-dark);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
+
 .vocab-doc-meta {
-    flex-shrink: 0; font-size: 12.5px; font-weight: 800; color: var(--text-main);
-    background: var(--bg-card-solid); border: 1px solid var(--border-color);
-    padding: 3px 10px; border-radius: 10px; white-space: nowrap;
+    flex-shrink: 0;
+    font-size: 12.5px;
+    font-weight: 800;
+    color: var(--text-main);
+    background: var(--bg-card-solid);
+    border: 1px solid var(--border-color);
+    padding: 3px 10px;
+    border-radius: 10px;
+    white-space: nowrap;
 }
-.vocab-doc-actions { flex-shrink: 0; display: flex; align-items: center; gap: 6px; }
+
+.vocab-doc-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .vocab-doc-export-pdf {
-    background: var(--bg-card-solid); border: 1px solid var(--border-color);
-    color: var(--primary-dark); font-size: 11px; font-weight: 700;
-    padding: 3px 10px; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap;
+    background: var(--bg-card-solid);
+    border: 1px solid var(--border-color);
+    color: var(--primary-dark);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    white-space: nowrap;
     transition: all 0.15s ease;
 }
+
 .vocab-doc-export-pdf:hover {
-    background: var(--primary); color: #ffffff; border-color: var(--primary);
+    background: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary);
     transform: translateY(-1px);
 }
-.vocab-doc-export-pdf:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.vocab-doc-export-pdf:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
 .vocab-doc-refresh {
-    background: var(--bg-card-solid); border: 1px solid var(--border-color);
-    color: var(--primary-dark); font-size: 11px; font-weight: 700;
-    padding: 3px 9px; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap;
+    background: var(--bg-card-solid);
+    border: 1px solid var(--border-color);
+    color: var(--primary-dark);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    white-space: nowrap;
     transition: all 0.15s ease;
 }
-.vocab-doc-refresh:hover { background: var(--primary-light); border-color: var(--border-color-hover); }
-.vocab-doc-refresh:disabled { opacity: 0.55; cursor: not-allowed; }
-.vocab-doc-delete {
-    background: transparent; border: 1px solid transparent;
-    color: var(--text-light); font-size: 15px; padding: 3px 7px;
-    border-radius: var(--radius-sm); cursor: pointer; transition: all 0.15s ease;
+
+.vocab-doc-refresh:hover {
+    background: var(--primary-light);
+    border-color: var(--border-color-hover);
 }
-.vocab-doc-delete:hover { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
+
+.vocab-doc-refresh:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.vocab-doc-delete {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-light);
+    font-size: 15px;
+    padding: 3px 7px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.vocab-doc-delete:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #b91c1c;
+}
 
 /* `.vocab-doc-body` rules are defined earlier (near `.vocab-section`) so the
    collapsed/expanded states share the same scroll container as the section. */
-.vocab-doc-body-inner { padding: 14px 16px 18px; }
+.vocab-doc-body-inner {
+    padding: 14px 16px 18px;
+}
 
 /* ========== VOCAB TABLE LABELS ========== */
 .ipa-text {
@@ -1518,12 +2192,31 @@ html[data-theme="midnight"] mark.highlight-mark {
     font-size: 14.5px;
     letter-spacing: 0.3px;
 }
+
 html[data-theme="dark"] .ipa-text,
 html[data-theme="cosmos"] .ipa-text,
-html[data-theme="midnight"] .ipa-text { color: #38bdf8; }
-.meaning-text { font-weight: 900; color: var(--primary-dark); font-size: 15px; }
-.example-text { color: var(--text-muted); font-size: 13px; font-weight: 600; }
-.meaning-wrap { display: flex; flex-direction: column; gap: 6px; }
+html[data-theme="midnight"] .ipa-text {
+    color: #38bdf8;
+}
+
+.meaning-text {
+    font-weight: 900;
+    color: var(--primary-dark);
+    font-size: 15px;
+}
+
+.example-text {
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.meaning-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
 .example-block {
     margin-top: 6px;
     padding: 6px 0 0 8px;
@@ -1532,6 +2225,7 @@ html[data-theme="midnight"] .ipa-text { color: #38bdf8; }
     flex-direction: column;
     gap: 3px;
 }
+
 .example-label {
     font-size: 10.5px;
     font-weight: 800;
@@ -1540,12 +2234,14 @@ html[data-theme="midnight"] .ipa-text { color: #38bdf8; }
     color: var(--primary);
     opacity: 0.85;
 }
+
 .example-en {
     font-size: 13px;
     font-style: italic;
     color: var(--text-main);
     line-height: 1.4;
 }
+
 .example-en strong {
     font-weight: 800;
     color: var(--primary-dark);
@@ -1554,11 +2250,13 @@ html[data-theme="midnight"] .ipa-text { color: #38bdf8; }
     border-radius: 0;
     text-decoration: none;
 }
+
 .example-vi {
     font-size: 12.5px;
     color: var(--text-light);
     line-height: 1.4;
 }
+
 .example-vi strong {
     font-weight: 800;
     color: var(--primary-dark);
@@ -1568,118 +2266,203 @@ html[data-theme="midnight"] .ipa-text { color: #38bdf8; }
     text-decoration: none;
 }
 
-.audio-btn { background: none; border: none; cursor: pointer; font-size: 17px; color: var(--primary); transition: transform 0.15s ease; }
-.audio-btn:hover { transform: scale(1.22); }
+.audio-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 17px;
+    color: var(--primary);
+    transition: transform 0.15s ease;
+}
+
+.audio-btn:hover {
+    transform: scale(1.22);
+}
 
 /* ========== VOCAB DETAIL POPUP (per-word explanation window) ========== */
 .vocab-detail-btn {
     background: var(--primary-light);
     border: 1px solid var(--border-color);
     color: var(--primary-dark);
-    font-size: 11px; font-weight: 700;
+    font-size: 11px;
+    font-weight: 700;
     padding: 4px 10px;
     border-radius: var(--radius-sm);
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.15s ease;
 }
+
 .vocab-detail-btn:hover {
     background: var(--primary);
     color: #fff;
     border-color: var(--primary);
 }
-tr.vocab-row-clickable { cursor: pointer; transition: background 0.15s ease; }
-tr.vocab-row-clickable:hover { background: var(--primary-light); }
+
+tr.vocab-row-clickable {
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+tr.vocab-row-clickable:hover {
+    background: var(--primary-light);
+}
 
 .vocab-detail-overlay {
-    position: fixed; inset: 0;
+    position: fixed;
+    inset: 0;
     background: rgba(20, 14, 8, 0.55);
     backdrop-filter: blur(6px);
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     z-index: 2100;
     padding: 24px;
     animation: vocabDetailFade 0.18s ease-out;
 }
-@keyframes vocabDetailFade { from { opacity: 0; } to { opacity: 1; } }
+
+@keyframes vocabDetailFade {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
 
 .vocab-detail-card {
-    width: 100%; max-width: 640px;
+    width: 100%;
+    max-width: 640px;
     max-height: calc(100vh - 48px);
     background: var(--bg-card-solid);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
-    display: flex; flex-direction: column;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
-    animation: vocabDetailPop 0.22s cubic-bezier(.2,.8,.3,1.2);
+    animation: vocabDetailPop 0.22s cubic-bezier(.2, .8, .3, 1.2);
 }
-@keyframes vocabDetailPop { from { transform: translateY(20px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+
+@keyframes vocabDetailPop {
+    from {
+        transform: translateY(20px) scale(0.96);
+        opacity: 0;
+    }
+
+    to {
+        transform: none;
+        opacity: 1;
+    }
+}
 
 .vocab-detail-header {
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 12px;
     padding: 16px 20px;
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-strip);
     flex-shrink: 0;
 }
+
 .vocab-detail-title-wrap {
-    display: flex; align-items: center; gap: 12px;
-    min-width: 0; flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
 }
+
 .vocab-detail-color-dot {
-    width: 16px; height: 16px; border-radius: 50%;
-    border: 1.5px solid rgba(0,0,0,0.12);
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(0, 0, 0, 0.12);
     flex-shrink: 0;
 }
+
 .vocab-detail-title {
     font-family: var(--font-heading);
-    font-size: 21px; font-weight: 800;
+    font-size: 21px;
+    font-weight: 800;
     color: var(--primary-dark);
-    margin: 0; line-height: 1.25;
+    margin: 0;
+    line-height: 1.25;
     word-break: break-word;
 }
+
 .vocab-detail-sub {
-    display: flex; align-items: center; gap: 8px;
-    margin-top: 4px; flex-wrap: wrap;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    flex-wrap: wrap;
 }
+
 .vocab-detail-header-actions {
-    display: flex; align-items: center; gap: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     flex-shrink: 0;
 }
+
 .vocab-detail-audio-btn,
 .vocab-detail-close-btn {
     background: var(--bg-card-solid);
     border: 1px solid var(--border-color);
     color: var(--primary-dark);
-    width: 34px; height: 34px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
     cursor: pointer;
     font-size: 16px;
-    display: inline-flex; align-items: center; justify-content: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     transition: all 0.15s ease;
 }
-.vocab-detail-audio-btn:hover { background: var(--primary); color: #fff; transform: scale(1.1); }
-.vocab-detail-close-btn { font-size: 22px; }
-.vocab-detail-close-btn:hover { background: #fee2e2; color: #b91c1c; }
 
-.vocab-detail-card > .vocab-detail-meaning-box,
-.vocab-detail-card > .vocab-detail-section {
+.vocab-detail-audio-btn:hover {
+    background: var(--primary);
+    color: #fff;
+    transform: scale(1.1);
+}
+
+.vocab-detail-close-btn {
+    font-size: 22px;
+}
+
+.vocab-detail-close-btn:hover {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.vocab-detail-card>.vocab-detail-meaning-box,
+.vocab-detail-card>.vocab-detail-section {
     /* Scrollable inner area: any section that overflows makes the whole card scroll */
 }
+
 .vocab-detail-meaning-box {
     padding: 16px 20px 12px;
     background: var(--primary-light);
     border-bottom: 1px dashed var(--border-color);
 }
+
 .vocab-detail-meaning-label {
-    font-size: 11px; font-weight: 800;
-    text-transform: uppercase; letter-spacing: 0.4px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
     color: var(--primary-dark);
     margin-bottom: 6px;
 }
+
 .vocab-detail-meaning-text {
-    font-size: 16px; font-weight: 700;
+    font-size: 16px;
+    font-weight: 700;
     color: var(--text-main);
     line-height: 1.5;
 }
@@ -1688,12 +2471,17 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     /* The card itself becomes the scroll container: header fixed,
        everything below scrolls when content is long. */
 }
+
 .vocab-detail-card {
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--primary) transparent;
 }
-.vocab-detail-card::-webkit-scrollbar { width: 8px; }
+
+.vocab-detail-card::-webkit-scrollbar {
+    width: 8px;
+}
+
 .vocab-detail-card::-webkit-scrollbar-thumb {
     background: var(--primary);
     border-radius: 4px;
@@ -1703,23 +2491,36 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     padding: 14px 20px;
     border-bottom: 1px dashed var(--border-color);
 }
-.vocab-detail-section:last-child { border-bottom: none; padding-bottom: 22px; }
+
+.vocab-detail-section:last-child {
+    border-bottom: none;
+    padding-bottom: 22px;
+}
 
 .vocab-detail-section-label {
-    font-size: 12px; font-weight: 800;
-    text-transform: uppercase; letter-spacing: 0.4px;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
     color: var(--primary-dark);
     margin-bottom: 8px;
-    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
 }
+
 .vocab-detail-section-label-en {
-    font-size: 10.5px; font-weight: 600;
+    font-size: 10.5px;
+    font-weight: 600;
     color: var(--text-muted);
-    text-transform: none; letter-spacing: normal;
+    text-transform: none;
+    letter-spacing: normal;
 }
 
 .vocab-detail-explanation-text {
-    font-size: 14px; line-height: 1.7;
+    font-size: 14px;
+    line-height: 1.7;
     color: var(--text-main);
     padding: 10px 12px;
     background: var(--bg-card-solid);
@@ -1728,7 +2529,8 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
 }
 
 .vocab-detail-example-en {
-    font-size: 15px; line-height: 1.6;
+    font-size: 15px;
+    line-height: 1.6;
     color: var(--text-main);
     font-weight: 600;
     padding: 10px 12px;
@@ -1737,6 +2539,7 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     border: 1px solid var(--border-color);
     font-style: italic;
 }
+
 .vocab-detail-example-vi {
     font-size: 13.5px;
     color: var(--accent-3);
@@ -1746,9 +2549,13 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
 }
 
 .vocab-detail-structures-list {
-    margin: 0; padding: 0;
-    display: flex; flex-direction: column; gap: 10px;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
+
 .vocab-detail-structure-item {
     padding: 10px 14px;
     background: var(--primary-light);
@@ -1758,6 +2565,7 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     flex-direction: column;
     gap: 6px;
 }
+
 .vocab-detail-structure-pattern {
     font-size: 13.5px;
     line-height: 1.55;
@@ -1766,6 +2574,7 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     font-family: 'Consolas', 'Monaco', monospace;
     letter-spacing: 0.1px;
 }
+
 .vocab-detail-structure-pattern-tag {
     display: inline-block;
     font-size: 9.5px;
@@ -1779,6 +2588,7 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     font-family: var(--font-sans);
     vertical-align: middle;
 }
+
 .vocab-detail-structure-example-en {
     font-size: 13.5px;
     line-height: 1.55;
@@ -1787,12 +2597,14 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     padding-left: 8px;
     border-left: 2px solid var(--border-color);
 }
+
 .vocab-detail-structure-example-vi {
     font-size: 13.5px;
     line-height: 1.55;
     color: var(--text-muted);
     padding-left: 8px;
 }
+
 .vocab-detail-empty {
     font-size: 13px;
     color: var(--text-muted);
@@ -1804,65 +2616,133 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
 
 /* ========== MODAL ========== */
 .modal-overlay {
-    position: fixed; inset: 0;
+    position: fixed;
+    inset: 0;
     background: rgba(20, 14, 8, 0.48);
     backdrop-filter: blur(5px);
-    display: none; align-items: center; justify-content: center;
-    z-index: 2000; opacity: 0; pointer-events: none;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    opacity: 0;
+    pointer-events: none;
     transition: opacity 0.22s ease;
 }
+
 .modal-overlay:not(.active) {
     display: none !important;
     opacity: 0 !important;
     pointer-events: none !important;
 }
+
 .modal-overlay:not(.active) * {
     pointer-events: none !important;
 }
+
 .modal-overlay.active {
     display: flex !important;
     opacity: 1 !important;
     pointer-events: auto !important;
 }
+
 .modal-card {
-    width: 90%; max-width: 560px;
+    width: 90%;
+    max-width: 560px;
     background: var(--bg-card-solid);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     padding: 26px;
     box-shadow: var(--shadow-lg);
-    display: flex; flex-direction: column; gap: 14px;
-    max-height: 90vh; overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-height: 90vh;
+    overflow-y: auto;
     pointer-events: auto;
 }
-.modal-header {
-    display: flex; justify-content: space-between; align-items: center;
-    border-bottom: 1px solid var(--border-color); padding-bottom: 12px;
-}
-.modal-title { font-family: var(--font-heading); font-size: 18px; font-weight: 800; color: var(--primary-dark); }
-.modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); line-height: 1; }
-.modal-close:hover { color: var(--text-main); }
 
-.form-group { display: flex; flex-direction: column; gap: 6px; }
-.form-label { font-size: 13px; font-weight: 600; color: var(--text-main); }
-.form-input, .form-select {
-    padding: 8px 12px; border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: 13.5px;
-    outline: none; background: var(--bg-card-solid); color: var(--text-main);
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 12px;
 }
-.form-input:focus, .form-select:focus {
+
+.modal-title {
+    font-family: var(--font-heading);
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--primary-dark);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 22px;
+    cursor: pointer;
+    color: var(--text-muted);
+    line-height: 1;
+}
+
+.modal-close:hover {
+    color: var(--text-main);
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.form-input,
+.form-select {
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    outline: none;
+    background: var(--bg-card-solid);
+    color: var(--text-main);
+}
+
+.form-input:focus,
+.form-select:focus {
     border-color: var(--primary);
     box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 /* ========== PROGRESS BAR ========== */
-.progress-bar-container { height: 5px; background: var(--bg-strip); border-radius: 3px; overflow: hidden; margin-top: 8px; }
-.progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent)); width: 0%; transition: width 0.2s ease; }
+.progress-bar-container {
+    height: 5px;
+    background: var(--bg-strip);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    width: 0%;
+    transition: width 0.2s ease;
+}
 
 /* ========== TYPOGRAPHY CONTROLS BAR ========== */
 .typography-controls-bar {
-    display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
-    padding: 8px 16px; background: var(--bg-card-solid);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 8px 16px;
+    background: var(--bg-card-solid);
     border-bottom: 1px solid var(--border-color);
 }
 
@@ -1876,7 +2756,10 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     gap: 6px;
     flex-wrap: nowrap;
 }
-.app-header .typography-controls-bar .typo-label { display: none; }
+
+.app-header .typography-controls-bar .typo-label {
+    display: none;
+}
 
 /* Compact trigger label inside the header — only show the font name.
    The dropdown menu still shows the full name + "(Serif thanh lịch)" etc. */
@@ -1885,128 +2768,178 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     font-size: 11px;
     font-weight: 700;
 }
-.typo-label { font-size: 11px; font-weight: 600; color: var(--text-muted); white-space: nowrap; letter-spacing: 0.2px; }
+
+.typo-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+    letter-spacing: 0.2px;
+}
 
 /* ===== Pill-shaped groups for A-/A+, slider, font select ===== */
 .font-size-controls,
 .font-weight-controls,
 .font-family-controls {
-    display: flex; align-items: center; gap: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     background: var(--primary-light);
     padding: 4px 10px;
-    border-radius: 999px;               /* fully rounded pill */
+    border-radius: 999px;
+    /* fully rounded pill */
     border: 1px solid var(--border-color);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.4);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
     transition: border-color 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
-    position: relative;                /* anchor for the custom dropdown */
+    position: relative;
+    /* anchor for the custom dropdown */
 }
+
 .font-size-controls:hover,
 .font-weight-controls:hover,
 .font-family-controls:hover {
     border-color: var(--border-color-hover);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 2px 6px rgba(60,45,35,0.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 2px 6px rgba(60, 45, 35, 0.06);
 }
 
 .font-btn {
-    background: none; border: none;
-    font-size: 12px; font-weight: 700;
+    background: none;
+    border: none;
+    font-size: 12px;
+    font-weight: 700;
     color: var(--primary-dark);
     cursor: pointer;
-    padding: 4px 9px; border-radius: 999px;
+    padding: 4px 9px;
+    border-radius: 999px;
     min-width: 28px;
     transition: background-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
 }
+
 .font-btn:hover {
     background: var(--bg-card-solid);
     color: var(--primary);
 }
-.font-btn:active { transform: scale(0.92); }
+
+.font-btn:active {
+    transform: scale(0.92);
+}
 
 /* ===== Slider — soft gradient track + glowing thumb ===== */
 .typo-slider {
-    -webkit-appearance: none; appearance: none;
-    width: 100px; height: 6px; border-radius: 999px;
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100px;
+    height: 6px;
+    border-radius: 999px;
     background: linear-gradient(90deg,
-        var(--primary) 0%,
-        var(--primary) var(--slider-progress, 50%),
-        var(--border-color) var(--slider-progress, 50%),
-        var(--border-color) 100%);
-    outline: none; cursor: pointer;
+            var(--primary) 0%,
+            var(--primary) var(--slider-progress, 50%),
+            var(--border-color) var(--slider-progress, 50%),
+            var(--border-color) 100%);
+    outline: none;
+    cursor: pointer;
     transition: filter 0.2s ease;
 }
-.typo-slider:hover { filter: brightness(1.04); }
+
+.typo-slider:hover {
+    filter: brightness(1.04);
+}
+
 .typo-slider::-webkit-slider-thumb {
-    -webkit-appearance: none; appearance: none;
-    width: 16px; height: 16px; border-radius: 50%;
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
     background: var(--bg-card-solid);
     border: 2.5px solid var(--primary);
-    box-shadow: 0 2px 6px rgba(60,45,35,0.28);
+    box-shadow: 0 2px 6px rgba(60, 45, 35, 0.28);
     cursor: pointer;
     transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
+
 .typo-slider::-webkit-slider-thumb:hover {
     transform: scale(1.22);
-    box-shadow: 0 0 0 6px rgba(140, 94, 60, 0.15), 0 2px 8px rgba(60,45,35,0.32);
+    box-shadow: 0 0 0 6px rgba(140, 94, 60, 0.15), 0 2px 8px rgba(60, 45, 35, 0.32);
 }
+
 .typo-slider::-webkit-slider-thumb:active {
     transform: scale(1.15);
     box-shadow: 0 0 0 8px rgba(140, 94, 60, 0.22);
 }
+
 .typo-slider::-moz-range-thumb {
-    width: 16px; height: 16px; border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
     background: var(--bg-card-solid);
     border: 2.5px solid var(--primary);
-    box-shadow: 0 2px 6px rgba(60,45,35,0.28);
+    box-shadow: 0 2px 6px rgba(60, 45, 35, 0.28);
     cursor: pointer;
     transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
+
 .typo-slider::-moz-range-thumb:hover {
     transform: scale(1.22);
     box-shadow: 0 0 0 6px rgba(140, 94, 60, 0.15);
 }
+
 .typo-slider::-moz-range-track {
-    height: 6px; border-radius: 999px;
+    height: 6px;
+    border-radius: 999px;
     background: var(--border-color);
 }
 
 /* ===== Font family custom dropdown — fully themed, replaces native browser popup ===== */
 .typo-select-native {
-    position: absolute; width: 1px; height: 1px;
-    opacity: 0; pointer-events: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
     /* Visually hidden but still updates state via JS .value = ... */
 }
+
 .typo-select-trigger {
-    display: inline-flex; align-items: center; gap: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     background: transparent;
     border: none;
     padding: 4px 8px;
     border-radius: 999px;
-    font-size: 11.5px; font-weight: 700;
+    font-size: 11.5px;
+    font-weight: 700;
     color: var(--primary-dark);
     cursor: pointer;
     max-width: 210px;
     transition: background-color 0.2s ease, color 0.2s ease;
     font-family: inherit;
 }
+
 .typo-select-trigger:hover {
     background: var(--bg-card-solid);
     color: var(--primary);
 }
+
 .typo-select-trigger:focus-visible {
     outline: 2px solid var(--primary);
     outline-offset: 1px;
 }
+
 .typo-select-trigger #fontFamilyTriggerLabel {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 170px;
 }
+
 .typo-select-chevron {
     color: var(--primary-dark);
     flex-shrink: 0;
     transition: transform 0.25s ease, color 0.2s ease;
 }
+
 .typo-select-trigger[aria-expanded="true"] .typo-select-chevron {
     transform: rotate(180deg);
     color: var(--primary);
@@ -2014,10 +2947,14 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
 
 .typo-select-dropdown {
     position: absolute;
-    top: calc(100% + 6px); left: 50%;
+    top: calc(100% + 6px);
+    left: 50%;
     transform: translateX(-50%) translateY(-4px);
-    min-width: 220px; max-width: 260px;
-    list-style: none; margin: 0; padding: 6px;
+    min-width: 220px;
+    max-width: 260px;
+    list-style: none;
+    margin: 0;
+    padding: 6px;
     background: var(--bg-card-solid);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
@@ -2031,11 +2968,13 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     max-height: 320px;
     overflow-y: auto;
 }
+
 .typo-select-dropdown.open {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
     pointer-events: auto;
 }
+
 .typo-select-dropdown li {
     padding: 8px 12px;
     border-radius: var(--radius-sm);
@@ -2045,17 +2984,20 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     transition: background-color 0.15s ease, color 0.15s ease, padding-left 0.15s ease;
     user-select: none;
 }
+
 .typo-select-dropdown li:hover,
 .typo-select-dropdown li.active {
     background: var(--primary-light);
     color: var(--primary-dark);
     padding-left: 16px;
 }
+
 .typo-select-dropdown li.selected {
     background: var(--primary);
     color: #fff;
     font-weight: 700;
 }
+
 .typo-select-dropdown li.selected::before {
     content: '✓';
     margin-right: 6px;
@@ -2064,7 +3006,9 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
 
 /* ========== DECORATIVE DOODLES (SVG stickers) in main area ========== */
 .doodle-blob {
-    position: fixed; pointer-events: none; z-index: 0;
+    position: fixed;
+    pointer-events: none;
+    z-index: 0;
     opacity: var(--doodle-opacity);
 }
 
@@ -2082,6 +3026,7 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     border: 1px dashed var(--border-color);
     border-radius: var(--radius-md);
 }
+
 .btn-export-pdf-inline {
     display: inline-flex;
     align-items: center;
@@ -2092,10 +3037,12 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     box-shadow: 0 2px 8px rgba(140, 94, 60, 0.15);
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
+
 .btn-export-pdf-inline:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 14px rgba(140, 94, 60, 0.25);
 }
+
 .vocab-export-hint {
     font-size: 12px;
     color: var(--text-muted);
@@ -2105,16 +3052,35 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
 
 /* ========== ANIMATED PREMIUM PDF BUTTONS ========== */
 @keyframes pdfBtnShimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
 }
+
 @keyframes pdfBtnPulse {
-    0%, 100% { box-shadow: 0 4px 15px rgba(37, 99, 235, 0.35), 0 0 0 0 rgba(37, 99, 235, 0.4); }
-    50% { box-shadow: 0 6px 22px rgba(37, 99, 235, 0.5), 0 0 0 8px rgba(37, 99, 235, 0); }
+
+    0%,
+    100% {
+        box-shadow: 0 4px 15px rgba(37, 99, 235, 0.35), 0 0 0 0 rgba(37, 99, 235, 0.4);
+    }
+
+    50% {
+        box-shadow: 0 6px 22px rgba(37, 99, 235, 0.5), 0 0 0 8px rgba(37, 99, 235, 0);
+    }
 }
+
 @keyframes pdfBtnSpin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .btn-pdf-animated {
@@ -2128,26 +3094,33 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     justify-content: center !important;
     gap: 8px !important;
 }
+
 .btn-pdf-animated * {
     pointer-events: none !important;
 }
+
 .btn-pdf-animated::before {
     content: '';
     position: absolute;
-    top: 0; left: -150%;
-    width: 100%; height: 100%;
+    top: 0;
+    left: -150%;
+    width: 100%;
+    height: 100%;
     background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.35) 50%, transparent 100%);
     transform: skewX(-20deg);
     transition: left 0.6s ease;
     pointer-events: none;
 }
+
 .btn-pdf-animated:hover::before {
     left: 150%;
 }
+
 .btn-pdf-animated:hover {
     transform: translateY(-2.5px) scale(1.025) !important;
     filter: brightness(1.05) !important;
 }
+
 .btn-pdf-animated:active {
     transform: translateY(1px) scale(0.97) !important;
 }
@@ -2161,6 +3134,7 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     padding: 8px 18px !important;
     font-size: 13px !important;
 }
+
 .btn-pdf-primary:hover {
     box-shadow: 0 6px 20px rgba(37, 99, 235, 0.48), 0 0 12px rgba(59, 130, 246, 0.4) !important;
 }
@@ -2174,6 +3148,7 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     padding: 8px 18px !important;
     font-size: 13px !important;
 }
+
 .btn-pdf-secondary:hover {
     box-shadow: 0 6px 20px rgba(140, 94, 60, 0.45), 0 0 12px rgba(192, 133, 82, 0.4) !important;
 }
@@ -2187,12 +3162,14 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     padding: 8px 18px !important;
     font-size: 13px !important;
 }
+
 .btn-pdf-print:hover {
     box-shadow: 0 6px 20px rgba(5, 150, 105, 0.45), 0 0 12px rgba(52, 211, 153, 0.4) !important;
 }
 
 /* ========== COMPREHENSIVE PRINT STYLES (Fixes PDF output visibility) ========== */
 @media print {
+
     /* Hide all main app non-printable interface elements */
     header.app-header,
     .doodle-blob,
@@ -2208,7 +3185,8 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     }
 
     /* Force background, body, and html to auto height and white background */
-    html, body {
+    html,
+    body {
         background: #ffffff !important;
         color: #1e293b !important;
         margin: 0 !important;
@@ -2221,7 +3199,8 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     }
 
     /* Expand Modal & Container to 100% full printable layout */
-    .modal-overlay, #pdfPreviewModal {
+    .modal-overlay,
+    #pdfPreviewModal {
         position: static !important;
         background: transparent !important;
         backdrop-filter: none !important;
@@ -2243,7 +3222,9 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
         background: #ffffff !important;
     }
 
-    #pdfModalContainer, .lc-pdf-wrapper, .lc-pdf-root {
+    #pdfModalContainer,
+    .lc-pdf-wrapper,
+    .lc-pdf-root {
         width: 100% !important;
         max-width: 100% !important;
         padding: 0 !important;
@@ -2256,14 +3237,20 @@ tr.vocab-row-clickable:hover { background: var(--primary-light); }
     }
 
     /* Prevent breaking table rows and cards across page splits */
-    .lc-reading-table, .lc-table {
+    .lc-reading-table,
+    .lc-table {
         page-break-inside: auto;
     }
-    .lc-reading-p-row, .lc-table-row, tr {
+
+    .lc-reading-p-row,
+    .lc-table-row,
+    tr {
         page-break-inside: avoid !important;
         break-inside: avoid !important;
     }
-    .lc-header, .lc-section-title {
+
+    .lc-header,
+    .lc-section-title {
         page-break-after: avoid !important;
         break-after: avoid !important;
     }
@@ -2286,10 +3273,12 @@ html[data-theme="cosmos"] [style*="background: #fffbeb"] {
     background: var(--primary-light) !important;
     border-color: var(--border-color) !important;
 }
+
 html[data-theme="dark"] [style*="color: #92400e"],
 html[data-theme="cosmos"] [style*="color: #92400e"] {
     color: var(--primary-dark) !important;
 }
+
 html[data-theme="dark"] [style*="background: var(--primary-light)"][style*="border: 1px solid var(--border-color)"],
 html[data-theme="cosmos"] [style*="background: var(--primary-light)"][style*="border: 1px solid var(--border-color)"] {
     background: var(--primary-light) !important;
@@ -2310,6 +3299,7 @@ html[data-theme="midnight"] mark.highlight-mark {
     filter: saturate(1.3) brightness(1.05);
     box-shadow: none !important;
 }
+
 html[data-theme="dark"] mark.highlight-mark:hover,
 html[data-theme="cosmos"] mark.highlight-mark:hover,
 html[data-theme="midnight"] mark.highlight-mark:hover {
@@ -2319,44 +3309,68 @@ html[data-theme="midnight"] mark.highlight-mark:hover {
 
 /* Section title decorative bar adapts to primary colour */
 html[data-theme="dark"] .section-title::before,
-html[data-theme="cosmos"] .section-title::before { background: var(--primary); }
+html[data-theme="cosmos"] .section-title::before {
+    background: var(--primary);
+}
 
 /* ===================================================================
    GLOBAL READABILITY BOOST (LAST-RULE WINS — uses !important so it
    beats any per-component font-weight: 600/700 set earlier in the file)
    =================================================================== */
-body, body * {
+body,
+body * {
     /* Universal floor — every text element on the page inherits at least
        weight 600 (semibold). Components opt-up via !important below. */
     font-weight: 600 !important;
 }
+
 /* Opt-UP overrides for chrome/UI text — these should be chunkier than body */
-.btn, .btn-sm,
-.theme-toggle, .pane-header, .pane-header *,
-.brand-title, .brand-subtitle,
-.app-header, .app-header *,
-.section-title, .section-title *,
-.vocab-doc-title, .vocab-doc-meta,
-.modal-title, .modal-title *,
-.form-label, .typo-label,
-.lookup-popup-note, .tooltip-act-btn,
-#wordCountBadge, #transStatusBadge,
-.vocab-empty-state, .vocab-export-hint,
-.example-text, .example-vi,
+.btn,
+.btn-sm,
+.theme-toggle,
+.pane-header,
+.pane-header *,
+.brand-title,
+.brand-subtitle,
+.app-header,
+.app-header *,
+.section-title,
+.section-title *,
+.vocab-doc-title,
+.vocab-doc-meta,
+.modal-title,
+.modal-title *,
+.form-label,
+.typo-label,
+.lookup-popup-note,
+.tooltip-act-btn,
+#wordCountBadge,
+#transStatusBadge,
+.vocab-empty-state,
+.vocab-export-hint,
+.example-text,
+.example-vi,
 .vocab-detail-empty {
     font-weight: 800 !important;
 }
+
 /* Opt-UP to 900 — the heaviest, most attention-grabbing pieces */
-.ipa-text, .meaning-text, .word-badge, .brand-title {
+.ipa-text,
+.meaning-text,
+.word-badge,
+.brand-title {
     font-weight: 900 !important;
 }
 
 /* Reading canvas & editor: respect the user's font-weight slider.
    The slider sets --reading-font-weight (200..900); the rule below uses
    that variable so dragging the slider truly changes the reading text. */
-.text-display-content, .editor-input, .text-display-content p {
+.text-display-content,
+.editor-input,
+.text-display-content p {
     font-weight: var(--reading-font-weight, 800) !important;
 }
+
 /* Highlights inherit the surrounding reading weight — no forced 900 here
    so the slider truly controls how bold highlights look. */
 mark.highlight-mark {
@@ -2367,8 +3381,11 @@ mark.highlight-mark {
    MOBILE RESPONSIVE ENGINE (iOS & Android Phone & Tablet Support)
    =================================================================== */
 @media screen and (max-width: 860px) {
+
     /* Touch-friendly inputs & zoomed prevention on iOS */
-    input[type="text"], textarea, select {
+    input[type="text"],
+    textarea,
+    select {
         font-size: 15px !important;
     }
 
@@ -2379,16 +3396,19 @@ mark.highlight-mark {
         align-items: stretch !important;
         gap: 12px !important;
     }
+
     .header-brand {
         justify-content: space-between !important;
         width: 100% !important;
     }
+
     .header-toolbar {
         width: 100% !important;
         justify-content: flex-start !important;
         flex-wrap: wrap !important;
         gap: 8px !important;
     }
+
     .btn {
         padding: 8px 14px !important;
         font-size: 12.5px !important;
@@ -2402,22 +3422,26 @@ mark.highlight-mark {
         min-height: unset !important;
         gap: 16px !important;
     }
+
     .pane {
         width: 100% !important;
         height: auto !important;
         min-height: 320px !important;
         flex: 1 1 100% !important;
     }
+
     .pane-resizer {
         display: none !important;
     }
 
     /* Reading paragraphs touch spacing */
-    .paragraph-block, .reader-paragraph {
+    .paragraph-block,
+    .reader-paragraph {
         font-size: 15px !important;
         line-height: 1.85 !important;
         padding: 12px 14px !important;
     }
+
     mark.highlight-mark {
         padding: 2px 6px !important;
         margin: 1px 2px !important;
@@ -2433,11 +3457,13 @@ mark.highlight-mark {
         margin: 8px auto !important;
         border-radius: 12px !important;
     }
+
     .lc-reading-table {
         display: block !important;
         overflow-x: auto !important;
         -webkit-overflow-scrolling: touch !important;
     }
+
     .lc-reading-p-row td {
         padding: 10px 12px !important;
         font-size: 13px !important;
@@ -2448,10 +3474,12 @@ mark.highlight-mark {
     .vocab-section {
         padding: 14px 12px !important;
     }
+
     .vocab-table-wrapper {
         overflow-x: auto !important;
         -webkit-overflow-scrolling: touch !important;
     }
+
     .lc-table {
         min-width: 600px !important;
     }
@@ -2462,7 +3490,9 @@ mark.highlight-mark {
         gap: 8px !important;
         justify-content: space-between !important;
     }
-    .font-size-controls, .font-family-controls {
+
+    .font-size-controls,
+    .font-family-controls {
         padding: 3px 8px !important;
     }
 }
@@ -2471,18 +3501,22 @@ mark.highlight-mark {
     .app-title {
         font-size: 17px !important;
     }
+
     .header-tagline {
         font-size: 10px !important;
     }
+
     .btn {
         width: 100% !important;
         justify-content: center !important;
     }
+
     .header-toolbar {
         display: grid !important;
         grid-template-columns: repeat(2, 1fr) !important;
         gap: 6px !important;
     }
+
     .header-toolbar .btn {
         font-size: 11.5px !important;
         padding: 7px 8px !important;

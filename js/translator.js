@@ -242,7 +242,7 @@ ${src}
                         additionalProperties: false,
                         properties: {
                             key: { type: 'string', description: 'English key copied verbatim from the numbered list.' },
-                            vn:  { type: 'string', description: 'Verbatim Vietnamese span found inside markedText.' }
+                            vn: { type: 'string', description: 'Verbatim Vietnamese span found inside markedText.' }
                         },
                         required: ['key', 'vn']
                     }
@@ -1198,7 +1198,7 @@ ${textChunk}
 
         const data = await response.json();
         const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        
+
         let jsonResult;
         try {
             jsonResult = JSON.parse(rawText.replace(/```json|```/g, '').trim());
@@ -1502,76 +1502,76 @@ ${textChunk}
             result.breakdown = await this._fillBreakdownGaps(result.breakdown);
         }
 
-// Correct the top-level (header) IPA so it is never a wrong estimate.
-// Single word: reuse the (now accurate) breakdown IPA, but only if it's a real
-// phonetic string — the breakdown may have been left as '/.../' if neither dict
-// nor AI knew it, and we want to keep that placeholder visible.
-// Phrase: if AI gave no phrase IPA and the dict has no real entry, ask AI.
-const dictHasPhrase = dict && dict.hasRealEntry(cleanWord);
-const aiGaveIpa = result.source === 'ai' && result.ipa && !/\.\.\./.test(result.ipa) && !!this._sanitizeAiIpa(result.ipa, cleanWord);
-if (!isPhrase && Array.isArray(result.breakdown) && result.breakdown[0] && result.breakdown[0].ipa && !/\.\.\./.test(result.breakdown[0].ipa)) {
-    result.ipa = result.breakdown[0].ipa;
-} else if (!isPhrase && (!result.ipa || /\.\.\./.test(result.ipa))) {
-    // Single word but we still don't have a verified IPA — fetch one now.
-    const map = await this._fetchIpaForWords([cleanWord]).catch(() => ({}));
-    const fetched = map[cleanWord.toLowerCase()];
-    if (fetched && this._sanitizeAiIpa(fetched, cleanWord)) result.ipa = fetched;
-} else if (isPhrase && !aiGaveIpa && !dictHasPhrase) {
-    const map = await this._fetchIpaForWords([cleanWord]).catch(() => ({}));
-    const fetched = map[cleanWord.toLowerCase()];
-    if (fetched && this._sanitizeAiIpa(fetched, cleanWord)) result.ipa = fetched;
-}
+        // Correct the top-level (header) IPA so it is never a wrong estimate.
+        // Single word: reuse the (now accurate) breakdown IPA, but only if it's a real
+        // phonetic string — the breakdown may have been left as '/.../' if neither dict
+        // nor AI knew it, and we want to keep that placeholder visible.
+        // Phrase: if AI gave no phrase IPA and the dict has no real entry, ask AI.
+        const dictHasPhrase = dict && dict.hasRealEntry(cleanWord);
+        const aiGaveIpa = result.source === 'ai' && result.ipa && !/\.\.\./.test(result.ipa) && !!this._sanitizeAiIpa(result.ipa, cleanWord);
+        if (!isPhrase && Array.isArray(result.breakdown) && result.breakdown[0] && result.breakdown[0].ipa && !/\.\.\./.test(result.breakdown[0].ipa)) {
+            result.ipa = result.breakdown[0].ipa;
+        } else if (!isPhrase && (!result.ipa || /\.\.\./.test(result.ipa))) {
+            // Single word but we still don't have a verified IPA — fetch one now.
+            const map = await this._fetchIpaForWords([cleanWord]).catch(() => ({}));
+            const fetched = map[cleanWord.toLowerCase()];
+            if (fetched && this._sanitizeAiIpa(fetched, cleanWord)) result.ipa = fetched;
+        } else if (isPhrase && !aiGaveIpa && !dictHasPhrase) {
+            const map = await this._fetchIpaForWords([cleanWord]).catch(() => ({}));
+            const fetched = map[cleanWord.toLowerCase()];
+            if (fetched && this._sanitizeAiIpa(fetched, cleanWord)) result.ipa = fetched;
+        }
 
         // Example sentence MUST come from AI (random natural sentence from real life /
-// science / etc.) — we NEVER use a hardcoded template, because a templated
-// sentence repeated for every word looks obviously fake ("The teacher explained
-// the meaning of X to the students.").
-//
-// Strategy:
-// 1. If `_lookupWithAI` already gave a natural-looking example, keep it.
-// 2. Otherwise call `_generateExampleWithAI` with the dedicated example-only
-//    prompt — that prompt explicitly forbids "The word X..." style filler.
-// 3. If the example is still bad after that single retry, retry with up to 3
-//    attempts of a different example-only prompt that uses random topic hints
-//    so the AI picks a different natural sentence each time.
-// 4. If AI is truly unavailable (no API key / network error), set
-//    `result.example = null` and `result.exampleUnavailable = true`. The UI
-//    then shows a hint instead of a fake sentence.
-let exampleRetries = 0;
-const _exampleLooksGood = (s) => s && s.trim() && s.trim().toLowerCase() !== word.toLowerCase() && this._looksLikeNaturalExample(s, cleanWord);
-if (!_exampleLooksGood(result.example)) {
-    // First attempt: dedicated example-only prompt.
-    let aiEx = await this._generateExampleWithAI(cleanWord).catch(() => null);
-    if (_exampleLooksGood(aiEx && aiEx.example)) {
-        result.example = aiEx.example.trim();
-        result.exampleVi = (aiEx.exampleVi || '').trim() || result.exampleVi;
-    } else {
-        // Retry up to 3 times with a randomized topic hint so the AI produces a
-        // DIFFERENT natural sentence on each attempt (not a fixed template).
-        const topicHints = [
-            'everyday conversation', 'a news headline', 'a science textbook',
-            'a travel blog', 'a movie review', 'a recipe blog', 'a sports article',
-            'a history book', 'a tech blog', 'a diary entry', 'a business email',
-            'a children\'s story', 'a weather report', 'a documentary script'
-        ];
-        while (exampleRetries < 3 && !_exampleLooksGood(result.example)) {
-            const topic = topicHints[(exampleRetries + (cleanWord.length % topicHints.length)) % topicHints.length];
-            aiEx = await this._generateExampleWithAI(cleanWord, topic).catch(() => null);
-            exampleRetries++;
+        // science / etc.) — we NEVER use a hardcoded template, because a templated
+        // sentence repeated for every word looks obviously fake ("The teacher explained
+        // the meaning of X to the students.").
+        //
+        // Strategy:
+        // 1. If `_lookupWithAI` already gave a natural-looking example, keep it.
+        // 2. Otherwise call `_generateExampleWithAI` with the dedicated example-only
+        //    prompt — that prompt explicitly forbids "The word X..." style filler.
+        // 3. If the example is still bad after that single retry, retry with up to 3
+        //    attempts of a different example-only prompt that uses random topic hints
+        //    so the AI picks a different natural sentence each time.
+        // 4. If AI is truly unavailable (no API key / network error), set
+        //    `result.example = null` and `result.exampleUnavailable = true`. The UI
+        //    then shows a hint instead of a fake sentence.
+        let exampleRetries = 0;
+        const _exampleLooksGood = (s) => s && s.trim() && s.trim().toLowerCase() !== word.toLowerCase() && this._looksLikeNaturalExample(s, cleanWord);
+        if (!_exampleLooksGood(result.example)) {
+            // First attempt: dedicated example-only prompt.
+            let aiEx = await this._generateExampleWithAI(cleanWord).catch(() => null);
             if (_exampleLooksGood(aiEx && aiEx.example)) {
                 result.example = aiEx.example.trim();
                 result.exampleVi = (aiEx.exampleVi || '').trim() || result.exampleVi;
-                break;
+            } else {
+                // Retry up to 3 times with a randomized topic hint so the AI produces a
+                // DIFFERENT natural sentence on each attempt (not a fixed template).
+                const topicHints = [
+                    'everyday conversation', 'a news headline', 'a science textbook',
+                    'a travel blog', 'a movie review', 'a recipe blog', 'a sports article',
+                    'a history book', 'a tech blog', 'a diary entry', 'a business email',
+                    'a children\'s story', 'a weather report', 'a documentary script'
+                ];
+                while (exampleRetries < 3 && !_exampleLooksGood(result.example)) {
+                    const topic = topicHints[(exampleRetries + (cleanWord.length % topicHints.length)) % topicHints.length];
+                    aiEx = await this._generateExampleWithAI(cleanWord, topic).catch(() => null);
+                    exampleRetries++;
+                    if (_exampleLooksGood(aiEx && aiEx.example)) {
+                        result.example = aiEx.example.trim();
+                        result.exampleVi = (aiEx.exampleVi || '').trim() || result.exampleVi;
+                        break;
+                    }
+                }
+                if (!_exampleLooksGood(result.example)) {
+                    // AI truly unavailable or kept producing bad examples — signal the UI
+                    // to show a hint instead of a fake templated sentence.
+                    result.example = null;
+                    result.exampleUnavailable = true;
+                }
             }
         }
-        if (!_exampleLooksGood(result.example)) {
-            // AI truly unavailable or kept producing bad examples — signal the UI
-            // to show a hint instead of a fake templated sentence.
-            result.example = null;
-            result.exampleUnavailable = true;
-        }
-    }
-}
 
         // Ensure the example has a Vietnamese translation.
         if (result.example && !result.exampleVi) {
@@ -1580,13 +1580,13 @@ if (!_exampleLooksGood(result.example)) {
             } catch (e) { /* ignore */ }
         }
 
-// Last-resort: if example is still empty, DO NOT use a hardcoded template.
-// Instead signal the UI to show a hint asking the user to configure an API key
-// (otherwise the example would look like an obvious fake "The teacher explained
-// the meaning of X to the students." repeated for every word).
-if (!result.example) {
-    result.exampleUnavailable = true;
-}
+        // Last-resort: if example is still empty, DO NOT use a hardcoded template.
+        // Instead signal the UI to show a hint asking the user to configure an API key
+        // (otherwise the example would look like an obvious fake "The teacher explained
+        // the meaning of X to the students." repeated for every word).
+        if (!result.example) {
+            result.exampleUnavailable = true;
+        }
 
         this._lookupCache.set(cacheKey, result);
         return result;
@@ -2286,7 +2286,7 @@ Trả về ĐÚNG JSON (không kèm markdown):
             const results = await Promise.all(batch.map(fn => fn()));
             totalEnriched += results.filter(Boolean).length;
             if (typeof onBatch === 'function') {
-                try { onBatch(totalEnriched, vocabList.length); } catch (_) {}
+                try { onBatch(totalEnriched, vocabList.length); } catch (_) { }
             }
         }
     }
@@ -2569,12 +2569,12 @@ ${chunkText}
             const l = w.toLowerCase();
             if (['is', 'are', 'was', 'were', 'am', 'be', 'been', 'being', 'has', 'have', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'shall', 'can', 'must'].includes(l)) return false;
             return l.endsWith('ed') || l.endsWith('ing') || l.endsWith('ize') || l.endsWith('ise') || l.endsWith('ate') || l.endsWith('ify') || l.endsWith('en') ||
-                   (window.dictionaryDB?.getPOS(w) || '').includes('v.');
+                (window.dictionaryDB?.getPOS(w) || '').includes('v.');
         };
         const isAdj = (w) => {
             const l = w.toLowerCase();
             return l.endsWith('ive') || l.endsWith('ous') || l.endsWith('ful') || l.endsWith('less') || l.endsWith('ible') || l.endsWith('able') || l.endsWith('ial') || l.endsWith('ical') || l.endsWith('al') || l.endsWith('ent') || l.endsWith('ant') || l.endsWith('ic') ||
-                   (window.dictionaryDB?.getPOS(w) || '').includes('adj.');
+                (window.dictionaryDB?.getPOS(w) || '').includes('adj.');
         };
 
         for (let i = 0; i < wordsLower.length - 1; i++) {
@@ -2592,7 +2592,7 @@ ${chunkText}
             const l = w.toLowerCase();
             if (l.length < 4) return false;
             return l.endsWith('tion') || l.endsWith('sion') || l.endsWith('ment') || l.endsWith('ness') || l.endsWith('ity') || l.endsWith('ence') || l.endsWith('ance') || l.endsWith('ism') || l.endsWith('ist') || l.endsWith('ogy') || l.endsWith('ure') || l.endsWith('dom') ||
-                   (window.dictionaryDB?.getPOS(w) || '').includes('n.');
+                (window.dictionaryDB?.getPOS(w) || '').includes('n.');
         };
 
         for (let i = 0; i < wordsLower.length - 1; i++) {
@@ -2814,19 +2814,19 @@ ${chunkText}
 
         // ── 11. FIXED PREPOSITIONAL PHRASES (idiom-level, not basic ones) ──
         const fixedPhrases = [
-            { regex: /\bin spite of\b/gi,         name: 'in spite of' },
-            { regex: /\bregardless of\b/gi,        name: 'regardless of' },
-            { regex: /\bby virtue of\b/gi,         name: 'by virtue of' },
-            { regex: /\bin light of\b/gi,          name: 'in light of' },
-            { regex: /\bon account of\b/gi,        name: 'on account of' },
-            { regex: /\bas a result of\b/gi,       name: 'as a result of' },
-            { regex: /\bas a consequence\b/gi,     name: 'as a consequence' },
-            { regex: /\bwith regard to\b/gi,       name: 'with regard to' },
-            { regex: /\bin terms of\b/gi,          name: 'in terms of' },
-            { regex: /\bin addition to\b/gi,       name: 'in addition to' },
-            { regex: /\bon the other hand\b/gi,    name: 'on the other hand' },
-            { regex: /\bnotwithstanding\b/gi,      name: 'notwithstanding' },
-            { regex: /\bby and large\b/gi,         name: 'by and large' },
+            { regex: /\bin spite of\b/gi, name: 'in spite of' },
+            { regex: /\bregardless of\b/gi, name: 'regardless of' },
+            { regex: /\bby virtue of\b/gi, name: 'by virtue of' },
+            { regex: /\bin light of\b/gi, name: 'in light of' },
+            { regex: /\bon account of\b/gi, name: 'on account of' },
+            { regex: /\bas a result of\b/gi, name: 'as a result of' },
+            { regex: /\bas a consequence\b/gi, name: 'as a consequence' },
+            { regex: /\bwith regard to\b/gi, name: 'with regard to' },
+            { regex: /\bin terms of\b/gi, name: 'in terms of' },
+            { regex: /\bin addition to\b/gi, name: 'in addition to' },
+            { regex: /\bon the other hand\b/gi, name: 'on the other hand' },
+            { regex: /\bnotwithstanding\b/gi, name: 'notwithstanding' },
+            { regex: /\bby and large\b/gi, name: 'by and large' },
             { regex: /\ball things considered\b/gi, name: 'all things considered' },
         ];
         for (const fp of fixedPhrases) {
@@ -2846,8 +2846,8 @@ ${chunkText}
 
         // Deep-scan mode: keep a much larger pool and don't starve standalone vocabulary
         // (previously capped at 8, which silently dropped good words like "pivotal"/"sustainable").
-        const MAX_TOTAL = 70;
-        const MAX_VOCAB = 30;
+        const MAX_TOTAL = 150;
+        const MAX_VOCAB = 80;
         const filtered = [];
         let vocabCount = 0;
         for (const item of results) {
