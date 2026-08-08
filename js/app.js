@@ -70,12 +70,19 @@ class LinguaApp {
         // row + popup shows the correct pronunciation.
         this._ipaOverrides = new Map();
 
+        // Default to a complete glossary: every distinct English word form in a
+        // pasted text is included, not only AI-highlighted “difficult” words.
+        // Users can opt out for very long texts in Settings.
+        this.completeVocabularyEnabled = localStorage.getItem('lingua_complete_vocabulary') !== 'false';
+
         this._bindElements();
         this._bindEvents();
         this._initResizer();
         this._initSyncedScroll();
         this._initTypographyControls();
         this._initTheme();
+        this._initChillSceneToggle();
+        this._initWatermarkToggle();
         this._initLookupMode();
         this._initMatchMode();
         this._initVocabResizer();
@@ -153,6 +160,149 @@ class LinguaApp {
                 document.dispatchEvent(new CustomEvent('themechange', { detail: { theme: next.id } }));
             });
         }
+    }
+
+    /**
+     * Chill Scenery Decoration: theme-aware filter on the bottom-right scene image.
+     * Reads the current `data-theme` attribute and applies the matching `show-on-*`
+     * class on the decor container so the scene blends with the active palette.
+     * Called on theme change and once at startup.
+     */
+    _applyChillSceneTheme(themeId) {
+        const decor = document.getElementById('chillSceneDecor');
+        if (!decor) return;
+        // Strip any previous theme class so we don't stack filters
+        decor.classList.remove('show-on-light', 'show-on-dark', 'show-on-cosmos', 'show-on-sepia');
+        // Map theme id → variant. The "midnight" theme reuses the dark variant.
+        const variantMap = {
+            classic: 'show-on-light',
+            dark: 'show-on-dark',
+            midnight: 'show-on-dark',
+            cosmos: 'show-on-cosmos',
+            sepia: 'show-on-sepia',
+        };
+        const variant = variantMap[themeId] || 'show-on-light';
+        decor.classList.add(variant);
+    }
+
+    /**
+     * Chill Scenery toggle: lets the user hide/show the bottom-right scenery.
+     * Visibility is persisted in localStorage so the choice is remembered on reload.
+     */
+    _initChillSceneToggle() {
+        const decor = document.getElementById('chillSceneDecor');
+        const toggleBtn = document.getElementById('btnToggleChillScene');
+        if (!decor || !toggleBtn) return;
+
+        // Restore previous visibility choice (default: visible)
+        const persisted = localStorage.getItem('lingua_chill_scene_hidden');
+        if (persisted === '1') decor.classList.add('is-hidden');
+
+        // Apply theme-aware filter on initial load
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'classic';
+        this._applyChillSceneTheme(currentTheme);
+
+        // Re-apply on every theme change (use the global event the app dispatches)
+        document.addEventListener('themechange', (e) => {
+            const themeId = e?.detail?.theme;
+            if (themeId) this._applyChillSceneTheme(themeId);
+        });
+
+        // Wire toggle button
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            decor.classList.toggle('is-hidden');
+            const isHidden = decor.classList.contains('is-hidden');
+            localStorage.setItem('lingua_chill_scene_hidden', isHidden ? '1' : '0');
+            // Swap icon to hint the new state ("show" vs "hide")
+            toggleBtn.querySelector('.chill-scene-toggle-icon').textContent = isHidden ? '🌱' : '🌿';
+        });
+    }
+
+    /**
+     * Watermark Mode Toggle: switches between two modes:
+     * - "Watermark Mode" (default): Shows chill-scene background + bold text
+     * - "Clean Mode": Hides watermark, returns text to normal weight/size
+     *
+     * IMPORTANT: This does NOT lock font-weight/font-size via CSS !important.
+     * Instead it drives the SAME state (this.fontWeight / this.fontSize) and
+     * the SAME CSS variables that the A-/A+ buttons and the weight slider use,
+     * so those controls keep working normally after switching modes — the
+     * user can still fine-tune from whatever baseline the mode sets.
+     */
+    _initWatermarkToggle() {
+        if (!this.els.btnWatermarkToggle) return;
+
+        const CLEAN_WEIGHT = 400;
+        const CLEAN_SIZE = 16;
+        const BOLD_WEIGHT = 800;
+        const BOLD_SIZE = 19;
+
+        // Apply a font-weight/size pair through the exact same code path the
+        // slider/buttons use, so their displayed values & internal state stay
+        // in sync no matter which control the user touches next.
+        const applyWeightAndSize = (weight, size) => {
+            this.fontWeight = weight;
+            document.documentElement.style.setProperty('--reading-font-weight', this.fontWeight);
+            if (this.els.fontWeightSlider) this.els.fontWeightSlider.value = this.fontWeight;
+            if (this.els.fontWeightDisplay) this.els.fontWeightDisplay.textContent = this.fontWeight;
+            if (this.els.fontWeightSlider) {
+                const min = parseInt(this.els.fontWeightSlider.min, 10) || 0;
+                const max = parseInt(this.els.fontWeightSlider.max, 10) || 100;
+                const pct = ((this.fontWeight - min) / (max - min)) * 100;
+                this.els.fontWeightSlider.style.setProperty('--slider-progress', pct + '%');
+            }
+            localStorage.setItem('lingua_font_weight', this.fontWeight);
+            this._applyFontWeightToReading();
+
+            this.fontSize = size;
+            document.documentElement.style.setProperty('--reading-font-size', `${this.fontSize}px`);
+            if (this.els.fontSizeDisplay) this.els.fontSizeDisplay.textContent = `${this.fontSize}px`;
+        };
+
+        // Restore previous choice (default: watermark ON = no "no-watermark" class)
+        const persisted = localStorage.getItem('lingua_watermark_mode');
+        const isCleanMode = persisted === 'clean';
+
+        document.body.classList.toggle('no-watermark', isCleanMode);
+        applyWeightAndSize(isCleanMode ? CLEAN_WEIGHT : BOLD_WEIGHT, isCleanMode ? CLEAN_SIZE : BOLD_SIZE);
+
+        // Update UI to reflect current state
+        const updateToggleUI = (cleanMode) => {
+            if (this.els.watermarkIcon) {
+                this.els.watermarkIcon.textContent = cleanMode ? '📄' : '🖼️';
+            }
+            if (this.els.watermarkLabel) {
+                this.els.watermarkLabel.textContent = cleanMode ? 'Sạch' : 'Ảnh';
+            }
+            if (this.els.watermarkTrack) {
+                this.els.watermarkTrack.style.background = cleanMode
+                    ? 'var(--border-color)'
+                    : 'var(--primary)';
+            }
+            if (this.els.btnWatermarkToggle) {
+                this.els.btnWatermarkToggle.setAttribute('aria-pressed', String(!cleanMode));
+                this.els.btnWatermarkToggle.setAttribute('title',
+                    cleanMode
+                        ? 'Chế độ Sạch (không ảnh nền) — bấm để bật ảnh nền'
+                        : 'Chế độ Ảnh nền — bấm để tắt ảnh và về chế độ sạch'
+                );
+            }
+        };
+
+        updateToggleUI(isCleanMode);
+
+        // Wire toggle button
+        this.els.btnWatermarkToggle.addEventListener('click', () => {
+            const isCurrentlyClean = document.body.classList.contains('no-watermark');
+            const newCleanMode = !isCurrentlyClean;
+
+            document.body.classList.toggle('no-watermark', newCleanMode);
+            applyWeightAndSize(newCleanMode ? CLEAN_WEIGHT : BOLD_WEIGHT, newCleanMode ? CLEAN_SIZE : BOLD_SIZE);
+            localStorage.setItem('lingua_watermark_mode', newCleanMode ? 'clean' : 'watermark');
+
+            updateToggleUI(newCleanMode);
+        });
     }
 
     /**
@@ -766,6 +916,12 @@ class LinguaApp {
             themeIcon: document.getElementById('themeIcon'),
             themeLabel: document.getElementById('themeLabel'),
 
+            // Watermark Toggle
+            btnWatermarkToggle: document.getElementById('btnWatermarkToggle'),
+            watermarkIcon: document.getElementById('watermarkIcon'),
+            watermarkLabel: document.getElementById('watermarkLabel'),
+            watermarkTrack: document.getElementById('watermarkTrack'),
+
             // Mode Toggle Buttons
             btnModeSelect: document.getElementById('btnModeSelect'),
             btnModeBrush: document.getElementById('btnModeBrush'),
@@ -831,6 +987,7 @@ class LinguaApp {
             selectOpenAiModel: document.getElementById('selectOpenAiModel'),
             inputApiKey: document.getElementById('inputApiKey'),
             selectModel: document.getElementById('selectModel'),
+            chkCompleteVocabulary: document.getElementById('chkCompleteVocabulary'),
             btnCloseSettings: document.getElementById('btnCloseSettings'),
             btnCancelSettings: document.getElementById('btnCancelSettings'),
             btnSaveSettings: document.getElementById('btnSaveSettings'),
@@ -1070,7 +1227,11 @@ class LinguaApp {
                 try {
                     const result = await this.translator.testApi(provider, key, model);
                     if (result.ok) {
-                        this._showTestStatus(statusEl, 'success', result.message + (result.model ? ` (model: ${result.model})` : ''));
+                        // A successful test is also a successful local save. This
+                        // fixes the old flow where Groq could be tested but its key
+                        // was discarded when the dialog was closed.
+                        this._saveTestedApiConfig(provider, key, model, keyInput);
+                        this._showTestStatus(statusEl, 'success', result.message + ' Đã lưu trên thiết bị này.' + (result.model ? ` (model: ${result.model})` : ''));
                         btn.className = 'btn btn-test-api success';
                         btn.textContent = '✓ OK';
                     } else {
@@ -1316,7 +1477,8 @@ class LinguaApp {
                 // Build vocab data with Vietnamese translations for the scanned terms
                 this.els.btnAutoHighlight.textContent = "⌛ Đang dịch nghĩa...";
                 const highlights = this.highlighter.getAllHighlightedItems();
-                const vocabData = await this._buildVocabDataForTerms(highlights);
+                const highlightedVocab = await this._buildVocabDataForTerms(highlights);
+                const vocabData = await this._buildCompleteVocabulary(text, highlightedVocab, highlights);
                 this.currentVocabData = vocabData;
                 this._addVocabSession(text, highlights, vocabData);
                 alert(`✨ Đã tìm thấy và tô đậm ${count} từ vựng/cụm từ/cấu trúc ngữ pháp hay trong bài!`);
@@ -1763,7 +1925,21 @@ class LinguaApp {
                 console.warn('[highlight] Retry patch failed (non-fatal):', e);
             }
 
-            this._addVocabSession(text, highlights, result.vocabList, renderText, alignments);
+            // A translation result normally contains only highlighted/key terms.
+            // Build the full glossary after alignment so every word in the pasted
+            // article is available in the summary without interfering with VN
+            // highlight matching.
+            let sessionVocab = result.vocabList;
+            if (this.completeVocabularyEnabled) {
+                if (this.els.progressText) this.els.progressText.textContent = 'Đang tra toàn bộ từ và kiểm tra IPA…';
+                try {
+                    sessionVocab = await this._buildCompleteVocabulary(text, result.vocabList, highlights);
+                } catch (e) {
+                    console.warn('Complete vocabulary enrichment failed; keeping analysed terms:', e);
+                }
+            }
+            this.currentVocabData = sessionVocab;
+            this._addVocabSession(text, highlights, sessionVocab, renderText, alignments);
 
             // Tag every <mark> on BOTH sides with its occurrence index (data-occ). Pairing the
             // Nth EN occurrence with the Nth VN occurrence is what makes the "Dò từ khớp"
@@ -2126,7 +2302,7 @@ class LinguaApp {
             mark.setAttribute('data-source', 'user-verified');
             mark.setAttribute('data-color', color);
             // Style matching other marks so the dashed-border upgrade is visually seamless.
-            const transColor = this.highlighter ? this.highlighter._getTranslucentColor(color) : 'rgba(34, 197, 94, 0.62)';
+            const transColor = this.highlighter ? this.highlighter._getTranslucentColor(color) : this.highlighter._getTranslucentColor('#22c55e');
             mark.style.cssText = `background-color: ${transColor} !important; background-image: none !important; color: inherit !important; padding: 1px 3px !important; margin: 0 !important; display: inline !important; border-radius: 3px !important; box-shadow: none !important; line-height: inherit !important;`;
             try {
                 range.surroundContents(mark);
@@ -2437,7 +2613,7 @@ class LinguaApp {
         // test assertions) but has NO visual effect — the user wants VN-side highlights to look
         // IDENTICAL to EN-side ones (just background color, no dashed border, no ⚠️ / ✓ badge).
         const renderMark = (color, inner, enKey = '', occIdx = 0, source = 'fallback') => {
-            const transColor = this.highlighter ? this.highlighter._getTranslucentColor(color) : 'rgba(250, 204, 21, 0.42)';
+            const transColor = this.highlighter ? this.highlighter._getTranslucentColor(color) : this.highlighter._getTranslucentColor('#facc15');
             const enAttr = enKey ? ` data-en="${this._escapeHTML(enKey)}"` : '';
             const occAttr = ` data-occ="${parseInt(occIdx, 10) || 0}"`;
             const sourceAttr = ` data-source="${this._escapeHTML(source)}"`;
@@ -3223,10 +3399,118 @@ class LinguaApp {
         sorted.forEach(h => {
             if (!h.text) return;
             const regex = new RegExp(`(${this._escapeRegExp(h.text)})`, 'gi');
-            const bg = this.highlighter ? this.highlighter._getTranslucentColor(h.color) : `rgba(254, 240, 138, 0.42)`;
+            const bg = this.highlighter ? this.highlighter._getTranslucentColor(h.color) : this.highlighter._getTranslucentColor('#fef08a');
             html = html.replace(regex, `<mark class="highlight-mark" style="background-color: ${bg};">$1</mark>`);
         });
         return html;
+    }
+
+    /**
+     * Returns every distinct English word form in reading order, together with
+     * the sentence in which it appeared.  This is intentionally lexical rather
+     * than “important-word” extraction: articles, auxiliaries, names and short
+     * words remain lookupable and appear in the complete glossary when enabled.
+     */
+    _extractAllVocabularyTerms(sourceText = '') {
+        const text = (sourceText || '').toString();
+        const wordPattern = /[A-Za-z]+(?:['’][A-Za-z]+)?(?:-[A-Za-z]+(?:['’][A-Za-z]+)?)*\b/g;
+        const result = [];
+        const seen = new Set();
+        let match;
+        while ((match = wordPattern.exec(text)) !== null) {
+            const original = match[0];
+            const key = original.toLowerCase();
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+
+            const before = text.slice(0, match.index);
+            const sentenceStart = Math.max(
+                before.lastIndexOf('.'),
+                before.lastIndexOf('!'),
+                before.lastIndexOf('?'),
+                before.lastIndexOf('\n')
+            ) + 1;
+            const after = text.slice(match.index);
+            const sentenceEndOffset = after.search(/[.!?\n]/);
+            const sentenceEnd = sentenceEndOffset === -1 ? text.length : match.index + sentenceEndOffset + 1;
+            result.push({ original, context: text.slice(sentenceStart, sentenceEnd).trim() });
+        }
+        return result;
+    }
+
+    _categoryForPOS(pos = '', word = '') {
+        const value = (pos || '').toLowerCase();
+        if (String(word).includes(' ') || String(word).includes('-')) return 'Cụm từ';
+        if (value.includes('adv')) return 'Trạng từ (Adv)';
+        if (value.includes('adj')) return 'Tính từ (Adj)';
+        if (value.includes('v.')) return 'Động từ (Verb)';
+        if (value.includes('prep') || value.includes('conj')) return 'Giới từ/Liên từ';
+        if (value.includes('pron')) return 'Đại từ (Pronoun)';
+        if (value.includes('det')) return 'Từ hạn định (Determiner)';
+        return 'Danh từ / Từ vựng';
+    }
+
+    /**
+     * Merges the AI's detailed analysis with a complete word-by-word glossary.
+     * Existing phrases, examples and contextual explanations always win; the
+     * enrichment step merely supplies missing rows, meanings and trusted IPA.
+     */
+    async _buildCompleteVocabulary(sourceText, analyzedVocab = [], highlights = []) {
+        const items = new Map();
+        const add = (raw, fallback = {}) => {
+            const original = (raw?.original || raw?.term || raw?.text || raw?.word || fallback.original || '').toString().trim();
+            const key = original.toLowerCase();
+            if (!key) return;
+            if (!items.has(key)) {
+                items.set(key, {
+                    ...fallback,
+                    ...raw,
+                    original,
+                    color: raw?.color || fallback.color || '#fff3a8'
+                });
+            }
+        };
+
+        (analyzedVocab || []).forEach(v => add(v));
+        (highlights || []).forEach(h => add({ original: h.text, color: h.color }));
+        const allTerms = this._extractAllVocabularyTerms(sourceText);
+        allTerms.forEach(term => add({
+            original: term.original,
+            context: term.context,
+            category: this._categoryForPOS(window.dictionaryDB?.getPOS?.(term.original) || '', term.original),
+            color: '#fff3a8'
+        }));
+
+        if (!this.completeVocabularyEnabled || !this.translator?.enrichVocabularyTerms) {
+            return Array.from(items.values());
+        }
+
+        const contextByKey = new Map(allTerms.map(t => [t.original.toLowerCase(), t.context]));
+        const enriched = await this.translator.enrichVocabularyTerms(
+            Array.from(items.values()).map(item => ({
+                original: item.original,
+                context: item.context || contextByKey.get(item.original.toLowerCase()) || ''
+            }))
+        );
+        const enrichmentByKey = new Map(enriched.map(item => [item.original.toLowerCase(), item]));
+
+        return Array.from(items.values()).map((item) => {
+            const extra = enrichmentByKey.get(item.original.toLowerCase());
+            if (!extra) return item;
+            const existingSource = item.ipaSource || (item.ipa ? 'ai' : '');
+            const extraIsReference = extra.ipaSource === 'curated' || extra.ipaSource === 'dictionary';
+            const ipa = extraIsReference ? extra.ipa : (item.ipa || extra.ipa || '');
+            const ipaSource = extraIsReference ? extra.ipaSource : (existingSource || extra.ipaSource || '');
+            return {
+                ...item,
+                ipa,
+                ipaSource,
+                pos: item.pos || extra.pos || '',
+                category: item.category || this._categoryForPOS(item.pos || extra.pos, item.original),
+                contextMeaning: item.contextMeaning || item.translatedTermInVN || extra.contextMeaning || '',
+                translatedTermInVN: item.translatedTermInVN || extra.contextMeaning || ''
+            };
+        });
     }
 
     /**
@@ -3251,9 +3535,9 @@ class LinguaApp {
      * Returns the MOST ACCURATE IPA for a word/phrase:
      *   1. AI override (fetched for non-dictionary words) — always correct.
      *   2. Curated dictionary entry — correct.
-     *   3. '' (empty) when only a rough estimate would be available — we prefer
-     *      showing nothing over a WRONG phonetic transcription, and an async AI
-     *      pass (_correctIpaForSession) fills it in shortly after.
+     *   3. Empty string when only a rough estimate would be available. 
+     *      We ALWAYS trigger an async AI fetch to get the correct IPA from Groq/OpenAI/Gemini
+     *      so the user sees accurate pronunciation as soon as the AI responds.
      */
     _accurateIPA(word) {
         const key = (word || '').toLowerCase().trim();
@@ -3261,24 +3545,15 @@ class LinguaApp {
         if (this._ipaOverrides && this._ipaOverrides.has(key)) return this._ipaOverrides.get(key);
         const dict = window.dictionaryDB;
         if (dict && dict.hasRealEntry && dict.hasRealEntry(key)) return dict.getIPA(key) || '';
-        // No curated entry and no AI override yet — fall back to the rule-based
-        // estimator so the user always sees *something* plausible instead of
-        // '/.../' or a wrong echo of the source word. The AI IPA fetch (when
-        // configured) will replace this with a more accurate transcription.
-        if (dict && typeof dict._estimateIPA === 'function') {
-            const est = dict._estimateIPA(key);
-            // Reject a BAD estimate that's just the source word re-echoed
-            // (e.g. estimPEP("perpetual") → "/perpetual/"). Accept everything
-            // else — including phonetic-rich outputs like /pəˈpetʃuəl/ which
-            // contain the IPA dot or other non-alpha glyphs.
-            const inner = (est || '').replace(/^\/+|\/+$/g, '').trim();
-            const isBareEcho = inner && inner === key && !/[^a-zA-Z'\-]/.test(inner);
-            if (est && !isBareEcho) return est;
-            // Last-resort surface form: try a clean lower-case echo so the user
-            // at least sees the word with IPA brackets, not just '/.../'.
-            return est || `/${key}/`;
-        }
-        return `/${key}/`;
+
+        // No curated entry and no AI override yet — trigger background AI fetch
+        // to get accurate IPA, and return a temporary placeholder
+        this._maybeFetchIpaForWord(word);
+
+        // Never turn spelling rules into a fake “accurate” IPA.  The table shows
+        // an explicit verification state until a curated, dictionary, or AI
+        // result has arrived.
+        return '';
     }
 
     /**
@@ -3313,7 +3588,10 @@ class LinguaApp {
                 (this.vocabSessions || []).forEach((s) => {
                     (s.vocabList || []).forEach((v) => {
                         const vKey = (v.original || v.term || v.text || v.word || '').toLowerCase().trim();
-                        if (vKey === key) v.ipa = clean;
+                        if (vKey === key) {
+                            v.ipa = clean;
+                            if (!v.ipaSource) v.ipaSource = 'ai';
+                        }
                     });
                 });
                 this.renderVocabAccordion();
@@ -3325,9 +3603,12 @@ class LinguaApp {
     /**
      * Collects every word/phrase in the session (vocabList + highlights) that lacks
      * an accurate IPA (not in the curated dictionary and not already overridden),
-     * fetches correct IPA from AI in one batched call, stores it in _ipaOverrides
+     * fetches correct IPA from AI in batched calls, stores it in _ipaOverrides
      * and on the vocab rows, then re-renders. Safe to call repeatedly — already
      * resolved words are skipped, so it makes at most one AI call per new word.
+     * 
+     * IMPROVED: Now aggressively fetches IPA for ALL non-dictionary words to ensure
+     * 100% accurate pronunciation using Groq/OpenAI/Gemini API.
      */
     async _correctIpaForSession(session) {
         if (!session || !this.translator || typeof this.translator._fetchIpaForWords !== 'function') return;
@@ -3339,7 +3620,9 @@ class LinguaApp {
         const alreadyGood = new Set();
         (session.vocabList || []).forEach(v => {
             const key = (v.original || v.term || v.text || v.word || '').toLowerCase().trim();
-            if (key && v.ipa && v.ipa.trim() && !/\.\.\./.test(v.ipa)) alreadyGood.add(key);
+            if (key && v.ipa && v.ipa.trim() && !/\.\.\./.test(v.ipa) && !v.ipa.includes(key)) {
+                alreadyGood.add(key);
+            }
         });
 
         const candidates = new Set();
@@ -3356,10 +3639,14 @@ class LinguaApp {
 
         if (candidates.size === 0) return;
 
+        console.log(`[IPA Fetch] Fetching accurate IPA for ${candidates.size} words using AI...`);
+
         let map = {};
         try {
             map = await this.translator._fetchIpaForWords(Array.from(candidates)) || {};
+            console.log(`[IPA Fetch] Received ${Object.keys(map).length} IPA entries from AI`);
         } catch (e) {
+            console.warn('[IPA Fetch] AI unavailable:', e);
             return; // AI unavailable — leave IPA blank rather than wrong
         }
 
@@ -3372,11 +3659,15 @@ class LinguaApp {
             changed = true;
             // Also stamp the accurate IPA onto any matching vocab row.
             (session.vocabList || []).forEach(v => {
-                if ((v.original || '').toLowerCase().trim() === key) v.ipa = ipa;
+                if ((v.original || '').toLowerCase().trim() === key) {
+                    v.ipa = ipa;
+                    if (!v.ipaSource) v.ipaSource = 'ai';
+                }
             });
         });
 
         if (changed && this.activeSessionId === session.id) {
+            console.log(`[IPA Fetch] Updated IPA for ${Object.keys(map).length} words, re-rendering...`);
             this.renderVocabAccordion();
         }
     }
@@ -3422,14 +3713,14 @@ class LinguaApp {
             //   3. Rule-based estimate from dictionary — last resort
             //   4. Source-word echo in slashes — only when nothing else works
             const aiIpa = (v.ipa || v.phonetic || v.pronunciation || '').toString().trim();
-            const aiIpaClean = aiIpa ? aiIpa.replace(/^\/+|\/+$/g, '').trim() : '';
-            const isBareEcho = aiIpaClean && aiIpaClean.toLowerCase() === word.toLowerCase()
-                && !/[^a-zA-Z'\-]/.test(aiIpaClean);
-            let ipa = (aiIpa && !isBareEcho) ? aiIpa : this._accurateIPA(word);
+            const checkedIpa = this.translator?._sanitizeAiIpa
+                ? this.translator._sanitizeAiIpa(aiIpa, word)
+                : aiIpa;
+            let ipa = checkedIpa || this._accurateIPA(word);
             // Kick off an AI fetch in the background to refine the estimate into
             // a more accurate transcription when AI is configured AND we didn't
             // already get one from the AI vocab list.
-            if (!aiIpa || isBareEcho) {
+            if (!checkedIpa) {
                 this._maybeFetchIpaForWord(word);
             }
             return {
@@ -3439,6 +3730,7 @@ class LinguaApp {
                     ? "Cụm từ kết hợp (Collocation)"
                     : (safePOS(word) || 'vocabulary')),
                 ipa,
+                ipaSource: v.ipaSource || (checkedIpa ? 'ai' : ''),
                 contextMeaning: v.contextMeaning || v.translatedTermInVN ||
                     v.meaning || v.meaningVi || safeMeaning(word),
                 example: v.example || v.exampleEn || ''
@@ -3477,6 +3769,7 @@ class LinguaApp {
                     color: h.color || '#fff3a8',
                     category: word.includes(' ') ? "Cụm từ kết hợp (Collocation)" : (safePOS(word) || 'vocabulary'),
                     ipa: safeIPA(word),
+                    ipaSource: '',
                     // Never render the literal string "..." — always show a
                     // readable "đang cập nhật" message so the user understands
                     // the meaning is being resolved, not missing.
@@ -3509,6 +3802,7 @@ class LinguaApp {
                 color: h.color || '#fff3a8',
                 category: matchedVocab?.category || (word.includes(' ') ? "Cụm từ kết hợp (Collocation)" : safePOS(word)),
                 ipa,
+                ipaSource: matchedVocab?.ipaSource || '',
                 // Never render "..." — use a readable "(đang cập nhật nghĩa…)"
                 // placeholder so the user knows the meaning is being fetched.
                 contextMeaning: matchedVocab?.contextMeaning || matchedVocab?.translatedTermInVN || safeMeaning(word) || '(đang cập nhật nghĩa…)',
@@ -4025,8 +4319,22 @@ class LinguaApp {
                     const tdIPA = document.createElement('td');
                     const ipaSpan = document.createElement('span');
                     ipaSpan.className = 'ipa-text';
-                    ipaSpan.textContent = item.ipa || `/${item.word}/`;
+                    ipaSpan.textContent = item.ipa || 'Đang xác minh IPA…';
+                    if (!item.ipa) ipaSpan.style.color = 'var(--text-muted)';
                     tdIPA.appendChild(ipaSpan);
+                    if (item.ipaSource) {
+                        const ipaSource = document.createElement('small');
+                        ipaSource.style.display = 'block';
+                        ipaSource.style.marginTop = '3px';
+                        ipaSource.style.fontSize = '10px';
+                        ipaSource.style.color = 'var(--text-muted)';
+                        ipaSource.textContent = item.ipaSource === 'curated'
+                            ? 'Từ điển đã kiểm tra'
+                            : item.ipaSource === 'dictionary'
+                                ? 'Nguồn từ điển'
+                                : 'AI theo ngữ cảnh';
+                        tdIPA.appendChild(ipaSource);
+                    }
 
                     // Meaning
                     const tdMean = document.createElement('td');
@@ -4522,6 +4830,7 @@ Ultimately, the ubiquity of cutting-edge technology acts as a catalyst for innov
 
         const chk = document.getElementById('chkAutoScanAi');
         if (chk) chk.checked = this.translator.autoScanEnabled;
+        if (this.els.chkCompleteVocabulary) this.els.chkCompleteVocabulary.checked = this.completeVocabularyEnabled;
 
         // Dedicated Scan API settings
         this.els.chkUseSeparateScanApi.checked = this.translator.useSeparateScanApi;
@@ -4549,9 +4858,30 @@ Ultimately, the ubiquity of cutting-edge technology acts as a catalyst for innov
         this.els.settingsModal.classList.remove('active');
     }
 
+    _saveTestedApiConfig(provider, key, model, keyInput) {
+        if (!this.translator || !keyInput) return;
+        if (keyInput === this.els.inputGroqApiKey && provider === 'groq') {
+            this.translator.setGroqConfig(key, model);
+        } else if (keyInput === this.els.inputOpenAiApiKey && provider === 'openai') {
+            this.translator.setOpenAIConfig(key, model);
+        } else if (keyInput === this.els.inputApiKey && provider === 'gemini') {
+            this.translator.setGeminiConfig(key, model);
+        } else if (keyInput === this.els.inputScanGroqApiKey && provider === 'groq') {
+            this.translator.setScanGroqConfig(key, model);
+        } else if (keyInput === this.els.inputScanOpenAiApiKey && provider === 'openai') {
+            this.translator.setScanOpenAIConfig(key, model);
+        } else if (keyInput === this.els.inputScanApiKey && provider === 'gemini') {
+            this.translator.setScanGeminiConfig(key, model);
+        }
+    }
+
     saveSettings() {
         const provider = this.els.selectProvider.value;
         this.translator.setProvider(provider);
+
+        // Groq was previously missing from this save path. Both the primary and
+        // separate scan configuration now persist exactly like OpenAI/Gemini.
+        this.translator.setGroqConfig(this.els.inputGroqApiKey.value.trim(), this.els.selectGroqModel.value);
 
         const openAiKey = this.els.inputOpenAiApiKey.value.trim();
         const openAiModel = this.els.selectOpenAiModel.value;
@@ -4563,10 +4893,15 @@ Ultimately, the ubiquity of cutting-edge technology acts as a catalyst for innov
 
         const chk = document.getElementById('chkAutoScanAi');
         if (chk) this.translator.setAutoScanEnabled(chk.checked);
+        if (this.els.chkCompleteVocabulary) {
+            this.completeVocabularyEnabled = this.els.chkCompleteVocabulary.checked;
+            localStorage.setItem('lingua_complete_vocabulary', this.completeVocabularyEnabled ? 'true' : 'false');
+        }
 
         // Save dedicated Scan API settings
         this.translator.setUseSeparateScanApi(this.els.chkUseSeparateScanApi.checked);
         this.translator.setScanProvider(this.els.selectScanProvider.value);
+        this.translator.setScanGroqConfig(this.els.inputScanGroqApiKey.value.trim(), this.els.selectScanGroqModel.value);
         this.translator.setScanOpenAIConfig(this.els.inputScanOpenAiApiKey.value.trim(), this.els.selectScanOpenAiModel.value);
         this.translator.setScanGeminiConfig(this.els.inputScanApiKey.value.trim(), this.els.selectScanModel.value);
 
@@ -4589,6 +4924,7 @@ Ultimately, the ubiquity of cutting-edge technology acts as a catalyst for innov
 
         const chk = document.getElementById('chkAutoScanAi');
         if (chk) chk.checked = this.translator.autoScanEnabled;
+        if (this.els.chkCompleteVocabulary) this.els.chkCompleteVocabulary.checked = this.completeVocabularyEnabled;
 
         this.els.chkUseSeparateScanApi.checked = this.translator.useSeparateScanApi;
         this.els.selectScanProvider.value = this.translator.scanProvider;

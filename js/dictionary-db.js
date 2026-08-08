@@ -228,7 +228,7 @@ class DictionaryDB {
             "well represented": { ipa: "/ˌwel ˌrep.rɪˈzen.tɪd/", pos: "adj. phr.", meaning: "được đại diện nhiều, phân bố rộng" },
             "wide range": { ipa: "/waɪd reɪndʒ/", pos: "n. phr.", meaning: "phạm vi rộng, đa dạng" },
             "open grassland": { ipa: "/ˈoʊ.pən ˈɡrɑːs.lænd/", pos: "n. phr.", meaning: "đồng cỏ mở, thảo nguyên" },
-"social structures": { ipa: "/ˈsoʊ.ʃəl ˈstrʌk.tʃərz/", pos: "n. phr.", meaning: "cấu trúc xã hội, tổ chức bầy đàn" },
+            "social structures": { ipa: "/ˈsoʊ.ʃəl ˈstrʌk.tʃərz/", pos: "n. phr.", meaning: "cấu trúc xã hội, tổ chức bầy đàn" },
             "domestic animals": { ipa: "/dəˈmes.tɪk ˈæn.ɪ.məlz/", pos: "n. phr.", meaning: "động vật nuôi, gia súc" },
             "domestic cattle": { ipa: "/dəˈmes.tɪk ˈkæt.əl/", pos: "n. phr.", meaning: "gia súc nuôi" },
             "common features": { ipa: "/ˈkɒm.ən ˈfiː.tʃərz/", pos: "n. phr.", meaning: "đặc điểm chung" },

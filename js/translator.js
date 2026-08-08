@@ -16,7 +16,10 @@ class ContextTranslator {
         // Groq: empty by default — user must paste their key in Settings (the key in this constructor
         // was revoked after being shared publicly on 2026-08-02; never hardcode keys again).
         this.groqApiKey = localStorage.getItem('lingua_groq_api_key') || '';
-        this.groqModel = localStorage.getItem('lingua_groq_model') || 'llama-3.3-70b-versatile';
+        // Llama 3.3 is scheduled to be retired by Groq.  Use Groq's current
+        // recommended production model for new installs; existing saved model
+        // selections are deliberately kept unchanged.
+        this.groqModel = localStorage.getItem('lingua_groq_model') || 'openai/gpt-oss-120b';
 
         this.autoScanEnabled = localStorage.getItem('lingua_auto_scan_ai') !== 'false';
 
@@ -28,7 +31,7 @@ class ContextTranslator {
         this.scanOpenaiApiKey = localStorage.getItem('lingua_scan_openai_api_key') || '';
         this.scanOpenaiModel = localStorage.getItem('lingua_scan_openai_model') || 'gpt-4o';
         this.scanGroqApiKey = localStorage.getItem('lingua_scan_groq_api_key') || '';
-        this.scanGroqModel = localStorage.getItem('lingua_scan_groq_model') || 'llama-3.3-70b-versatile';
+        this.scanGroqModel = localStorage.getItem('lingua_scan_groq_model') || 'openai/gpt-oss-120b';
     }
 
     /**
@@ -98,7 +101,7 @@ class ContextTranslator {
                 try { return JSON.parse(args); } catch (e) { return null; }
             } catch (e) { return null; }
         }
-        if (this.geminiApiKey) {
+        if (this.provider === 'gemini' && this.geminiApiKey) {
             try {
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiApiKey}`;
                 const resp = await fetch(url, {
@@ -120,7 +123,7 @@ class ContextTranslator {
                 try { return JSON.parse(text); } catch (e) { return null; }
             } catch (e) { return null; }
         }
-        if (this.groqApiKey) {
+        if (this.provider === 'groq' && this.groqApiKey) {
             try {
                 const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                     method: 'POST',
@@ -131,6 +134,9 @@ class ContextTranslator {
                     body: JSON.stringify({
                         model: this.groqModel,
                         messages: [{ role: 'user', content: prompt }],
+                        // Groq JSON mode prevents markdown/prose from making a
+                        // vocabulary or pronunciation batch impossible to parse.
+                        response_format: { type: 'json_object' },
                         temperature: 0
                     })
                 });
@@ -621,7 +627,7 @@ ${para}
 
     async pingGroq(key, model) {
         if (!key || !key.trim()) return { ok: false, error: 'Chưa nhập API key' };
-        const m = model || 'llama-3.3-70b-versatile';
+        const m = model || 'openai/gpt-oss-120b';
         const start = Date.now();
         try {
             const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -706,7 +712,7 @@ ${para}
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
                     body: JSON.stringify({
-                        model: m || 'llama-3.3-70b-versatile',
+                        model: m || 'openai/gpt-oss-120b',
                         messages: [{ role: 'user', content: 'Reply with the single word: OK' }],
                         max_tokens: 5,
                         temperature: 0
@@ -1317,7 +1323,17 @@ ${textChunk}
 """
 `;
 
-        const modelsToTry = [this.groqModel, 'llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
+        // Keep legacy choices at the end so saved configurations continue to work
+        // until Groq actually removes them. New Groq accounts use a supported
+        // production model first.
+        const modelsToTry = [
+            this.groqModel,
+            'openai/gpt-oss-120b',
+            'qwen/qwen3.6-27b',
+            'llama-3.3-70b-versatile',
+            'llama-3.1-70b-versatile',
+            'llama-3.1-8b-instant'
+        ];
         const uniqueModels = Array.from(new Set(modelsToTry.filter(Boolean)));
         let lastError = null;
 
@@ -1835,6 +1851,7 @@ Trả về ĐÚNG JSON dạng: {"word1":"/ipa1/","word2":"/ipa2/"} (key là từ
                         body: JSON.stringify({
                             model: this.groqModel,
                             messages: [{ role: 'user', content: prompt }],
+                            response_format: { type: "json_object" },
                             temperature: 0
                         })
                     });
@@ -1849,7 +1866,10 @@ Trả về ĐÚNG JSON dạng: {"word1":"/ipa1/","word2":"/ipa2/"} (key là từ
                     let val = String(obj[k] || '').trim();
                     if (val && !val.startsWith('/')) val = `/${val}`;
                     if (val && !val.endsWith('/')) val = `${val}/`;
-                    if (val && val.length > 2) this._ipaCache.set(key, val);
+                    // Never cache a model echo such as "/perpetual interruption/".
+                    // It looks like IPA but is objectively not a transcription.
+                    const checked = this._sanitizeAiIpa(val, key);
+                    if (checked && checked.length > 2) this._ipaCache.set(key, checked);
                 });
             } catch (e) { /* ignore — leave uncached words out */ }
         }
@@ -1857,6 +1877,150 @@ Trả về ĐÚNG JSON dạng: {"word1":"/ipa1/","word2":"/ipa2/"} (key là từ
         const out = {};
         uniq.forEach((w) => { if (this._ipaCache.has(w)) out[w] = this._ipaCache.get(w); });
         return out;
+    }
+
+    /**
+     * Builds a compact glossary for every distinct lexical item in pasted text.
+     *
+     * The old flow only asked AI about highlighted/key terms, which silently
+     * omitted ordinary words from the summary. This method intentionally covers
+     * every supplied word form. It first trusts a curated entry, then attempts a
+     * dictionary pronunciation for single words, and only then asks the configured
+     * AI for a contextual fallback. A missing value stays visibly unresolved instead
+     * of being replaced with a made-up rule-based IPA.
+     */
+    async enrichVocabularyTerms(rawTerms, progressCallback = null) {
+        const seen = new Set();
+        const terms = (rawTerms || []).map((raw) => {
+            const original = (typeof raw === 'string' ? raw : (raw.original || raw.word || raw.text || '')).toString().trim();
+            const context = (typeof raw === 'object' && raw ? (raw.context || '') : '').toString().trim();
+            return { original, context };
+        }).filter(({ original }) => {
+            const key = original.toLowerCase();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        if (!terms.length) return [];
+
+        const dict = window.dictionaryDB;
+        const entries = terms.map(({ original, context }) => {
+            const hasCurated = !!(dict && dict.hasRealEntry && dict.hasRealEntry(original));
+            const ipa = hasCurated ? (dict.getIPA(original) || '') : '';
+            return {
+                original,
+                context,
+                ipa,
+                ipaSource: hasCurated ? 'curated' : '',
+                pos: dict && dict.getPOS ? (dict.getPOS(original) || '') : '',
+                contextMeaning: dict && dict.getMeaning ? (dict.getMeaning(original) || '') : ''
+            };
+        });
+
+        // A dictionary reference is used before the LLM for a single word. Phrases
+        // are intentionally skipped: their pronunciation depends on the whole phrase
+        // and dictionary APIs usually only know individual headwords.
+        const referenceCandidates = entries.filter(e => !e.ipa && !/[\s-]/.test(e.original));
+        const referenceResults = new Map();
+        const CONCURRENCY = 6;
+        for (let i = 0; i < referenceCandidates.length; i += CONCURRENCY) {
+            const batch = referenceCandidates.slice(i, i + CONCURRENCY);
+            const values = await Promise.all(batch.map(async (entry) => ({
+                key: entry.original.toLowerCase(),
+                ipa: await this._fetchDictionaryIpa(entry.original)
+            })));
+            values.forEach(({ key, ipa }) => { if (ipa) referenceResults.set(key, ipa); });
+        }
+        entries.forEach((entry) => {
+            const referenceIpa = referenceResults.get(entry.original.toLowerCase());
+            if (referenceIpa) {
+                entry.ipa = referenceIpa;
+                entry.ipaSource = 'dictionary';
+            }
+        });
+
+        // Ask the selected AI only for missing meanings / pronunciations. Sending
+        // the actual sentence lets it choose a sensible meaning for a homograph.
+        const needsAi = entries.filter(e => !e.contextMeaning || !e.ipa);
+        const remote = await this._fetchVocabularyDetails(needsAi, progressCallback);
+        entries.forEach((entry) => {
+            const data = remote.get(entry.original.toLowerCase());
+            if (!data) return;
+            if (!entry.contextMeaning && data.contextMeaning) entry.contextMeaning = data.contextMeaning;
+            if (!entry.pos && data.pos) entry.pos = data.pos;
+            // AI IPA is retained only as an explicitly-labelled fallback. The UI
+            // distinguishes it from a dictionary/curated transcription.
+            if (!entry.ipa && data.ipa) {
+                entry.ipa = data.ipa;
+                entry.ipaSource = 'ai';
+            }
+        });
+        return entries;
+    }
+
+    async _fetchDictionaryIpa(word) {
+        const clean = (word || '').trim();
+        if (!clean || /[\s-]/.test(clean)) return '';
+        try {
+            const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(clean)}`);
+            if (!response.ok) return '';
+            const data = await response.json();
+            const phonetics = Array.isArray(data?.[0]?.phonetics) ? data[0].phonetics : [];
+            const candidate = phonetics.find(p => p && p.text && /[\u0250-\u02FF\u1D00-\u1D7F\u02C8\u02CC]/.test(p.text));
+            const raw = candidate?.text || '';
+            if (!raw) return '';
+            const wrapped = raw.startsWith('/') ? raw : `/${raw}/`;
+            return this._sanitizeAiIpa(wrapped, clean);
+        } catch (e) {
+            return '';
+        }
+    }
+
+    async _fetchVocabularyDetails(entries, progressCallback = null) {
+        const output = new Map();
+        if (!entries || !entries.length) return output;
+        const batchSize = 40;
+        const schema = {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+                items: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                            original: { type: 'string' },
+                            ipa: { type: 'string' },
+                            pos: { type: 'string' },
+                            contextMeaning: { type: 'string' }
+                        },
+                        required: ['original', 'ipa', 'pos', 'contextMeaning']
+                    }
+                }
+            },
+            required: ['items']
+        };
+        const allowed = new Set(entries.map(e => e.original.toLowerCase()));
+        for (let i = 0; i < entries.length; i += batchSize) {
+            const batch = entries.slice(i, i + batchSize);
+            if (progressCallback) progressCallback(i, entries.length, `Đang tra ${Math.min(i + batch.length, entries.length)}/${entries.length} từ...`);
+            const prompt = `You are an English-Vietnamese dictionary editor. Return JSON only. For EVERY supplied item, copy original exactly, provide a standard IPA pronunciation appropriate to its sentence context, a short POS label, and a concise Vietnamese contextMeaning. Do not invent words and do not omit an item. IPA must use /.../ delimiters and stress marks.\nItems: ${JSON.stringify(batch.map(e => ({ original: e.original, context: e.context || '' })) )}`;
+            const parsed = await this._callProviderJson(prompt, schema, 'return_complete_vocabulary');
+            const items = Array.isArray(parsed?.items) ? parsed.items : [];
+            items.forEach((item) => {
+                const original = (item?.original || '').toString().trim();
+                const key = original.toLowerCase();
+                if (!allowed.has(key) || output.has(key)) return;
+                const ipa = this._sanitizeAiIpa(item.ipa || '', original);
+                output.set(key, {
+                    ipa,
+                    pos: (item.pos || '').toString().trim(),
+                    contextMeaning: (item.contextMeaning || '').toString().trim()
+                });
+            });
+        }
+        return output;
     }
 
     /**

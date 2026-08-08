@@ -41,7 +41,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
     <!-- Stylesheet -->
-    <link rel="stylesheet" href="css/style.css?v=27.0">
+    <link rel="stylesheet" href="css/style.css?v=29.4">
 
     <!-- Favicon -->
     <link rel="icon"
@@ -49,6 +49,24 @@
 </head>
 
 <body>
+
+    <!-- Chill scenery decoration: full-page ambient watermark.
+         - A single layer that fills the entire viewport from edge to edge.
+         - The pixel-art lake scene is subtly blended into the page background with
+           very low opacity + mix-blend-mode so it tints the whole workspace like
+           a gentle watermark without obscuring any text.
+         - z-index: -1 keeps it behind all content (header, cards, panes, tables).
+         - pointer-events: none ensures it never blocks clicks or text selection.
+         - User can toggle the deco on/off with the small leaf button. -->
+    <div class="chill-scene-decor" id="chillSceneDecor" aria-hidden="true">
+        <div class="chill-scene-layer">
+            <img src="assets/chill-scene.png" alt="" class="chill-scene-img" />
+        </div>
+        <button type="button" class="chill-scene-toggle" id="btnToggleChillScene" title="Ẩn / Hiện ảnh trang trí"
+            aria-label="Toggle chill scenery decoration">
+            <span class="chill-scene-toggle-icon">🌿</span>
+        </button>
+    </div>
 
     <!-- Decorative SVG doodles — fixed, pointer-events none, theme-aware via opacity var -->
     <svg class="doodle-blob" style="width:340px;top:-60px;left:-80px;transform:rotate(-18deg);" viewBox="0 0 340 300"
@@ -166,6 +184,14 @@
                 <span class="theme-toggle-icon" id="themeIcon">☀️</span>
                 <div class="theme-toggle-track" id="themeTrack"></div>
                 <span id="themeLabel" style="font-size:11px;font-weight:700;">Sáng</span>
+            </button>
+
+            <!-- Watermark Toggle: No Background (Clean) vs Background Image -->
+            <button class="theme-toggle" id="btnWatermarkToggle" title="Chuyển chế độ: Không ảnh nền (sạch) / Có ảnh nền"
+                aria-label="Toggle watermark background">
+                <span class="theme-toggle-icon" id="watermarkIcon">🖼️</span>
+                <div class="theme-toggle-track" id="watermarkTrack"></div>
+                <span id="watermarkLabel" style="font-size:11px;font-weight:700;">Ảnh</span>
             </button>
 
             <!-- Mode Selector: Select vs Brush Pen vs Dictionary Lookup vs Match Tracking -->
@@ -406,14 +432,16 @@
                     <span style="font-size: 11.5px; color: var(--text-muted);">
                         Lấy key miễn phí tại <a href="https://console.groq.com/keys" target="_blank"
                             style="color: var(--primary);">console.groq.com/keys</a> — không cần credit card.
-                        Model đề xuất: <strong>llama-3.3-70b-versatile</strong> (miễn phí, nhanh, 70B params).
+                        Model đề xuất: <strong>openai/gpt-oss-120b</strong>. Khóa được lưu cục bộ trên trình duyệt này sau khi Test thành công.
                     </span>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">Mô hình Groq Model</label>
                     <select class="form-select" id="selectGroqModel">
-                        <option value="llama-3.3-70b-versatile" selected>Llama 3.3 70B Versatile (Nhanh & Miễn phí)
+                        <option value="openai/gpt-oss-120b" selected>GPT-OSS 120B (Groq — khuyên dùng)</option>
+                        <option value="qwen/qwen3.6-27b">Qwen 3.6 27B (Groq — khuyên dùng)</option>
+                        <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile (sắp ngừng hỗ trợ)
                         </option>
                         <option value="llama-3.1-70b-versatile">Llama 3.1 70B Versatile</option>
                         <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (Siêu nhanh, miễn phí)</option>
@@ -493,6 +521,16 @@
                 </label>
             </div>
 
+            <div class="form-group"
+                style="margin-top: 10px; padding: 10px; background: #ecfdf5; border-radius: var(--radius-sm); border: 1px solid #a7f3d0;">
+                <label
+                    style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12.5px; font-weight: 600; color: #166534;">
+                    <input type="checkbox" id="chkCompleteVocabulary" checked
+                        style="margin-top: 3px; accent-color: var(--primary);" />
+                    <span>📚 Tổng kết tất cả từ trong bài (không chỉ từ được tô). IPA chỉ hiện khi đã có nguồn từ điển hoặc phản hồi AI hợp lệ; ứng dụng không tự đoán phiên âm.</span>
+                </label>
+            </div>
+
             <!-- Divider -->
             <div style="height: 1px; background: var(--border-color); margin: 14px 0;"></div>
 
@@ -534,7 +572,9 @@
                         <div class="form-group">
                             <label class="form-label">Mô hình Groq Model</label>
                             <select class="form-select" id="selectScanGroqModel">
-                                <option value="llama-3.3-70b-versatile" selected>Llama 3.3 70B Versatile (Miễn phí)
+                                <option value="openai/gpt-oss-120b" selected>GPT-OSS 120B (Groq — khuyên dùng)</option>
+                                <option value="qwen/qwen3.6-27b">Qwen 3.6 27B (Groq — khuyên dùng)</option>
+                                <option value="llama-3.3-70b-versatile">Llama 3.3 70B Versatile (sắp ngừng hỗ trợ)
                                 </option>
                                 <option value="llama-3.1-70b-versatile">Llama 3.1 70B Versatile</option>
                                 <option value="llama-3.1-8b-instant">Llama 3.1 8B Instant (Siêu nhanh)</option>
@@ -606,11 +646,11 @@
     </div>
 
     <!-- Scripts -->
-    <script src="js/dictionary-db.js?v=27.0"></script>
-    <script src="js/highlighter.js?v=27.0"></script>
-    <script src="js/translator.js?v=27.0"></script>
-    <script src="js/pdf-exporter.js?v=27.0"></script>
-    <script src="js/app.js?v=27.0"></script>
+    <script src="js/dictionary-db.js?v=28.0"></script>
+    <script src="js/highlighter.js?v=28.0"></script>
+    <script src="js/translator.js?v=28.0"></script>
+    <script src="js/pdf-exporter.js?v=28.0"></script>
+    <script src="js/app.js?v=29.4"></script>
 
 </body>
 
